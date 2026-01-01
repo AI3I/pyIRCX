@@ -1,0 +1,38 @@
+# Database files
+*.db
+
+# Log files
+*.log
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Claude Code session data
+.claude/
+
+# Transcripts (runtime generated)
+transcripts/
+
+# IDE
+.vscode/
+.idea/
+
+# Environment
+.env
+*.env
+
+# Temporary files
+*.tmp
+*.bak
+*~
+
+# Exported conversations
+*_claude.txt
+
+# Test configurations
+pyircx_config_server*.json
+
+# Runtime status files
+*_status.json
