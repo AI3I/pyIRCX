@@ -174,6 +174,44 @@ set_permissions() {
     echo -e "${GREEN}Permissions set${NC}"
 }
 
+# Install Cockpit module
+install_cockpit() {
+    echo -e "${YELLOW}Installing Cockpit web admin panel...${NC}"
+
+    # Install Cockpit package
+    case "$OS" in
+        fedora|rhel|centos)
+            dnf install -y cockpit || yum install -y cockpit
+            ;;
+        debian|ubuntu)
+            apt-get install -y cockpit
+            ;;
+        arch)
+            pacman -S --noconfirm cockpit
+            ;;
+        opensuse*)
+            zypper install -y cockpit
+            ;;
+        *)
+            echo -e "${RED}Unknown OS. Please install Cockpit manually.${NC}"
+            return 1
+            ;;
+    esac
+
+    # Copy Cockpit module to user directory
+    mkdir -p ~/.local/share/cockpit
+    cp -r cockpit/pyircx ~/.local/share/cockpit/
+
+    # Enable and start Cockpit
+    systemctl enable --now cockpit.socket
+
+    echo -e "${GREEN}Cockpit installed successfully!${NC}"
+    echo ""
+    echo "Access Cockpit at: https://localhost:9090"
+    echo "Look for 'pyIRCX Server' in the left menu"
+    echo ""
+}
+
 # Install systemd service
 install_systemd() {
     echo -e "${YELLOW}Installing systemd service...${NC}"
@@ -255,6 +293,15 @@ main() {
     echo ""
     echo "Default ports: 6667 (plain), 6697 (SSL)"
     echo ""
+    echo "========================================"
+    echo -e "${YELLOW}Optional: Web Admin Panel (Cockpit)${NC}"
+    echo "========================================"
+    echo ""
+    read -p "Install Cockpit web admin panel? [y/N] " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        install_cockpit
+    fi
 }
 
 # Uninstall function

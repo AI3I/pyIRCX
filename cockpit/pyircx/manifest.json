@@ -1,0 +1,12 @@
+{
+    "version": 0,
+    "name": "pyircx",
+    "menu": {
+        "index": {
+            "label": "pyIRCX Server",
+            "order": 50
+        }
+    },
+    "content-security-policy": "default-src 'self' 'unsafe-inline' 'unsafe-eval'",
+    "description": "Web-based administration interface for pyIRCX IRC server"
+}

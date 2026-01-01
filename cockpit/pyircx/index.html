@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>pyIRCX Server</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="../static/branding.css" rel="stylesheet">
+    <link href="pyircx.css" rel="stylesheet">
+    <script type="text/javascript" src="../base1/cockpit.js"></script>
+    <script type="text/javascript" src="pyircx.js"></script>
+</head>
+<body>
+    <div class="container-fluid">
+        <h1>pyIRCX Server Management</h1>
+
+        <!-- Row 1: Service Status + Real-Time Status -->
+        <div class="row">
+            <div class="col-6">
+                <div class="card">
+                    <div class="card-header"><h3>Service Status</h3></div>
+                    <div class="card-body">
+                        <div id="service-status">Loading...</div>
+                        <div style="margin-top: 10px;">
+                            <button class="btn btn-primary" id="btn-start">Start</button>
+                            <button class="btn btn-warning" id="btn-restart">Restart</button>
+                            <button class="btn btn-danger" id="btn-stop">Stop</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6">
+                <div class="card">
+                    <div class="card-header"><h3>Real-Time Status</h3></div>
+                    <div class="card-body"><div id="realtime-status">Loading...</div></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Row 2: Connected Users + Active Channels -->
+        <div class="row">
+            <div class="col-6">
+                <div class="card">
+                    <div class="card-header"><h3>Connected Users <span id="connected-count" class="badge">0</span></h3></div>
+                    <div class="card-body"><div id="connected-users">Loading...</div></div>
+                </div>
+            </div>
+            <div class="col-6">
+                <div class="card">
+                    <div class="card-header"><h3>Active Channels <span id="channel-count" class="badge">0</span></h3></div>
+                    <div class="card-body"><div id="active-channels">Loading...</div></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Row 3: Server Stats + Configuration -->
+        <div class="row">
+            <div class="col-6">
+                <div class="card">
+                    <div class="card-header"><h3>Server Statistics</h3></div>
+                    <div class="card-body"><div id="server-stats">Loading...</div></div>
+                </div>
+            </div>
+            <div class="col-6">
+                <div class="card">
+                    <div class="card-header"><h3>Configuration</h3></div>
+                    <div class="card-body">
+                        <div id="server-config">Loading...</div>
+                        <button class="btn btn-info" id="btn-edit-config" style="margin-top: 10px;">Edit Configuration</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Full Width: Access Management -->
+        <div class="card">
+            <div class="card-header"><h3>Server Access Management</h3></div>
+            <div class="card-body">
+                <button class="btn btn-success" id="btn-add-access">Add Access Rule</button>
+                <div id="access-list" style="margin-top: 10px;">Loading...</div>
+            </div>
+        </div>
+
+        <!-- Full Width: Newsflash Management -->
+        <div class="card">
+            <div class="card-header"><h3>Newsflash Management</h3></div>
+            <div class="card-body">
+                <button class="btn btn-success" id="btn-add-newsflash">Add Newsflash</button>
+                <div id="newsflash-list" style="margin-top: 10px;">Loading...</div>
+            </div>
+        </div>
+
+        <!-- Full Width: Mailbox Messages -->
+        <div class="card">
+            <div class="card-header"><h3>Mailbox Messages</h3></div>
+            <div class="card-body"><div id="mailbox-list">Loading...</div></div>
+        </div>
+
+        <!-- Full Width: Search -->
+        <div class="card">
+            <div class="card-header"><h3>Search</h3></div>
+            <div class="card-body">
+                <div style="margin-bottom: 10px;">
+                    <label>Search Nicknames:</label>
+                    <input type="text" id="search-nicks-input" class="form-control" placeholder="Enter nickname..." style="display: inline-block; width: 300px; margin-left: 10px;">
+                    <button class="btn btn-primary" id="btn-search-nicks">Search</button>
+                </div>
+                <div id="search-nicks-results"></div>
+                <div style="margin-top: 20px;">
+                    <label>Search Channels:</label>
+                    <input type="text" id="search-channels-input" class="form-control" placeholder="Enter channel..." style="display: inline-block; width: 300px; margin-left: 10px;">
+                    <button class="btn btn-primary" id="btn-search-channels">Search</button>
+                </div>
+                <div id="search-channels-results"></div>
+            </div>
+        </div>
+
+        <!-- Row 4: Staff + Recent Registrations -->
+        <div class="row">
+            <div class="col-6">
+                <div class="card">
+                    <div class="card-header"><h3>Staff Members</h3></div>
+                    <div class="card-body"><div id="staff-list">Loading...</div></div>
+                </div>
+            </div>
+            <div class="col-6">
+                <div class="card">
+                    <div class="card-header"><h3>Recent Nick Registrations</h3></div>
+                    <div class="card-body"><div id="recent-registrations">Loading...</div></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Full Width: Registered Channels -->
+        <div class="card">
+            <div class="card-header"><h3>Registered Channels</h3></div>
+            <div class="card-body"><div id="channels-list">Loading...</div></div>
+        </div>
+
+        <!-- Full Width: Logs -->
+        <div class="card">
+            <div class="card-header"><h3>Server Logs</h3></div>
+            <div class="card-body">
+                <div style="margin-bottom: 10px;">
+                    <label>Level:</label>
+                    <select id="log-level-filter" class="form-control" style="display: inline-block; width: 120px; margin-left: 5px;">
+                        <option value="">All</option>
+                        <option value="INFO">INFO</option>
+                        <option value="WARNING">WARNING</option>
+                        <option value="ERROR">ERROR</option>
+                    </select>
+                    <label style="margin-left: 20px;">Search:</label>
+                    <input type="text" id="log-search-input" class="form-control" placeholder="Search logs..." style="display: inline-block; width: 200px; margin-left: 5px;">
+                    <button class="btn btn-secondary" id="btn-refresh-logs">Refresh</button>
+                </div>
+                <pre id="server-logs" style="max-height: 400px; overflow-y: auto;">Loading...</pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Add Access Rule -->
+    <div id="modal-add-access" class="modal" style="display: none;">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header"><h4>Add Access Rule</h4></div>
+                <div class="modal-body">
+                    <label>Type:</label>
+                    <select id="access-type" class="form-control">
+                        <option value="DENY">DENY (Ban)</option>
+                        <option value="GRANT">GRANT (Allow)</option>
+                    </select>
+                    <label style="margin-top: 10px;">Pattern:</label>
+                    <input type="text" id="access-pattern" class="form-control" placeholder="*!*@*.example.com">
+                    <label style="margin-top: 10px;">Reason:</label>
+                    <input type="text" id="access-reason" class="form-control">
+                    <label style="margin-top: 10px;">Duration (minutes, 0=permanent):</label>
+                    <input type="number" id="access-timeout" class="form-control" value="0">
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-primary" id="btn-save-access">Add</button>
+                    <button class="btn btn-default" id="btn-cancel-access">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Add Newsflash -->
+    <div id="modal-add-newsflash" class="modal" style="display: none;">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header"><h4>Add Newsflash</h4></div>
+                <div class="modal-body">
+                    <label>Message:</label>
+                    <textarea id="newsflash-message" class="form-control" rows="3"></textarea>
+                    <label style="margin-top: 10px;">Priority:</label>
+                    <select id="newsflash-priority" class="form-control">
+                        <option value="0">Normal</option>
+                        <option value="1">High</option>
+                        <option value="2">Critical</option>
+                    </select>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-primary" id="btn-save-newsflash">Add</button>
+                    <button class="btn btn-default" id="btn-cancel-newsflash">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Edit Config -->
+    <div id="modal-edit-config" class="modal" style="display: none;">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header"><h4>Edit Configuration</h4></div>
+                <div class="modal-body">
+                    <div class="alert alert-warning">
+                        <strong>Warning:</strong> Invalid JSON will be rejected. Restart required.
+                    </div>
+                    <textarea id="config-editor" class="form-control" rows="20" style="font-family: monospace;"></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-primary" id="btn-save-config">Save & Restart</button>
+                    <button class="btn btn-default" id="btn-cancel-config">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
