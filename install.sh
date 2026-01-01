@@ -294,6 +294,30 @@ main() {
     echo "Default ports: 6667 (plain), 6697 (SSL)"
     echo ""
     echo "========================================"
+    echo -e "${YELLOW}Optional: SSL/TLS Certificate Setup${NC}"
+    echo "========================================"
+    echo ""
+    echo "Would you like to set up SSL/TLS now?"
+    echo "  - Let's Encrypt (free, automatic)"
+    echo "  - Self-signed (for testing)"
+    echo "  - Skip (configure manually later)"
+    echo ""
+    read -p "Set up SSL/TLS now? [y/N] " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        if [ -f "setup_ssl.sh" ]; then
+            ./setup_ssl.sh "$CONFIG_DIR/pyircx_config.json"
+        else
+            echo -e "${YELLOW}setup_ssl.sh not found, skipping SSL setup${NC}"
+            echo "You can run it later: sudo ./setup_ssl.sh"
+        fi
+    else
+        echo ""
+        echo "SSL/TLS can be set up later with:"
+        echo "  sudo ./setup_ssl.sh"
+    fi
+    echo ""
+    echo "========================================"
     echo -e "${YELLOW}Optional: Web Admin Panel (Cockpit)${NC}"
     echo "========================================"
     echo ""

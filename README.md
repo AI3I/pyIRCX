@@ -379,12 +379,34 @@ To create a multi-server network:
 
 See [LINKING.md](LINKING.md) for complete server linking documentation.
 
+### SSL/TLS Setup (Recommended)
+
+**Quick automated setup:**
+```bash
+sudo ./setup_ssl.sh
+```
+
+Choose from:
+- **Let's Encrypt** - Free, trusted certificates with auto-renewal
+- **Self-signed** - For testing/internal use
+- **Existing certificate** - Use your own certificate files
+
+The script automatically:
+- Obtains and installs certificates
+- Configures pyIRCX
+- Sets up auto-renewal (Let's Encrypt)
+- Restarts the server
+
 ### Connecting
 
 Connect with any IRC client:
 
 ```
+# Plain connection
 /server localhost 6667
+
+# SSL/TLS connection (after setup)
+/server localhost 6697
 ```
 
 For IRCX features, use the IRCX command after connecting:
