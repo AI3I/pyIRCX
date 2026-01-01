@@ -1,0 +1,141 @@
+{
+  "server": {
+    "name": "irc.local",
+    "network": "IRCX Network",
+    "staff_login_message": "Welcome to the staff team."
+  },
+  "network": {
+    "listen_addr": "0.0.0.0",
+    "listen_ports": [
+      6667,
+      7000
+    ],
+    "enable_ipv6": true,
+    "resolve_hostnames": true
+  },
+  "database": {
+    "path": "pyircx.db",
+    "pool_size": 5
+  },
+  "system": {
+    "nick": "System",
+    "ident": "System",
+    "staff_term": "staff and services"
+  },
+  "modes": {
+    "user": "agiorxz",
+    "channel": "adefiklmnprstuwxy",
+    "channel_defaults": "nt"
+  },
+  "transcript": {
+    "enabled": true,
+    "directory": "transcripts",
+    "max_lines": 10000,
+    "format": "[{timestamp}] {event}"
+  },
+  "limits": {
+    "max_users": 1000,
+    "msg_length": 512,
+    "nick_change_cooldown": 60,
+    "max_nick_length": 30,
+    "max_user_length": 30,
+    "max_channel_length": 50,
+    "max_channels": 500,
+    "max_channels_per_user": 20
+  },
+  "services": {
+    "servicebot_count": 10,
+    "servicebot_max_channels": 10
+  },
+  "security": {
+    "flood_messages": 5,
+    "flood_window": 2.0,
+    "connection_throttle": 100,
+    "throttle_window": 60.0,
+    "enable_flood_protection": true,
+    "enable_connection_throttle": false,
+    "cap_timeout": 60,
+    "auth_max_attempts": 5,
+    "auth_lockout_duration": 300,
+    "auth_lockout_window": 600,
+    "dnsbl": {
+      "enabled": false,
+      "action": "reject",
+      "timeout": 3.0,
+      "cache_ttl": 3600,
+      "lists": [
+        "dnsbl.dronebl.org",
+        "rbl.efnetrbl.org",
+        "bl.spamcop.net"
+      ],
+      "whitelist": [],
+      "reject_message": "Your IP is listed in a DNS blacklist. Please contact network staff."
+    },
+    "proxy_detection": {
+      "enabled": false,
+      "ports": [8080, 3128, 1080, 9050],
+      "timeout": 2.0,
+      "action": "warn"
+    },
+    "connection_scoring": {
+      "enabled": false,
+      "threshold": 100,
+      "dnsbl_score": 50,
+      "proxy_score": 30,
+      "no_ident_score": 10,
+      "generic_hostname_score": 5
+    }
+  },
+  "persistence": {
+    "auto_save": true,
+    "save_interval": 300
+  },
+  "servicebot": {
+    "enabled": true,
+    "profanity_filter": {
+      "enabled": true,
+      "action": "warn",
+      "words": ["badword", "testbad"],
+      "warn_message": "Please watch your language.",
+      "case_sensitive": false
+    },
+    "malicious_detection": {
+      "enabled": true,
+      "flood_threshold": 5,
+      "flood_window": 3,
+      "flood_action": "gag",
+      "caps_threshold": 0.7,
+      "caps_min_length": 10,
+      "caps_action": "warn",
+      "url_spam_threshold": 3,
+      "url_spam_window": 10,
+      "url_spam_action": "warn",
+      "repeat_threshold": 3,
+      "repeat_window": 30,
+      "repeat_action": "warn"
+    }
+  },
+  "admin": {
+    "loc1": "pyIRCX Administration",
+    "loc2": "Network Operations",
+    "email": "admin@irc.local",
+    "default_username": "admin",
+    "default_password": "changeme"
+  },
+  "ssl": {
+    "enabled": false,
+    "ports": [6697],
+    "cert_file": "/etc/letsencrypt/live/irc.example.com/fullchain.pem",
+    "key_file": "/etc/letsencrypt/live/irc.example.com/privkey.pem",
+    "min_version": "TLSv1.2",
+    "auto_reload": true,
+    "reload_interval": 3600,
+    "expiry_warn_days": [14, 7, 3, 1]
+  },
+  "linking": {
+    "enabled": false,
+    "bind_host": "0.0.0.0",
+    "bind_port": 7001,
+    "links": []
+  }
+}
