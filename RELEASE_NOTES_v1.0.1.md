@@ -105,14 +105,20 @@ Safe removal with database backup option and interactive prompts.
 
 ## Upgrade from v1.0.0
 
-If you installed v1.0.0, simply pull the latest changes:
+If you installed v1.0.0, use the new upgrade script:
 
 ```bash
 cd pyIRCX
 git pull
+sudo ./upgrade.sh
 ```
 
-The new scripts are compatible with existing installations. No configuration changes needed.
+The upgrade script will:
+- Detect and fix missing linking.py module
+- Update systemd service file
+- Migrate Cockpit to system-wide installation
+- Fix any permission issues
+- Preserve your existing configuration
 
 ---
 
