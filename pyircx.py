@@ -7,9 +7,9 @@ channel persistence, flood protection, and staff management features.
 """
 
 # Version info - updated with each release
-__version__ = "1.0.0"
+__version__ = "1.0.3"
 __version_label__ = "pyIRCX"
-__created__ = "Wed Jan 01 2026"
+__created__ = "Thu Jan 02 2026"
 
 import asyncio
 import aiosqlite
@@ -7766,7 +7766,7 @@ Examples:
     parser.add_argument(
         '--version', '-v',
         action='version',
-        version='pyIRCX 1.0.0'
+        version='pyIRCX 1.0.3'
     )
     return parser.parse_args()
 

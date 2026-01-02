@@ -4,7 +4,7 @@
 
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.0.0-brightgreen.svg)](#)
+[![Version](https://img.shields.io/badge/version-1.0.3-brightgreen.svg)](#)
 [![Tests](https://img.shields.io/badge/tests-54%20passing-brightgreen.svg)](#testing)
 
 ---
@@ -20,6 +20,27 @@ pyIRCX is a **production-ready IRCX chat server** built on Python's asyncio fram
 If you remember the days of **Microsoft Comic Chat**, chat rooms with real nickserv-style registration, channel properties, and the unique IRCX extensions — pyIRCX brings all of that back with modern security, scalability, and reliability.
 
 > **Comic Chat Compatible!** pyIRCX works with Microsoft Comic Chat (V2.5), the iconic IRC client that displayed conversations as comic strips. Run it natively or in a VM - pyIRCX speaks the same IRCX protocol.
+
+---
+
+## What's New in 1.0.3
+
+### Cockpit Dashboard Enhancements
+- **Staff Management** — Full CRUD interface for managing ADMIN/SYSOP/GUIDE accounts
+- **Enhanced Statistics** — Detailed server stats with staff breakdowns and access rule counts
+- **Channel Modes Display** — Active channels now show modes (+nt, +mnst, etc.)
+- **Improved Layout** — 3-column Server Overview with integrated search
+- **Terminology Consistency** — "Nicknames" and "NewsFlash" standardized throughout
+
+### Security Fixes
+- **Mode Security** — Prevented manual setting of +r (registered) mode on channels
+- Registered mode can now only be set through proper REGISTER command
+
+### UI Improvements
+- Reorganized dashboard for better information hierarchy
+- Added comprehensive server statistics with contextual breakdowns
+- Improved search functionality with stacked layout
+- Enhanced visual consistency across all interface elements
 
 ---
 
@@ -693,7 +714,7 @@ Future enhancements planned:
 <p align="center">
   <i>Bringing back the chat rooms of yesterday, with the technology of today.</i>
   <br><br>
-  <b>pyIRCX 1.0.0</b> — The production-ready IRCX server for distributed networks
+  <b>pyIRCX 1.0.3</b> — The production-ready IRCX server for distributed networks
   <br><br>
   ⭐ <b>Star this project on GitHub if you find it useful!</b> ⭐
 </p>
