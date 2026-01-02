@@ -1696,7 +1696,7 @@ RESPONSES = {
     "305": "You are no longer marked as being away",
     "306": "You have been marked as being away",
     "311": "{target} {ident} {host} * :{real}",
-    "312": "{target} {servername} :{version} {version_label}",
+    "312": "{target} {servername} :pyIRCX Server",
     "313": "{target} :{role}",
     "314": "{target} {ident} {host} * :{real}",
     "315": "{target} :End of /WHO list",
