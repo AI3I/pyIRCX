@@ -378,16 +378,18 @@ label {
 
 .dl-horizontal dt {
     float: left;
-    width: 140px;
+    width: 180px;
     clear: left;
     font-weight: 600;
     color: #555;
-    padding: 3px 0;
+    padding: 6px 0;
+    text-align: left;
 }
 
 .dl-horizontal dd {
-    margin-left: 150px;
-    padding: 3px 0;
+    margin-left: 200px;
+    padding: 6px 0;
+    font-weight: 500;
 }
 
 /* Pre/Code */
@@ -433,6 +435,11 @@ pre {
 
 .modal-dialog.modal-lg {
     max-width: 800px;
+}
+
+.modal-dialog.modal-xl {
+    max-width: 1200px;
+    width: 95%;
 }
 
 .modal-header {
@@ -481,13 +488,13 @@ pre {
     margin-bottom: 15px;
 }
 
-.col-6 {
-    flex: 1;
+.col-4 {
+    flex: 0 0 calc(33.333% - 10px);
     min-width: 0;
 }
 
-.col-4 {
-    flex: 0 0 calc(33.333% - 10px);
+.col-6 {
+    flex: 1;
     min-width: 0;
 }
 
