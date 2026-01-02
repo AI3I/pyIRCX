@@ -185,10 +185,12 @@
                 $('#active-channels').innerHTML = '<div class="empty-state"><div class="empty-state-icon">💬</div><div class="empty-state-text">No Active Channels</div><div class="empty-state-subtext">Create a channel to get started</div></div>';
             } else {
                 let html = '<table class="table table-striped table-bordered table-condensed">';
-                html += '<thead><tr><th>Channel</th><th>Topic</th><th>Members</th></tr></thead><tbody>';
+                html += '<thead><tr><th>Channel</th><th>Modes</th><th>Topic</th><th>Members</th></tr></thead><tbody>';
                 chans.forEach(c => {
                     const topic = c.topic || '(No topic)';
+                    const modes = c.modes ? `+${c.modes}` : '';
                     html += `<tr><td><strong>${escapeHtml(c.name)}</strong></td>`;
+                    html += `<td><code style="font-size: 11px;">${escapeHtml(modes)}</code></td>`;
                     html += `<td>${escapeHtml(topic)}</td><td>${c.member_count}</td></tr>`;
                 });
                 html += '</tbody></table>';
@@ -233,12 +235,28 @@
             $('#stat-staff').textContent = data.staff.total || 0;
 
             // Update detailed stats
-            let html = '<dl class="dl-horizontal">';
-            html += `<dt>Staff:</dt><dd><strong>${data.staff.total}</strong></dd>`;
-            html += `<dt>Registered Nicks:</dt><dd><strong>${data.registered_nicks}</strong></dd>`;
+            let html = '<dl class="dl-horizontal" style="margin-bottom: 0;">';
+            html += `<dt>Total Staff:</dt><dd><strong>${data.staff.total}</strong>`;
+            if (data.staff.by_level) {
+                const levels = [];
+                if (data.staff.by_level.ADMIN) levels.push(`${data.staff.by_level.ADMIN} Admin`);
+                if (data.staff.by_level.SYSOP) levels.push(`${data.staff.by_level.SYSOP} SysOp`);
+                if (data.staff.by_level.GUIDE) levels.push(`${data.staff.by_level.GUIDE} Guide`);
+                if (levels.length) html += ` <span style="font-size: 11px; color: #666;">(${levels.join(', ')})</span>`;
+            }
+            html += `</dd>`;
+            html += `<dt>Registered Nicknames:</dt><dd><strong>${data.registered_nicks}</strong></dd>`;
             html += `<dt>Registered Channels:</dt><dd><strong>${data.registered_channels}</strong></dd>`;
             html += `<dt>Unread Mailbox:</dt><dd><strong>${data.unread_mailbox}</strong></dd>`;
-            html += `<dt>Newsflash Count:</dt><dd><strong>${data.newsflash_count || 0}</strong></dd>`;
+            html += `<dt>Unread Memos:</dt><dd><strong>${data.unread_memos || 0}</strong></dd>`;
+            html += `<dt>NewsFlash Items:</dt><dd><strong>${data.newsflash_count || 0}</strong></dd>`;
+            if (data.server_access) {
+                const denies = data.server_access.DENY || 0;
+                const grants = data.server_access.GRANT || 0;
+                html += `<dt>Access Rules:</dt><dd><strong>${denies + grants}</strong>`;
+                if (denies || grants) html += ` <span style="font-size: 11px; color: #666;">(${denies} ban${denies !== 1 ? 's' : ''}, ${grants} grant${grants !== 1 ? 's' : ''})</span>`;
+                html += `</dd>`;
+            }
             html += '</dl>';
             $('#server-stats').innerHTML = html;
         });
@@ -319,11 +337,11 @@
             $$('.btn-delete-newsflash').forEach(btn => {
                 btn.addEventListener('click', function() {
                     const id = this.getAttribute('data-id');
-                    if (confirm('Delete this newsflash?')) {
+                    if (confirm('Delete this NewsFlash?')) {
                         callAPI('delete-newsflash', [id]).then(res => {
                             if (res.error) showToast('Error', res.error, 'error');
                             else {
-                                showToast('Success', 'Newsflash deleted', 'success');
+                                showToast('Success', 'NewsFlash deleted', 'success');
                                 loadNewsflash();
                             }
                         });
@@ -727,7 +745,7 @@
                         $('#modal-add-newsflash').style.display = 'none';
                         $('#newsflash-message').value = '';
                         $('#newsflash-priority').value = '0';
-                        showToast('Success', 'Newsflash added', 'success');
+                        showToast('Success', 'NewsFlash added', 'success');
                         loadNewsflash();
                     }
                 });
