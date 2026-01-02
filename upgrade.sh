@@ -203,7 +203,7 @@ chmod 750 "$INSTALL_DIR/transcripts" 2>/dev/null || true  # Keep transcripts pri
 chmod 644 "$INSTALL_DIR/pyircx.db" 2>/dev/null || true  # Database readable
 chmod 755 "$INSTALL_DIR/pyircx.py"
 chmod 755 "$INSTALL_DIR/linking.py" 2>/dev/null || true
-chmod 640 "$CONFIG_DIR/pyircx_config.json" 2>/dev/null || true
+chmod 644 "$CONFIG_DIR/pyircx_config.json" 2>/dev/null || true  # Config readable for Cockpit
 echo -e "${GREEN}✓ Permissions fixed${NC}"
 
 # Restart service if it was running
