@@ -7202,6 +7202,9 @@ class pyIRCXServer:
                     # Sync to clones if this is the original
                     if channel.is_clone_enabled() and channel.clone_children:
                         self.sync_mode_to_clones(channel, 'l', False)
+            elif char == 'r':
+                # Registered mode (+r) can only be set by REGISTER command, not manually
+                user.send(f":{self.servername} 696 {user.nickname} {channel.name} r :Cannot manually set or unset +r mode. Use REGISTER/UNREGISTER commands.")
             elif char in channel.modes:
                 channel.modes[char] = adding
                 sign = '+' if adding else '-'
