@@ -99,7 +99,7 @@ def get_server_stats():
     db_path = get_db_path()
 
     if not os.path.exists(db_path):
-        return {"error": f"Database not found at {db_path}"}
+        return {"error": f"Database not found at {db_path}. The database is created when pyIRCX starts for the first time. Please start the service: systemctl start pyircx"}
 
     try:
         conn = sqlite3.connect(db_path)
