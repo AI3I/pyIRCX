@@ -108,8 +108,8 @@ pyIRCX offers feature parity with commercial IRCX servers like [OfficeIRC](https
 |---------|:------:|:---------:|:----------:|
 | Full IRCX Protocol Support | ✅ | ✅ | ❌ |
 | RFC 1459/2812 Compliance | ✅ | ✅ | ✅ |
-| **Server-to-Server Linking** | ✅ | ❌ | ✅ |
-| **Distributed Networks** | ✅ | ❌ | ✅ |
+| **Server-to-Server Linking** | ✅ | ✅ | ✅ |
+| **Distributed Networks** | ✅ | ✅ | ✅ |
 | SASL Authentication | ✅ | ✅ | ✅ |
 | IPv4 & IPv6 Dual-Stack | ✅ | ✅ | ✅ |
 | TLS/SSL Encryption | ✅ | ✅ | ✅ |
@@ -580,32 +580,35 @@ pyIRCX provides an authentic IRCX experience on modern infrastructure.
 | Server | Language | IRCX | Linking | ACCESS | PROP | Clone Channels | Open Source | Cost |
 |--------|----------|:----:|:-------:|:------:|:----:|:--------------:|:-----------:|:----:|
 | **pyIRCX** | Python | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Free |
-| OfficeIRC | .NET | ✅ | ❌ | ✅ | ✅ | ✅ | ❌ | Commercial |
+| OfficeIRC | .NET | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | Commercial |
 | UnrealIRCd | C | ❌ | ✅ | ❌ | ❌ | ❌ | ✅ | Free |
 | InspIRCd | C++ | ❌ | ✅ | ❌ | ❌ | ❌ | ✅ | Free |
 | Solanum | C | ❌ | ✅ | ❌ | ❌ | ❌ | ✅ | Free |
+| ircu | C | ❌ | ✅ | ❌ | ❌ | ❌ | ✅ | Free |
+| bahamut | C | ❌ | ✅ | ❌ | ❌ | ❌ | ✅ | Free |
+| ratbox | C | ❌ | ✅ | ❌ | ❌ | ❌ | ✅ | Free |
 | ngIRCd | C | ❌ | ✅ | ❌ | ❌ | ❌ | ✅ | Free |
 | Ergo | Go | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ | Free |
 | ircd-hybrid | C | ❌ | ✅ | ❌ | ❌ | ❌ | ✅ | Free |
 
 ### Feature Comparison
 
-| Feature | pyIRCX | OfficeIRC | UnrealIRCd | Solanum | Ergo |
-|---------|:------:|:---------:|:----------:|:-------:|:----:|
-| IRCX Protocol | ✅ | ✅ | ❌ | ❌ | ❌ |
-| Server Linking | ✅ | ❌ | ✅ | ✅ | ❌ |
-| Multi-Server Networks | ✅ | ❌ | ✅ | ✅ | ❌ |
-| Comic Chat Compatible | ✅ | ✅ | ❌ | ❌ | ❌ |
-| Built-in NickServ | ✅ | ✅ | ❌* | ❌* | ✅ |
-| Built-in ChanServ | ✅ | ✅ | ❌* | ❌* | ✅ |
-| ServiceBot System | ✅ | ✅ | ❌ | ❌ | ❌ |
-| Channel Cloning | ✅ | ✅ | ❌ | ❌ | ❌ |
-| SASL Authentication | ✅ | ✅ | ✅ | ✅ | ✅ |
-| IPv6 Support | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Transcript Logging | ✅ | ✅ | ❌ | ❌ | ❌ |
-| Single-File Deploy | ✅ | ✅ | ❌ | ❌ | ✅ |
-| No External Services | ✅ | ✅ | ❌* | ❌* | ✅ |
-| Web Admin (Optional) | ✅ | ✅ | ❌ | ❌ | ✅ |
+| Feature | pyIRCX | OfficeIRC | UnrealIRCd | Solanum | ircu | bahamut | ratbox | Ergo |
+|---------|:------:|:---------:|:----------:|:-------:|:----:|:-------:|:------:|:----:|
+| IRCX Protocol | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Server Linking | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| Multi-Server Networks | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| Comic Chat Compatible | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Built-in NickServ | ✅ | ✅ | ❌* | ❌* | ❌* | ❌* | ❌* | ✅ |
+| Built-in ChanServ | ✅ | ✅ | ❌* | ❌* | ❌* | ❌* | ❌* | ✅ |
+| ServiceBot System | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Channel Cloning | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| SASL Authentication | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| IPv6 Support | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Transcript Logging | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Single-File Deploy | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
+| No External Services | ✅ | ✅ | ❌* | ❌* | ❌* | ❌* | ❌* | ✅ |
+| Web Admin (Optional) | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
 
 *\* Requires Anope or Atheme services package*
 
@@ -623,15 +626,17 @@ pyIRCX is production-ready and suitable for:
 ✅ **Enterprise Deployments** — Secure internal chat with staff hierarchy
 ✅ **Retro Projects** — Authentic IRCX for vintage client compatibility
 
-### Who's Using pyIRCX?
+### Who Should Use pyIRCX?
 
-- Retro computing communities
-- Gaming guilds and clans
-- Self-hosted team chat
-- IRC network operators
-- IRCX protocol researchers
+pyIRCX is ideal for:
 
-*Want to be listed? Open an issue on GitHub!*
+- **Retro computing enthusiasts** preserving IRCX protocol history
+- **Gaming communities** needing dedicated chat infrastructure
+- **Organizations** wanting self-hosted team communication
+- **IRC network operators** building distributed chat networks
+- **Researchers** studying IRCX protocol implementation
+
+*Using pyIRCX in production? Let us know via GitHub issues!*
 
 ---
 
@@ -676,7 +681,7 @@ GNU General Public License v3.0 — See [LICENSE](LICENSE) for details.
 ## Acknowledgments
 
 - The Microsoft Exchange Chat team for creating IRCX
-- The MSN Chat community for years of memories
+- The TalkCity community for years of memories
 - The IRC protocol designers (RFC 1459, RFC 2812)
 - Everyone keeping classic chat protocols alive
 - All contributors to this project
@@ -688,20 +693,6 @@ GNU General Public License v3.0 — See [LICENSE](LICENSE) for details.
 - **Documentation**: See docs in this repository
 - **Issues**: [GitHub Issues](https://github.com/AI3I/pyIRCX/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/AI3I/pyIRCX/discussions)
-
----
-
-## Roadmap
-
-Future enhancements planned:
-
-- [ ] WebSocket support for browser clients
-- [ ] IRCv3 capability extensions
-- [ ] PostgreSQL/MySQL database backends
-- [ ] Cluster mode with Redis pub/sub
-- [ ] S2S link encryption (TLS)
-- [ ] REST API for integrations
-- [ ] Prometheus metrics export
 
 ---
 
