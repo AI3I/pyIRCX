@@ -312,7 +312,7 @@ def add_newsflash(message, created_by, priority=0):
         conn.commit()
         conn.close()
 
-        return {"success": True, "message": "Newsflash added"}
+        return {"success": True, "message": "NewsFlash added"}
 
     except Exception as e:
         return {"error": str(e)}
@@ -335,9 +335,9 @@ def delete_newsflash(msg_id):
         conn.close()
 
         if rows_affected > 0:
-            return {"success": True, "message": "Newsflash deleted"}
+            return {"success": True, "message": "NewsFlash deleted"}
         else:
-            return {"error": "Newsflash not found"}
+            return {"error": "NewsFlash not found"}
 
     except Exception as e:
         return {"error": str(e)}
