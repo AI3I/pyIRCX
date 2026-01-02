@@ -40,7 +40,23 @@ trap cleanup EXIT INT TERM
 check_server() {
     echo -e "${BLUE}Checking if pyIRCX server is running...${NC}"
 
-    if nc -z $TEST_HOST $TEST_PORT 2>/dev/null; then
+    # Check if nc (netcat) is available
+    if ! command -v nc &> /dev/null; then
+        # Try alternative methods
+        if command -v timeout &> /dev/null && command -v bash &> /dev/null; then
+            # Use bash TCP socket feature
+            if timeout 1 bash -c "cat < /dev/null > /dev/tcp/$TEST_HOST/$TEST_PORT" 2>/dev/null; then
+                echo -e "${GREEN}✓ Server is running on $TEST_HOST:$TEST_PORT${NC}"
+                return 0
+            else
+                echo -e "${YELLOW}✗ Server is not running on $TEST_HOST:$TEST_PORT${NC}"
+                return 1
+            fi
+        else
+            echo -e "${YELLOW}Warning: nc (netcat) not found. Assuming server needs to be started.${NC}"
+            return 1
+        fi
+    elif nc -z $TEST_HOST $TEST_PORT 2>/dev/null; then
         echo -e "${GREEN}✓ Server is running on $TEST_HOST:$TEST_PORT${NC}"
         return 0
     else
@@ -69,7 +85,24 @@ start_test_server() {
     sleep $SERVER_WAIT
 
     # Verify server started
-    if ! nc -z $TEST_HOST $TEST_PORT 2>/dev/null; then
+    SERVER_STARTED=0
+    if command -v nc &> /dev/null; then
+        if nc -z $TEST_HOST $TEST_PORT 2>/dev/null; then
+            SERVER_STARTED=1
+        fi
+    elif command -v timeout &> /dev/null && command -v bash &> /dev/null; then
+        if timeout 1 bash -c "cat < /dev/null > /dev/tcp/$TEST_HOST/$TEST_PORT" 2>/dev/null; then
+            SERVER_STARTED=1
+        fi
+    else
+        # Assume it started if the process is still running
+        if kill -0 $SERVER_PID 2>/dev/null; then
+            SERVER_STARTED=1
+            echo -e "${YELLOW}Warning: Cannot verify server port, assuming it started${NC}"
+        fi
+    fi
+
+    if [ $SERVER_STARTED -eq 0 ]; then
         echo -e "${RED}Error: Failed to start test server${NC}"
         echo "Check /tmp/pyircx_test.log for errors"
         exit 1

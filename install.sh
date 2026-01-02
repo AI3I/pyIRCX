@@ -69,28 +69,77 @@ install_dependencies() {
     echo -e "${YELLOW}Installing dependencies for $os...${NC}"
 
     case $os in
-        ubuntu|debian)
+        ubuntu|debian|linuxmint|pop|elementary|zorin|kali|parrot|raspbian)
             apt-get update
             apt-get install -y python3 python3-pip python3-venv
             ;;
         fedora)
             dnf install -y python3 python3-pip
             ;;
-        centos|rhel|rocky|almalinux)
+        centos|rhel|rocky|almalinux|oracle|scientific)
             if [ -f /etc/centos-release ] || [ "$VERSION_ID" -lt 8 ]; then
                 yum install -y python3 python3-pip
             else
                 dnf install -y python3 python3-pip
             fi
             ;;
-        arch|manjaro)
+        arch|manjaro|endeavouros|garuda|artix)
             pacman -Sy --noconfirm python python-pip
             ;;
-        opensuse*|sles)
+        opensuse*|sles|tumbleweed)
             zypper install -y python3 python3-pip
             ;;
+        gentoo|funtoo)
+            emerge --ask=n dev-lang/python dev-python/pip
+            ;;
+        void)
+            xbps-install -Sy python3 python3-pip
+            ;;
+        alpine)
+            apk add --no-cache python3 py3-pip
+            ;;
+        solus)
+            eopkg install -y python3 pip
+            ;;
+        nixos)
+            echo -e "${YELLOW}NixOS detected. Please add python3 and pip to your configuration.nix${NC}"
+            echo "Example: environment.systemPackages = with pkgs; [ python3 python3Packages.pip ];"
+            ;;
+        clear-linux-os)
+            swupd bundle-add python3-basic
+            ;;
+        mageia)
+            urpmi python3 python3-pip
+            ;;
+        slackware)
+            # Slackware typically has Python pre-installed
+            echo -e "${GREEN}Slackware detected. Python should be pre-installed.${NC}"
+            if ! command -v pip3 &> /dev/null; then
+                echo -e "${YELLOW}pip not found. Installing pip...${NC}"
+                python3 -m ensurepip --default-pip || python3 <(curl -sS https://bootstrap.pypa.io/get-pip.py)
+            fi
+            ;;
         *)
-            echo -e "${YELLOW}Unknown OS, assuming dependencies are installed${NC}"
+            echo -e "${YELLOW}Unknown OS ($os), attempting generic installation...${NC}"
+            # Try to detect package manager and install
+            if command -v apt-get &> /dev/null; then
+                apt-get update && apt-get install -y python3 python3-pip python3-venv
+            elif command -v dnf &> /dev/null; then
+                dnf install -y python3 python3-pip
+            elif command -v yum &> /dev/null; then
+                yum install -y python3 python3-pip
+            elif command -v pacman &> /dev/null; then
+                pacman -Sy --noconfirm python python-pip
+            elif command -v zypper &> /dev/null; then
+                zypper install -y python3 python3-pip
+            elif command -v apk &> /dev/null; then
+                apk add --no-cache python3 py3-pip
+            elif command -v emerge &> /dev/null; then
+                emerge --ask=n dev-lang/python dev-python/pip
+            else
+                echo -e "${YELLOW}No supported package manager found.${NC}"
+                echo -e "${YELLOW}Please ensure Python 3.8+ and pip are installed manually.${NC}"
+            fi
             ;;
     esac
 }
@@ -178,23 +227,52 @@ set_permissions() {
 install_cockpit() {
     echo -e "${YELLOW}Installing Cockpit web admin panel...${NC}"
 
+    local os=$(detect_os)
+
     # Install Cockpit package
-    case "$OS" in
-        fedora|rhel|centos)
+    case "$os" in
+        fedora|rhel|centos|rocky|almalinux|oracle|scientific)
             dnf install -y cockpit || yum install -y cockpit
             ;;
-        debian|ubuntu)
+        debian|ubuntu|linuxmint|pop|elementary|zorin|kali|parrot|raspbian)
+            apt-get update
             apt-get install -y cockpit
             ;;
-        arch)
+        arch|manjaro|endeavouros|garuda)
             pacman -S --noconfirm cockpit
             ;;
-        opensuse*)
+        opensuse*|sles|tumbleweed)
             zypper install -y cockpit
             ;;
-        *)
-            echo -e "${RED}Unknown OS. Please install Cockpit manually.${NC}"
+        gentoo|funtoo)
+            echo -e "${YELLOW}Gentoo detected. Installing Cockpit from overlay...${NC}"
+            emerge --ask=n app-admin/cockpit || echo -e "${YELLOW}Cockpit may require manual installation from overlay${NC}"
+            ;;
+        void)
+            xbps-install -Sy cockpit
+            ;;
+        alpine)
+            echo -e "${YELLOW}Alpine Linux: Cockpit may not be available in standard repos${NC}"
+            echo "Consider using a lightweight alternative or building from source"
             return 1
+            ;;
+        *)
+            echo -e "${YELLOW}Unknown OS. Attempting generic installation...${NC}"
+            if command -v apt-get &> /dev/null; then
+                apt-get update && apt-get install -y cockpit
+            elif command -v dnf &> /dev/null; then
+                dnf install -y cockpit
+            elif command -v yum &> /dev/null; then
+                yum install -y cockpit
+            elif command -v pacman &> /dev/null; then
+                pacman -S --noconfirm cockpit
+            elif command -v zypper &> /dev/null; then
+                zypper install -y cockpit
+            else
+                echo -e "${RED}Could not install Cockpit automatically.${NC}"
+                echo "Please install Cockpit manually: https://cockpit-project.org/running.html"
+                return 1
+            fi
             ;;
     esac
 
