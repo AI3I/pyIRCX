@@ -13,11 +13,28 @@ import re
 from pathlib import Path
 from datetime import datetime
 
-# Default paths
-DEFAULT_CONFIG = os.path.expanduser("~/pyIRCX/pyircx_config.json")
-DEFAULT_DB = os.path.expanduser("~/pyIRCX/pyircx.db")
-DEFAULT_LOG = os.path.expanduser("~/pyIRCX/pyircx.log")
-DEFAULT_STATUS = os.path.expanduser("~/pyIRCX/pyircx_status.json")
+# Default paths - check system install location first, then user home
+# System installation paths (from install.sh)
+SYSTEM_CONFIG = "/etc/pyircx/pyircx_config.json"
+SYSTEM_INSTALL = "/opt/pyircx"
+
+# User installation paths (for manual/development installations)
+USER_CONFIG = os.path.expanduser("~/pyIRCX/pyircx_config.json")
+USER_INSTALL = os.path.expanduser("~/pyIRCX")
+
+# Determine which installation is active
+if os.path.exists(SYSTEM_CONFIG):
+    # System installation detected
+    DEFAULT_CONFIG = SYSTEM_CONFIG
+    DEFAULT_DB = os.path.join(SYSTEM_INSTALL, "pyircx.db")
+    DEFAULT_LOG = os.path.join(SYSTEM_INSTALL, "pyircx.log")
+    DEFAULT_STATUS = os.path.join(SYSTEM_INSTALL, "pyircx_status.json")
+else:
+    # Fall back to user installation
+    DEFAULT_CONFIG = USER_CONFIG
+    DEFAULT_DB = os.path.join(USER_INSTALL, "pyircx.db")
+    DEFAULT_LOG = os.path.join(USER_INSTALL, "pyircx.log")
+    DEFAULT_STATUS = os.path.join(USER_INSTALL, "pyircx_status.json")
 
 def load_config():
     """Load pyIRCX configuration"""
@@ -43,7 +60,11 @@ def get_db_path():
         db_path = config['database']['path']
         # Handle relative paths
         if not os.path.isabs(db_path):
-            db_path = os.path.expanduser(f"~/pyIRCX/{db_path}")
+            # Use the appropriate base directory
+            if os.path.exists(SYSTEM_CONFIG):
+                db_path = os.path.join(SYSTEM_INSTALL, db_path)
+            else:
+                db_path = os.path.join(USER_INSTALL, db_path)
         return db_path
     return DEFAULT_DB
 
