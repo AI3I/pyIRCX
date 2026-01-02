@@ -198,7 +198,9 @@ echo ""
 echo -e "${BLUE}Fixing permissions...${NC}"
 chown -R "$SERVICE_USER:$SERVICE_GROUP" "$INSTALL_DIR"
 chown -R "$SERVICE_USER:$SERVICE_GROUP" "$CONFIG_DIR"
-chmod 750 "$INSTALL_DIR"
+chmod 755 "$INSTALL_DIR"  # Allow Cockpit access
+chmod 750 "$INSTALL_DIR/transcripts" 2>/dev/null || true  # Keep transcripts private
+chmod 644 "$INSTALL_DIR/pyircx.db" 2>/dev/null || true  # Database readable
 chmod 755 "$INSTALL_DIR/pyircx.py"
 chmod 755 "$INSTALL_DIR/linking.py" 2>/dev/null || true
 chmod 640 "$CONFIG_DIR/pyircx_config.json" 2>/dev/null || true
