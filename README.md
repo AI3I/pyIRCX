@@ -170,7 +170,7 @@ When a channel with clone mode (+d) reaches its user limit (+l), new joiners aut
 - **TLS 1.2/1.3** with automatic certificate management
 - **IP masking** (+x user mode)
 
-### ServiceBot System
+### Network Services
 
 Built-in service bots that can be invited to channels for moderation:
 
@@ -178,7 +178,7 @@ Built-in service bots that can be invited to channels for moderation:
 - **Registrar** — Handles nickname registration and authentication
 - **Messenger** — Offline messaging / memo service
 - **NewsFlash** — Network-wide announcements
-- **ServiceBot1-10** — Configurable monitoring bots for content filtering
+- **ServiceBots** — Configurable monitoring bots for content filtering
 
 ### Staff Management
 
@@ -559,7 +559,7 @@ Comprehensive comparison of pyIRCX with major IRC server implementations:
 | **Comic Chat** | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | **Built-in NickServ** | ✅ | ✅ | ❌* | ❌* | ❌* | ❌* | ❌* | ❌* | ❌* | ✅ | ❌* |
 | **Built-in ChanServ** | ✅ | ✅ | ❌* | ❌* | ❌* | ❌* | ❌* | ❌* | ❌* | ✅ | ❌* |
-| **ServiceBot System** | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **Network Services** | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | **SASL Auth** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **IPv6 Support** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **Transcript Logging** | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
