@@ -138,14 +138,31 @@ fi
 # Remove Cockpit module
 echo ""
 echo -e "${BLUE}Checking for Cockpit module...${NC}"
+COCKPIT_REMOVED=0
+
+# Check system-wide installation
+if [ -d /usr/share/cockpit/pyircx ]; then
+    read -p "Remove Cockpit web admin module (system-wide)? [y/N] " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        rm -rf /usr/share/cockpit/pyircx
+        echo -e "${GREEN}✓ Cockpit module removed (system-wide)${NC}"
+        COCKPIT_REMOVED=1
+    fi
+fi
+
+# Check user installation (old location)
 if [ -d ~/.local/share/cockpit/pyircx ]; then
-    read -p "Remove Cockpit web admin module? [y/N] " -n 1 -r
+    read -p "Remove Cockpit web admin module (user directory)? [y/N] " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         rm -rf ~/.local/share/cockpit/pyircx
-        echo -e "${GREEN}✓ Cockpit module removed${NC}"
+        echo -e "${GREEN}✓ Cockpit module removed (user directory)${NC}"
+        COCKPIT_REMOVED=1
     fi
-else
+fi
+
+if [ $COCKPIT_REMOVED -eq 0 ]; then
     echo "Cockpit module not found"
 fi
 

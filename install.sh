@@ -276,9 +276,11 @@ install_cockpit() {
             ;;
     esac
 
-    # Copy Cockpit module to user directory
-    mkdir -p ~/.local/share/cockpit
-    cp -r cockpit/pyircx ~/.local/share/cockpit/
+    # Copy Cockpit module to system directory
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    mkdir -p /usr/share/cockpit
+    cp -r "$SCRIPT_DIR/cockpit/pyircx" /usr/share/cockpit/
+    chmod +x /usr/share/cockpit/pyircx/api.py
 
     # Enable and start Cockpit
     systemctl enable --now cockpit.socket
