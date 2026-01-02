@@ -146,12 +146,19 @@ The new scripts are compatible with existing installations. No configuration cha
 - Now uses system-wide Cockpit installation path
 - Works for all users, not just the installer
 
-**install.sh** (Cockpit section)
-- Changed to install Cockpit module system-wide (/usr/share/cockpit/)
+**install.sh**
+- Now copies linking.py module (was missing - caused service failures!)
+- Changed Cockpit module to install system-wide (/usr/share/cockpit/)
 - Makes api.py executable during installation
 - Accessible to all users on the system
 
-**uninstall.sh** (Cockpit section)
+**pyircx.service**
+- Relaxed ProtectSystem from 'strict' to 'full' for proper operation
+- Removed MemoryDenyWriteExecute (can interfere with Python)
+- Added explicit ReadOnlyPaths for /etc/pyircx
+- Changed PrivateDevices to false (needed for system devices)
+
+**uninstall.sh**
 - Removes Cockpit from both system and user locations
 - Handles upgrades from old installation method
 
@@ -174,6 +181,8 @@ The new scripts are compatible with existing installations. No configuration cha
 - Fixed Cockpit installation on Arch derivatives
 - **Fixed Cockpit web admin not finding files after system installation**
 - **Fixed Cockpit integration with hardcoded user path - now works system-wide**
+- **CRITICAL: Fixed service startup failure - linking.py module was not being copied**
+- **Fixed systemd security settings that were too restrictive**
 
 ---
 
