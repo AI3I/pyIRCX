@@ -557,13 +557,13 @@ The protocol powered some of the largest chat networks of the era:
 - **TalkCity** was one of the pioneering web chat communities
 - Countless enterprise deployments for internal communications
 
-When Microsoft [shut down MSN Chat in 2006](https://en.wikipedia.org/wiki/MSN_Chat), the IRCX protocol largely faded from public use — but not from memory.
+When TalkCity [ceased its original operations in 2002](https://en.wikipedia.org/wiki/Talkcity.com) and Microsoft [shut down MSN Chat in 2006](https://en.wikipedia.org/wiki/MSN_Chat), the IRCX protocol largely faded from public use — but not from memory.
 
 ### Preserving Chat History
 
 pyIRCX was created to preserve this important piece of internet history. Whether you're:
 
-- **Nostalgic** for the MSN Chat days
+- **Nostalgic** for the TalkCity or MSN Chat era
 - Running a **retro computing** project
 - Need a **fully-featured IRC server** with modern enhancements
 - Want to understand how **enterprise chat worked** before Slack
