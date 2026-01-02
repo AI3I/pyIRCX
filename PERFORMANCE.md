@@ -515,6 +515,6 @@ pyIRCX v1.0.3 is **suitable for small to medium deployments**:
 
 ---
 
-**Document Version:** 1.0.3
+**Document Version:** 1.0.4
 **Last Updated:** 2026-01-02
 **Benchmarked On:** Python 3.11, 8-core CPU, 16GB RAM, SSD storage

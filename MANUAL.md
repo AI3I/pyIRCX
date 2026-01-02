@@ -1,8 +1,8 @@
 # pyIRCX Server Manual
 
-**Version:** 1.0.3
+**Version:** 1.0.4
 **Last Updated:** 2026-01-02
-**License:** Open Source
+**License:** GNU General Public License v3.0
 
 ---
 
