@@ -72,6 +72,13 @@ sudo ./uninstall.sh
 - More portable across minimal installations
 - Works on Alpine, Gentoo, and other minimal distros
 
+#### Fixed Cockpit Web Admin Paths
+
+- **Cockpit now works with system installation**
+- Automatically detects system install location (`/opt/pyircx`, `/etc/pyircx`)
+- Falls back to user installation (`~/pyIRCX`) for development setups
+- Correctly handles both installation methods seamlessly
+
 ---
 
 ## Installation
@@ -129,6 +136,11 @@ The new scripts are compatible with existing installations. No configuration cha
 - Bash TCP socket fallback for connectivity checks
 - Works on minimal Linux installations
 
+**cockpit/pyircx/api.py**
+- Fixed paths to work with system installation
+- Auto-detects install location (/opt/pyircx vs ~/pyIRCX)
+- Correctly handles both system and user installations
+
 ### New Files
 
 **uninstall.sh**
@@ -146,6 +158,7 @@ The new scripts are compatible with existing installations. No configuration cha
 - Fixed installation failures on non-mainstream distributions
 - Fixed test runner failures when netcat not installed
 - Fixed Cockpit installation on Arch derivatives
+- **Fixed Cockpit web admin not finding files after system installation**
 
 ---
 
