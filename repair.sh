@@ -240,7 +240,9 @@ if [[ ! $REPLY =~ ^[Nn]$ ]]; then
         echo -e "${YELLOW}Fixing permissions...${NC}"
         chown -R "$SERVICE_USER:$SERVICE_GROUP" "$INSTALL_DIR" 2>/dev/null || true
         chown -R "$SERVICE_USER:$SERVICE_GROUP" "$CONFIG_DIR" 2>/dev/null || true
-        chmod 750 "$INSTALL_DIR" 2>/dev/null || true
+        chmod 755 "$INSTALL_DIR" 2>/dev/null || true  # Allow Cockpit access
+        chmod 750 "$INSTALL_DIR/transcripts" 2>/dev/null || true  # Keep transcripts private
+        chmod 644 "$INSTALL_DIR/pyircx.db" 2>/dev/null || true  # Database readable
         chmod 755 "$INSTALL_DIR/pyircx.py" 2>/dev/null || true
         chmod 755 "$INSTALL_DIR/linking.py" 2>/dev/null || true
         chmod 640 "$CONFIG_DIR/pyircx_config.json" 2>/dev/null || true
