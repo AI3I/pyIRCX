@@ -8,9 +8,9 @@ Configuration is stored in `pyircx_config.json`. All options have sensible defau
 |--------|---------|-------------|
 | `server.name` | `"irc.local"` | Server hostname shown to clients |
 | `server.network` | `"IRCX Network"` | Network name in 005 numeric |
-| `server.version` | `"1.0.0"` | Server version string |
+| `server.version` | `"1.0.3"` | Server version string |
 | `server.version_label` | `"pyIRCX"` | Version label for VERSION command |
-| `server.created_date` | `"2025"` | Server creation date shown in 003 |
+| `server.created_date` | `"2026"` | Server creation date shown in 003 |
 
 ## Network Settings
 

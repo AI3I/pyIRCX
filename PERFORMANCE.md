@@ -1,4 +1,4 @@
-# Performance Analysis - pyIRCX v1.0.0
+# Performance Analysis - pyIRCX v1.0.3
 
 ## Executive Summary
 
@@ -499,7 +499,7 @@ tail -f /var/log/pyircx.log | grep -E "Connection|Flood|Error"
 
 ## Conclusion
 
-pyIRCX v1.0.0 is **suitable for small to medium deployments**:
+pyIRCX v1.0.3 is **suitable for small to medium deployments**:
 
 ✅ **Excellent for: 100-1,000 users** (single server)
 ✅ **Good for: 1,000-5,000 users** (server linking)
@@ -515,6 +515,6 @@ pyIRCX v1.0.0 is **suitable for small to medium deployments**:
 
 ---
 
-**Document Version:** 1.0
-**Last Updated:** 2026-01-01
+**Document Version:** 1.0.3
+**Last Updated:** 2026-01-02
 **Benchmarked On:** Python 3.11, 8-core CPU, 16GB RAM, SSD storage
