@@ -141,6 +141,20 @@ The new scripts are compatible with existing installations. No configuration cha
 - Auto-detects install location (/opt/pyircx vs ~/pyIRCX)
 - Correctly handles both system and user installations
 
+**cockpit/pyircx/pyircx.js**
+- Removed hardcoded user-specific path
+- Now uses system-wide Cockpit installation path
+- Works for all users, not just the installer
+
+**install.sh** (Cockpit section)
+- Changed to install Cockpit module system-wide (/usr/share/cockpit/)
+- Makes api.py executable during installation
+- Accessible to all users on the system
+
+**uninstall.sh** (Cockpit section)
+- Removes Cockpit from both system and user locations
+- Handles upgrades from old installation method
+
 ### New Files
 
 **uninstall.sh**
@@ -159,6 +173,7 @@ The new scripts are compatible with existing installations. No configuration cha
 - Fixed test runner failures when netcat not installed
 - Fixed Cockpit installation on Arch derivatives
 - **Fixed Cockpit web admin not finding files after system installation**
+- **Fixed Cockpit integration with hardcoded user path - now works system-wide**
 
 ---
 
