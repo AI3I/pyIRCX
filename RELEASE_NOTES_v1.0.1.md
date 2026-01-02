@@ -140,16 +140,20 @@ The new scripts are compatible with existing installations. No configuration cha
 - Fixed paths to work with system installation
 - Auto-detects install location (/opt/pyircx vs ~/pyIRCX)
 - Correctly handles both system and user installations
+- Improved database error messages with helpful instructions
 
 **cockpit/pyircx/pyircx.js**
 - Removed hardcoded user-specific path
 - Now uses system-wide Cockpit installation path
 - Works for all users, not just the installer
+- Added proper superuser permissions for systemctl commands
+- Fixed service status checking and control
 
 **install.sh**
 - Now copies linking.py module (was missing - caused service failures!)
 - Changed Cockpit module to install system-wide (/usr/share/cockpit/)
 - Makes api.py executable during installation
+- Restarts Cockpit if already running (picks up new module immediately)
 - Accessible to all users on the system
 
 **pyircx.service**
@@ -181,6 +185,8 @@ The new scripts are compatible with existing installations. No configuration cha
 - Fixed Cockpit installation on Arch derivatives
 - **Fixed Cockpit web admin not finding files after system installation**
 - **Fixed Cockpit integration with hardcoded user path - now works system-wide**
+- **Fixed Cockpit service control - systemctl now works with proper permissions**
+- **Fixed Cockpit not reloading when already installed - now auto-restarts**
 - **CRITICAL: Fixed service startup failure - linking.py module was not being copied**
 - **Fixed systemd security settings that were too restrictive**
 
