@@ -70,7 +70,7 @@
             </div>
         </div>
 
-        <!-- Row: Connected Users + Active Channels -->
+        <!-- Row: Connected Users + Recent Nickname Registrations -->
         <div class="row">
             <div class="col-6">
                 <div class="card fade-in">
@@ -80,8 +80,24 @@
             </div>
             <div class="col-6">
                 <div class="card fade-in">
+                    <div class="card-header"><h3><span class="card-header-icon">📝</span> Recent Nickname Registrations</h3></div>
+                    <div class="card-body"><div id="recent-registrations"><div class="spinner spinner-sm"></div></div></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Row: Active Channels + Registered Channels -->
+        <div class="row">
+            <div class="col-6">
+                <div class="card fade-in">
                     <div class="card-header"><h3><span class="card-header-icon">💬</span> Active Channels <span id="channel-count" class="badge badge-success">0</span></h3></div>
                     <div class="card-body"><div id="active-channels"><div class="spinner spinner-sm"></div></div></div>
+                </div>
+            </div>
+            <div class="col-6">
+                <div class="card fade-in">
+                    <div class="card-header"><h3><span class="card-header-icon">📋</span> Registered Channels</h3></div>
+                    <div class="card-body"><div id="channels-list"><div class="spinner spinner-sm"></div></div></div>
                 </div>
             </div>
         </div>
@@ -138,26 +154,10 @@
             </div>
         </div>
 
-        <!-- Row 4: Staff + Recent Registrations -->
-        <div class="row">
-            <div class="col-6">
-                <div class="card fade-in">
-                    <div class="card-header"><h3><span class="card-header-icon">👮</span> Staff Members</h3></div>
-                    <div class="card-body"><div id="staff-list"><div class="spinner spinner-sm"></div></div></div>
-                </div>
-            </div>
-            <div class="col-6">
-                <div class="card fade-in">
-                    <div class="card-header"><h3><span class="card-header-icon">📝</span> Recent Nick Registrations</h3></div>
-                    <div class="card-body"><div id="recent-registrations"><div class="spinner spinner-sm"></div></div></div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Full Width: Registered Channels -->
+        <!-- Staff Members -->
         <div class="card fade-in">
-            <div class="card-header"><h3><span class="card-header-icon">📋</span> Registered Channels</h3></div>
-            <div class="card-body"><div id="channels-list"><div class="spinner spinner-sm"></div></div></div>
+            <div class="card-header"><h3><span class="card-header-icon">👮</span> Staff Members</h3></div>
+            <div class="card-body"><div id="staff-list"><div class="spinner spinner-sm"></div></div></div>
         </div>
 
         <!-- Full Width: Logs -->
