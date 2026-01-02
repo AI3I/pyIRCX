@@ -67,10 +67,32 @@
                         <div id="server-stats"><div class="spinner spinner-sm"></div></div>
                     </div>
                 </div>
+                <!-- Search Section -->
+                <div style="margin-top: 25px; padding-top: 20px; border-top: 1px solid #e0e0e0;">
+                    <h4 style="font-size: 14px; font-weight: 700; color: #2c3e50; margin-bottom: 15px;">🔍 Search</h4>
+                    <div style="margin-bottom: 15px;">
+                        <label>Search Nicknames:</label>
+                        <input type="text" id="search-nicks-input" class="form-control" placeholder="Enter nickname..." style="display: inline-block; width: 300px; margin-left: 10px;">
+                        <button class="btn btn-primary" id="btn-search-nicks">🔍 Search</button>
+                    </div>
+                    <div id="search-nicks-results"></div>
+                    <div style="margin-top: 20px;">
+                        <label>Search Channels:</label>
+                        <input type="text" id="search-channels-input" class="form-control" placeholder="Enter channel..." style="display: inline-block; width: 300px; margin-left: 10px;">
+                        <button class="btn btn-primary" id="btn-search-channels">🔍 Search</button>
+                    </div>
+                    <div id="search-channels-results"></div>
+                </div>
             </div>
         </div>
 
-        <!-- Row: Connected Users + Recent Nickname Registrations -->
+        <!-- Staff Members -->
+        <div class="card fade-in">
+            <div class="card-header"><h3><span class="card-header-icon">👮</span> Staff Members</h3></div>
+            <div class="card-body"><div id="staff-list"><div class="spinner spinner-sm"></div></div></div>
+        </div>
+
+        <!-- Row: Connected Users + Active Channels -->
         <div class="row">
             <div class="col-6">
                 <div class="card fade-in">
@@ -80,18 +102,18 @@
             </div>
             <div class="col-6">
                 <div class="card fade-in">
-                    <div class="card-header"><h3><span class="card-header-icon">📝</span> Recent Nickname Registrations</h3></div>
-                    <div class="card-body"><div id="recent-registrations"><div class="spinner spinner-sm"></div></div></div>
+                    <div class="card-header"><h3><span class="card-header-icon">💬</span> Active Channels <span id="channel-count" class="badge badge-success">0</span></h3></div>
+                    <div class="card-body"><div id="active-channels"><div class="spinner spinner-sm"></div></div></div>
                 </div>
             </div>
         </div>
 
-        <!-- Row: Active Channels + Registered Channels -->
+        <!-- Row: Recent Nickname Registrations + Registered Channels -->
         <div class="row">
             <div class="col-6">
                 <div class="card fade-in">
-                    <div class="card-header"><h3><span class="card-header-icon">💬</span> Active Channels <span id="channel-count" class="badge badge-success">0</span></h3></div>
-                    <div class="card-body"><div id="active-channels"><div class="spinner spinner-sm"></div></div></div>
+                    <div class="card-header"><h3><span class="card-header-icon">📝</span> Recent Nickname Registrations</h3></div>
+                    <div class="card-body"><div id="recent-registrations"><div class="spinner spinner-sm"></div></div></div>
                 </div>
             </div>
             <div class="col-6">
@@ -143,31 +165,6 @@
         <div class="card fade-in">
             <div class="card-header"><h3><span class="card-header-icon">📬</span> Mailbox Messages</h3></div>
             <div class="card-body"><div id="mailbox-list"><div class="spinner spinner-sm"></div></div></div>
-        </div>
-
-        <!-- Full Width: Search -->
-        <div class="card fade-in">
-            <div class="card-header"><h3><span class="card-header-icon">🔍</span> Search</h3></div>
-            <div class="card-body">
-                <div style="margin-bottom: 15px;">
-                    <label>Search Nicknames:</label>
-                    <input type="text" id="search-nicks-input" class="form-control" placeholder="Enter nickname..." style="display: inline-block; width: 300px; margin-left: 10px;">
-                    <button class="btn btn-primary" id="btn-search-nicks">🔍 Search</button>
-                </div>
-                <div id="search-nicks-results"></div>
-                <div style="margin-top: 20px;">
-                    <label>Search Channels:</label>
-                    <input type="text" id="search-channels-input" class="form-control" placeholder="Enter channel..." style="display: inline-block; width: 300px; margin-left: 10px;">
-                    <button class="btn btn-primary" id="btn-search-channels">🔍 Search</button>
-                </div>
-                <div id="search-channels-results"></div>
-            </div>
-        </div>
-
-        <!-- Staff Members -->
-        <div class="card fade-in">
-            <div class="card-header"><h3><span class="card-header-icon">👮</span> Staff Members</h3></div>
-            <div class="card-body"><div id="staff-list"><div class="spinner spinner-sm"></div></div></div>
         </div>
 
         <!-- Full Width: Logs -->
