@@ -194,6 +194,28 @@
                 html += '</tbody></table>';
                 $('#active-channels').innerHTML = html;
             }
+
+            // Get linked servers
+            const servers = data.linked_servers || [];
+            $('#linked-count').textContent = servers.length;
+
+            if (servers.length === 0) {
+                $('#linked-servers').innerHTML = '<div class="empty-state"><div class="empty-state-icon">🔗</div><div class="empty-state-text">No Linked Servers</div><div class="empty-state-subtext">Server linking not active</div></div>';
+            } else {
+                let html = '<table class="table table-striped table-bordered table-condensed">';
+                html += '<thead><tr><th>Server</th><th>Users</th><th>Hops</th><th>Status</th></tr></thead><tbody>';
+                servers.forEach(s => {
+                    const statusClass = s.status === 'ok' ? 'success' : 'warning';
+                    const statusIcon = s.status === 'ok' ? '✓' : '⚠';
+                    const direct = s.is_direct ? '<span class="label label-info" style="font-size:9px;">DIRECT</span> ' : '';
+                    html += `<tr><td>${direct}<strong>${escapeHtml(s.name)}</strong></td>`;
+                    html += `<td>${s.user_count}</td>`;
+                    html += `<td>${s.hopcount}</td>`;
+                    html += `<td><span class="label label-${statusClass}">${statusIcon} ${s.status.toUpperCase()}</span></td></tr>`;
+                });
+                html += '</tbody></table>';
+                $('#linked-servers').innerHTML = html;
+            }
         });
     }
 

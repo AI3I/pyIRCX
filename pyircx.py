@@ -7551,7 +7551,8 @@ class ServerManager:
                     status_data = {
                         'timestamp': time.time(),
                         'connected_users': [],
-                        'active_channels': []
+                        'active_channels': [],
+                        'linked_servers': []
                     }
 
                     # Get connected users (exclude virtual users)
@@ -7585,6 +7586,24 @@ class ServerManager:
                                 'is_local': channel.is_local
                             }
                             status_data['active_channels'].append(channel_data)
+
+                    # Get linked servers (if linking is enabled)
+                    if hasattr(self, 'link_manager') and self.link_manager:
+                        for server_name, linked_server in self.link_manager.linked_servers.items():
+                            uptime = int(time.time() - linked_server.connected_at)
+                            ping_age = int(time.time() - linked_server.last_pong)
+                            server_data = {
+                                'name': server_name,
+                                'description': linked_server.description,
+                                'hopcount': linked_server.hopcount,
+                                'is_direct': linked_server.is_direct,
+                                'user_count': len(linked_server.users),
+                                'connected_at': int(linked_server.connected_at),
+                                'uptime': uptime,
+                                'ping_age': ping_age,
+                                'status': 'ok' if ping_age < 60 else 'lagging'
+                            }
+                            status_data['linked_servers'].append(server_data)
 
                     # Write status file atomically
                     temp_file = status_file.with_suffix('.tmp')
