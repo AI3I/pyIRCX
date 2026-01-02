@@ -7560,9 +7560,9 @@ class ServerManager:
                             user_data = {
                                 'nickname': nick,
                                 'username': user.username,
-                                'hostname': user.hostname,
+                                'hostname': user.host,
                                 'realname': user.realname,
-                                'connected_at': user.connected_at,
+                                'connected_at': user.signon_time,
                                 'registered': user.registered,
                                 'channels': list(user.channels),
                                 'modes': ''.join(user.modes),
