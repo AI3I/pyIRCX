@@ -23,39 +23,36 @@ If you remember the days of **Microsoft Comic Chat**, chat rooms with real nicks
 
 ---
 
-## What's New in 1.0.3
+## Recent Updates
 
-### Cockpit Dashboard Enhancements
+### Version 1.0.4 (January 2026)
+**License Migration to GPLv3**
+
+- **Open Source Forever** — Migrated from MIT to GNU General Public License v3.0
+- **Enhanced Protections** — GPLv3 ensures derivatives remain open source with patent protection
+- **Updated Copyright** — Standardized to "pyIRCX Project" across all source files
+- **Comprehensive Headers** — All Python files now include full GPLv3 license headers
+- **Documentation Updates** — All references and badges updated to reflect GPLv3
+
+### Version 1.0.3 (January 2026)
+**Cockpit Enhancements & Security Fixes**
+
 - **Staff Management** — Full CRUD interface for managing ADMIN/SYSOP/GUIDE accounts
 - **Enhanced Statistics** — Detailed server stats with staff breakdowns and access rule counts
 - **Channel Modes Display** — Active channels now show modes (+nt, +mnst, etc.)
-- **Improved Layout** — 3-column Server Overview with integrated search
-- **Terminology Consistency** — "Nicknames" and "NewsFlash" standardized throughout
+- **Mode Security Fix** — Prevented manual setting of +r (registered) mode on channels
+- **UI Improvements** — Reorganized dashboard with better information hierarchy
 
-### Security Fixes
-- **Mode Security** — Prevented manual setting of +r (registered) mode on channels
-- Registered mode can now only be set through proper REGISTER command
+### Version 1.0.0 (January 2026)
+**Server-to-Server Linking**
 
-### UI Improvements
-- Reorganized dashboard for better information hierarchy
-- Added comprehensive server statistics with contextual breakdowns
-- Improved search functionality with stacked layout
-- Enhanced visual consistency across all interface elements
-
----
-
-## What's New in 1.0.0
-
-### Server-to-Server Linking
-pyIRCX now supports **distributed chat networks** with server-to-server linking. Build a multi-server IRC network just like the traditional networks (EFnet, DALnet, Freenode). Features include:
+pyIRCX now supports **distributed chat networks** with server-to-server linking:
 
 - **Server linking protocol** with password authentication
 - **State synchronization** - users and channels sync across servers
 - **Message routing** - seamless communication across the network
 - **Netsplit handling** - graceful recovery from server disconnections
 - **Admin commands** - CONNECT, SQUIT, LINKS for network management
-
-This makes pyIRCX suitable for large-scale deployments across multiple data centers or geographic regions.
 
 ---
 
