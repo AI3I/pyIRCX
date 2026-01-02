@@ -286,6 +286,12 @@ install_cockpit() {
     # Enable and start Cockpit
     systemctl enable --now cockpit.socket
 
+    # Restart Cockpit to load new module (if already running)
+    if systemctl is-active --quiet cockpit.socket; then
+        echo -e "${YELLOW}Restarting Cockpit to load pyIRCX module...${NC}"
+        systemctl restart cockpit.socket
+    fi
+
     echo -e "${GREEN}Cockpit installed successfully!${NC}"
     echo ""
     echo "Access Cockpit at: https://localhost:9090"

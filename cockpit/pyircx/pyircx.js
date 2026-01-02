@@ -65,7 +65,7 @@
 
     // Load functions
     function loadServiceStatus() {
-        cockpit.spawn(['systemctl', 'is-active', 'pyircx.service'], { err: 'ignore' })
+        cockpit.spawn(['systemctl', 'is-active', 'pyircx.service'], { err: 'ignore', superuser: 'try' })
             .then(out => {
                 const status = out.trim();
                 let html = status === 'active' ? '<span class="label label-success">Running</span>' :
@@ -75,7 +75,7 @@
                 $('#service-status').innerHTML = html;
             })
             .catch(() => {
-                $('#service-status').innerHTML = '<span class="label label-warning">Not found</span>';
+                $('#service-status').innerHTML = '<span class="label label-warning">Service not found or no permission</span>';
             });
     }
 
