@@ -366,18 +366,28 @@
                 return;
             }
             if (data.length === 0) {
-                $('#staff-list').innerHTML = '<p>No staff.</p>';
+                $('#staff-list').innerHTML = '<p>No staff members.</p>';
                 return;
             }
             let html = '<table class="table table-striped table-bordered">';
-            html += '<thead><tr><th>Username</th><th>Level</th></tr></thead><tbody>';
+            html += '<thead><tr><th>Username</th><th>Level</th><th>Actions</th></tr></thead><tbody>';
             data.forEach(s => {
                 const levelClass = {'SYSOP': 'danger', 'ADMIN': 'warning', 'GUIDE': 'info'}[s.level] || 'default';
                 html += `<tr><td>${escapeHtml(s.username)}</td>`;
-                html += `<td><span class="label label-${levelClass}">${s.level}</span></td></tr>`;
+                html += `<td><span class="label label-${levelClass}">${s.level}</span></td>`;
+                html += `<td><button class="btn btn-sm btn-info btn-edit-staff" data-username="${escapeHtml(s.username)}" data-level="${s.level}">✏️ Edit</button></td></tr>`;
             });
             html += '</tbody></table>';
             $('#staff-list').innerHTML = html;
+
+            // Add click handlers for edit buttons
+            document.querySelectorAll('.btn-edit-staff').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const username = this.getAttribute('data-username');
+                    const level = this.getAttribute('data-level');
+                    openEditStaffModal(username, level);
+                });
+            });
         });
     }
 
@@ -442,6 +452,119 @@
             html += `<dt>SSL:</dt><dd>${data.ssl_enabled ? 'Yes' : 'No'}</dd>`;
             html += '</dl>';
             $('#server-config').innerHTML = html;
+        });
+    }
+
+    // ========================================================================
+    // STAFF MANAGEMENT
+    // ========================================================================
+
+    function openEditStaffModal(username, currentLevel) {
+        $('#edit-staff-username').textContent = username;
+        $('#edit-staff-level').value = currentLevel;
+        $('#modal-edit-staff').style.display = 'block';
+
+        // Store username for later use
+        $('#modal-edit-staff').setAttribute('data-username', username);
+    }
+
+    function addStaff() {
+        const username = $('#staff-username').value.trim();
+        const password = $('#staff-password').value;
+        const passwordConfirm = $('#staff-password-confirm').value;
+        const level = $('#staff-level').value;
+
+        // Validation
+        if (!username || !password) {
+            showToast('Error', 'Username and password are required', 'error');
+            return;
+        }
+
+        if (password !== passwordConfirm) {
+            showToast('Error', 'Passwords do not match', 'error');
+            return;
+        }
+
+        if (password.length < 8) {
+            showToast('Error', 'Password must be at least 8 characters', 'error');
+            return;
+        }
+
+        callAPI('add-staff', [username, password, level]).then(res => {
+            if (res.error) {
+                showToast('Error', res.error, 'error');
+            } else {
+                showToast('Success', res.message, 'success');
+                $('#modal-add-staff').style.display = 'none';
+                $('#staff-username').value = '';
+                $('#staff-password').value = '';
+                $('#staff-password-confirm').value = '';
+                loadStaff();
+            }
+        });
+    }
+
+    function changeStaffLevel() {
+        const username = $('#modal-edit-staff').getAttribute('data-username');
+        const newLevel = $('#edit-staff-level').value;
+
+        callAPI('change-staff-level', [username, newLevel]).then(res => {
+            if (res.error) {
+                showToast('Error', res.error, 'error');
+            } else {
+                showToast('Success', res.message, 'success');
+                $('#modal-edit-staff').style.display = 'none';
+                loadStaff();
+            }
+        });
+    }
+
+    function changeStaffPassword() {
+        const username = $('#modal-edit-staff').getAttribute('data-username');
+        const newPassword = $('#edit-staff-password').value;
+        const confirmPassword = $('#edit-staff-password-confirm').value;
+
+        if (!newPassword) {
+            showToast('Error', 'Password is required', 'error');
+            return;
+        }
+
+        if (newPassword !== confirmPassword) {
+            showToast('Error', 'Passwords do not match', 'error');
+            return;
+        }
+
+        if (newPassword.length < 8) {
+            showToast('Error', 'Password must be at least 8 characters', 'error');
+            return;
+        }
+
+        callAPI('change-staff-password', [username, newPassword]).then(res => {
+            if (res.error) {
+                showToast('Error', res.error, 'error');
+            } else {
+                showToast('Success', res.message, 'success');
+                $('#edit-staff-password').value = '';
+                $('#edit-staff-password-confirm').value = '';
+            }
+        });
+    }
+
+    function deleteStaff() {
+        const username = $('#modal-edit-staff').getAttribute('data-username');
+
+        if (!confirm(`Are you sure you want to delete staff member '${username}'? This cannot be undone!`)) {
+            return;
+        }
+
+        callAPI('delete-staff', [username]).then(res => {
+            if (res.error) {
+                showToast('Error', res.error, 'error');
+            } else {
+                showToast('Success', res.message, 'success');
+                $('#modal-edit-staff').style.display = 'none';
+                loadStaff();
+            }
         });
     }
 
@@ -609,6 +732,35 @@
                     }
                 });
             });
+        }
+
+        // Staff Management
+        if ($('#btn-add-staff')) {
+            $('#btn-add-staff').addEventListener('click', () => {
+                $('#modal-add-staff').style.display = 'block';
+            });
+        }
+        if ($('#btn-cancel-staff')) {
+            $('#btn-cancel-staff').addEventListener('click', () => {
+                $('#modal-add-staff').style.display = 'none';
+            });
+        }
+        if ($('#btn-save-staff')) {
+            $('#btn-save-staff').addEventListener('click', addStaff);
+        }
+        if ($('#btn-cancel-edit-staff')) {
+            $('#btn-cancel-edit-staff').addEventListener('click', () => {
+                $('#modal-edit-staff').style.display = 'none';
+            });
+        }
+        if ($('#btn-change-level')) {
+            $('#btn-change-level').addEventListener('click', changeStaffLevel);
+        }
+        if ($('#btn-change-password')) {
+            $('#btn-change-password').addEventListener('click', changeStaffPassword);
+        }
+        if ($('#btn-delete-staff')) {
+            $('#btn-delete-staff').addEventListener('click', deleteStaff);
         }
 
         // Search
