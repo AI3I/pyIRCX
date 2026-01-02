@@ -102,12 +102,22 @@
             </div>
         </div>
 
-        <!-- Configuration -->
-        <div class="card fade-in">
-            <div class="card-header"><h3><span class="card-header-icon">⚙️</span> Configuration</h3></div>
-            <div class="card-body">
-                <div id="server-config"><div class="spinner spinner-sm"></div></div>
-                <button class="btn btn-info" id="btn-edit-config" style="margin-top: 15px;">✏️ Edit Configuration</button>
+        <!-- Row: Configuration + Linked Servers -->
+        <div class="row">
+            <div class="col-6">
+                <div class="card fade-in">
+                    <div class="card-header"><h3><span class="card-header-icon">⚙️</span> Configuration</h3></div>
+                    <div class="card-body">
+                        <div id="server-config"><div class="spinner spinner-sm"></div></div>
+                        <button class="btn btn-info" id="btn-edit-config" style="margin-top: 15px;">✏️ Edit Configuration</button>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6">
+                <div class="card fade-in">
+                    <div class="card-header"><h3><span class="card-header-icon">🔗</span> Linked Servers <span id="linked-count" class="badge badge-success">0</span></h3></div>
+                    <div class="card-body"><div id="linked-servers"><div class="spinner spinner-sm"></div></div></div>
+                </div>
             </div>
         </div>
 
