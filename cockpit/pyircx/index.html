@@ -89,7 +89,10 @@
         <!-- Staff Members -->
         <div class="card fade-in">
             <div class="card-header"><h3><span class="card-header-icon">👮</span> Staff Members</h3></div>
-            <div class="card-body"><div id="staff-list"><div class="spinner spinner-sm"></div></div></div>
+            <div class="card-body">
+                <button class="btn btn-success" id="btn-add-staff">➕ Add Staff Member</button>
+                <div id="staff-list" style="margin-top: 15px;"><div class="spinner spinner-sm"></div></div>
+            </div>
         </div>
 
         <!-- Row: Connected Users + Active Channels -->
@@ -251,6 +254,70 @@
                 <div class="modal-footer">
                     <button class="btn btn-primary" id="btn-save-config">💾 Save & Restart</button>
                     <button class="btn btn-default" id="btn-cancel-config">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Add Staff -->
+    <div id="modal-add-staff" class="modal" style="display: none;">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header"><h4>Add Staff Member</h4></div>
+                <div class="modal-body">
+                    <label>Username:</label>
+                    <input type="text" id="staff-username" class="form-control" placeholder="3-20 characters (letters, numbers, _, -)">
+                    <label style="margin-top: 10px;">Password:</label>
+                    <input type="password" id="staff-password" class="form-control" placeholder="Minimum 8 characters">
+                    <label style="margin-top: 10px;">Confirm Password:</label>
+                    <input type="password" id="staff-password-confirm" class="form-control">
+                    <label style="margin-top: 10px;">Level:</label>
+                    <select id="staff-level" class="form-control">
+                        <option value="GUIDE">GUIDE (Basic - Helper)</option>
+                        <option value="SYSOP">SYSOP (Medium - Operator)</option>
+                        <option value="ADMIN">ADMIN (Highest - Administrator)</option>
+                    </select>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-primary" id="btn-save-staff">Add Staff</button>
+                    <button class="btn btn-default" id="btn-cancel-staff">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Edit Staff -->
+    <div id="modal-edit-staff" class="modal" style="display: none;">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header"><h4>Edit Staff Member: <span id="edit-staff-username"></span></h4></div>
+                <div class="modal-body">
+                    <h5 style="margin-top: 0;">Change Level</h5>
+                    <label>New Level:</label>
+                    <select id="edit-staff-level" class="form-control">
+                        <option value="GUIDE">GUIDE (Basic - Helper)</option>
+                        <option value="SYSOP">SYSOP (Medium - Operator)</option>
+                        <option value="ADMIN">ADMIN (Highest - Administrator)</option>
+                    </select>
+                    <button class="btn btn-info" id="btn-change-level" style="margin-top: 10px;">Change Level</button>
+
+                    <hr style="margin: 20px 0;">
+
+                    <h5>Change Password</h5>
+                    <label>New Password:</label>
+                    <input type="password" id="edit-staff-password" class="form-control" placeholder="Minimum 8 characters">
+                    <label style="margin-top: 10px;">Confirm Password:</label>
+                    <input type="password" id="edit-staff-password-confirm" class="form-control">
+                    <button class="btn btn-warning" id="btn-change-password" style="margin-top: 10px;">Change Password</button>
+
+                    <hr style="margin: 20px 0;">
+
+                    <h5>Delete Staff Member</h5>
+                    <p style="color: #d9534f;">Warning: This action cannot be undone!</p>
+                    <button class="btn btn-danger" id="btn-delete-staff">Delete Staff Member</button>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-default" id="btn-cancel-edit-staff">Close</button>
                 </div>
             </div>
         </div>

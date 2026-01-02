@@ -10,6 +10,7 @@ import sys
 import os
 import time
 import re
+import hashlib
 from pathlib import Path
 from datetime import datetime
 
@@ -573,6 +574,159 @@ def get_staff_list():
     except Exception as e:
         return {"error": str(e)}
 
+# ============================================================================
+# STAFF MANAGEMENT
+# ============================================================================
+
+def add_staff(username, password, level):
+    """Add a new staff member"""
+    db_path = get_db_path()
+
+    if not os.path.exists(db_path):
+        return {"error": f"Database not found at {db_path}"}
+
+    # Validate level
+    if level not in ['ADMIN', 'SYSOP', 'GUIDE']:
+        return {"error": "Invalid staff level. Must be ADMIN, SYSOP, or GUIDE"}
+
+    # Validate username
+    if not re.match(r'^[a-zA-Z0-9_-]{3,20}$', username):
+        return {"error": "Username must be 3-20 characters (letters, numbers, _, -)"}
+
+    # Validate password strength
+    if len(password) < 8:
+        return {"error": "Password must be at least 8 characters"}
+
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+
+        # Check if username already exists
+        cursor.execute("SELECT username FROM users WHERE username = ?", (username,))
+        if cursor.fetchone():
+            conn.close()
+            return {"error": f"Staff member '{username}' already exists"}
+
+        # Hash password (same method as pyircx.py uses)
+        password_hash = hashlib.sha256(password.encode('utf-8')).hexdigest()
+
+        # Insert new staff member
+        cursor.execute("""
+            INSERT INTO users (username, password, level)
+            VALUES (?, ?, ?)
+        """, (username, password_hash, level))
+
+        conn.commit()
+        conn.close()
+
+        return {"success": True, "message": f"Staff member '{username}' added as {level}"}
+
+    except Exception as e:
+        return {"error": str(e)}
+
+def delete_staff(username):
+    """Delete a staff member"""
+    db_path = get_db_path()
+
+    if not os.path.exists(db_path):
+        return {"error": f"Database not found at {db_path}"}
+
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+
+        # Check if user exists
+        cursor.execute("SELECT username FROM users WHERE username = ?", (username,))
+        if not cursor.fetchone():
+            conn.close()
+            return {"error": f"Staff member '{username}' not found"}
+
+        # Delete staff member
+        cursor.execute("DELETE FROM users WHERE username = ?", (username,))
+
+        rows_affected = cursor.rowcount
+        conn.commit()
+        conn.close()
+
+        if rows_affected > 0:
+            return {"success": True, "message": f"Staff member '{username}' deleted"}
+        else:
+            return {"error": "Failed to delete staff member"}
+
+    except Exception as e:
+        return {"error": str(e)}
+
+def change_staff_password(username, new_password):
+    """Change a staff member's password"""
+    db_path = get_db_path()
+
+    if not os.path.exists(db_path):
+        return {"error": f"Database not found at {db_path}"}
+
+    # Validate password strength
+    if len(new_password) < 8:
+        return {"error": "Password must be at least 8 characters"}
+
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+
+        # Check if user exists
+        cursor.execute("SELECT username FROM users WHERE username = ?", (username,))
+        if not cursor.fetchone():
+            conn.close()
+            return {"error": f"Staff member '{username}' not found"}
+
+        # Hash password
+        password_hash = hashlib.sha256(new_password.encode('utf-8')).hexdigest()
+
+        # Update password
+        cursor.execute("""
+            UPDATE users SET password = ? WHERE username = ?
+        """, (password_hash, username))
+
+        conn.commit()
+        conn.close()
+
+        return {"success": True, "message": f"Password changed for '{username}'"}
+
+    except Exception as e:
+        return {"error": str(e)}
+
+def change_staff_level(username, new_level):
+    """Change a staff member's privilege level"""
+    db_path = get_db_path()
+
+    if not os.path.exists(db_path):
+        return {"error": f"Database not found at {db_path}"}
+
+    # Validate level
+    if new_level not in ['ADMIN', 'SYSOP', 'GUIDE']:
+        return {"error": "Invalid staff level. Must be ADMIN, SYSOP, or GUIDE"}
+
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+
+        # Check if user exists
+        cursor.execute("SELECT username FROM users WHERE username = ?", (username,))
+        if not cursor.fetchone():
+            conn.close()
+            return {"error": f"Staff member '{username}' not found"}
+
+        # Update level
+        cursor.execute("""
+            UPDATE users SET level = ? WHERE username = ?
+        """, (new_level, username))
+
+        conn.commit()
+        conn.close()
+
+        return {"success": True, "message": f"Level changed for '{username}' to {new_level}"}
+
+    except Exception as e:
+        return {"error": str(e)}
+
 def get_server_config():
     """Get server configuration"""
     config = load_config()
@@ -724,6 +878,28 @@ def main():
         level = sys.argv[3] if len(sys.argv) > 3 else None
         search_term = sys.argv[4] if len(sys.argv) > 4 else None
         result = get_logs(lines, level, search_term)
+
+    # Staff management
+    elif command == "add-staff":
+        if len(sys.argv) < 5:
+            result = {"error": "Usage: add-staff <username> <password> <level>"}
+        else:
+            result = add_staff(sys.argv[2], sys.argv[3], sys.argv[4])
+    elif command == "delete-staff":
+        if len(sys.argv) < 3:
+            result = {"error": "Usage: delete-staff <username>"}
+        else:
+            result = delete_staff(sys.argv[2])
+    elif command == "change-staff-password":
+        if len(sys.argv) < 4:
+            result = {"error": "Usage: change-staff-password <username> <new_password>"}
+        else:
+            result = change_staff_password(sys.argv[2], sys.argv[3])
+    elif command == "change-staff-level":
+        if len(sys.argv) < 4:
+            result = {"error": "Usage: change-staff-level <username> <new_level>"}
+        else:
+            result = change_staff_level(sys.argv[2], sys.argv[3])
 
     # Legacy commands
     elif command == "recent-registrations":
