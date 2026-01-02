@@ -99,37 +99,11 @@ Study the IRCX protocol, teach network programming, or research distributed chat
 
 ### The Only Open-Source IRCX Server with Server Linking
 
-pyIRCX offers feature parity with commercial IRCX servers like [OfficeIRC](https://www.officeirc.com/), but as **open-source software** you can deploy anywhere:
+pyIRCX offers feature parity with commercial IRCX servers like [OfficeIRC](https://www.officeirc.com/), but as **open-source software** you can deploy anywhere. While OfficeIRC supports both IRCX and server linking, it's commercial/closed-source. UnrealIRCd and other major IRC servers support linking but lack IRCX protocol extensions.
 
-| Feature | pyIRCX | OfficeIRC | UnrealIRCd |
-|---------|:------:|:---------:|:----------:|
-| Full IRCX Protocol Support | ✅ | ✅ | ❌ |
-| RFC 1459/2812 Compliance | ✅ | ✅ | ✅ |
-| **Server-to-Server Linking** | ✅ | ✅ | ✅ |
-| **Distributed Networks** | ✅ | ✅ | ✅ |
-| SASL Authentication | ✅ | ✅ | ✅ |
-| IPv4 & IPv6 Dual-Stack | ✅ | ✅ | ✅ |
-| TLS/SSL Encryption | ✅ | ✅ | ✅ |
-| Channel Clone Mode | ✅ | ✅ | ❌ |
-| ACCESS Control Lists | ✅ | ✅ | ❌ |
-| PROP Channel Properties | ✅ | ✅ | ❌ |
-| Nickname Registration | ✅ | ✅ | ❌* |
-| Channel Registration | ✅ | ✅ | ❌* |
-| Offline Messaging (Memos) | ✅ | ✅ | ❌ |
-| ServiceBot Monitoring | ✅ | ✅ | ❌ |
-| NewsFlash Announcements | ✅ | ✅ | ❌ |
-| Transcript Logging | ✅ | ✅ | ❌ |
-| DNSBL Integration | ✅ | ✅ | ✅ |
-| Flood Protection | ✅ | ✅ | ✅ |
-| Staff Hierarchy (ADMIN/SYSOP/GUIDE) | ✅ | ✅ | ❌ |
-| **Open Source** | ✅ | ❌ | ✅ |
-| **No Licensing Fees** | ✅ | ❌ | ✅ |
-| **Single Executable** | ✅ | ✅ | ❌ |
-| **No External Services Needed** | ✅ | ✅ | ❌* |
+**pyIRCX is the only open-source server combining full IRCX protocol support with server-to-server linking capabilities.**
 
-*\* UnrealIRCd requires Anope or Atheme services for nick/channel registration*
-
-**pyIRCX is the only open-source server with full IRCX protocol support AND server linking.**
+*See detailed feature comparison below.*
 
 ---
 
@@ -572,44 +546,39 @@ pyIRCX provides an authentic IRCX experience on modern infrastructure.
 
 ## Comparison with Other Servers
 
-### Protocol & Network Support Comparison
+Comprehensive comparison of pyIRCX with major IRC server implementations:
 
-| Server | Language | IRCX | Linking | ACCESS | PROP | Clone Channels | Open Source | Cost |
-|--------|----------|:----:|:-------:|:------:|:----:|:--------------:|:-----------:|:----:|
-| **pyIRCX** | Python | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Free |
-| OfficeIRC | .NET | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | Commercial |
-| UnrealIRCd | C | ❌ | ✅ | ❌ | ❌ | ❌ | ✅ | Free |
-| InspIRCd | C++ | ❌ | ✅ | ❌ | ❌ | ❌ | ✅ | Free |
-| Solanum | C | ❌ | ✅ | ❌ | ❌ | ❌ | ✅ | Free |
-| ircu | C | ❌ | ✅ | ❌ | ❌ | ❌ | ✅ | Free |
-| bahamut | C | ❌ | ✅ | ❌ | ❌ | ❌ | ✅ | Free |
-| ratbox | C | ❌ | ✅ | ❌ | ❌ | ❌ | ✅ | Free |
-| ngIRCd | C | ❌ | ✅ | ❌ | ❌ | ❌ | ✅ | Free |
-| Ergo | Go | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ | Free |
-| ircd-hybrid | C | ❌ | ✅ | ❌ | ❌ | ❌ | ✅ | Free |
+| Feature/Server | **pyIRCX** | OfficeIRC | UnrealIRCd | InspIRCd | Solanum | ircu | bahamut | ratbox | ngIRCd | Ergo | ircd-hybrid |
+|----------------|:----------:|:---------:|:----------:|:--------:|:-------:|:----:|:-------:|:------:|:------:|:----:|:-----------:|
+| **Language** | Python | .NET | C | C++ | C | C | C | C | C | Go | C |
+| **IRCX Protocol** | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **Server Linking** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ |
+| **ACCESS Control** | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **PROP Properties** | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **Channel Cloning** | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **Comic Chat** | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **Built-in NickServ** | ✅ | ✅ | ❌* | ❌* | ❌* | ❌* | ❌* | ❌* | ❌* | ✅ | ❌* |
+| **Built-in ChanServ** | ✅ | ✅ | ❌* | ❌* | ❌* | ❌* | ❌* | ❌* | ❌* | ✅ | ❌* |
+| **ServiceBot System** | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **SASL Auth** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **IPv6 Support** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Transcript Logging** | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **Single-File Deploy** | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ |
+| **Web Admin** | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ |
+| **Open Source** | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Cost** | Free | Commercial | Free | Free | Free | Free | Free | Free | Free | Free | Free |
 
-### Feature Comparison
+*\* Requires external services package (Anope or Atheme)*
 
-| Feature | pyIRCX | OfficeIRC | UnrealIRCd | Solanum | ircu | bahamut | ratbox | Ergo |
-|---------|:------:|:---------:|:----------:|:-------:|:----:|:-------:|:------:|:----:|
-| IRCX Protocol | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| Server Linking | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
-| Multi-Server Networks | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
-| Comic Chat Compatible | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| Built-in NickServ | ✅ | ✅ | ❌* | ❌* | ❌* | ❌* | ❌* | ✅ |
-| Built-in ChanServ | ✅ | ✅ | ❌* | ❌* | ❌* | ❌* | ❌* | ✅ |
-| ServiceBot System | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| Channel Cloning | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| SASL Authentication | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| IPv6 Support | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Transcript Logging | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| Single-File Deploy | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
-| No External Services | ✅ | ✅ | ❌* | ❌* | ❌* | ❌* | ❌* | ✅ |
-| Web Admin (Optional) | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
+**Network Associations:**
+- **Solanum** - Libera.Chat
+- **ircu** - Undernet (P10 protocol)
+- **bahamut** - DALnet
+- **ratbox** - EFnet (TS6 protocol)
+- **ircd-hybrid** - EFnet
+- **ngIRCd** - Lightweight/portable
 
-*\* Requires Anope or Atheme services package*
-
-pyIRCX is the only open-source server combining full IRCX protocol support with server linking capabilities.
+**pyIRCX is the only open-source server combining full IRCX protocol support with server-to-server linking capabilities.**
 
 ---
 
