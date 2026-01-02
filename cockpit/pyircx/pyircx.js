@@ -49,7 +49,8 @@
 
     // API wrapper
     function callAPI(cmd, args = []) {
-        const fullArgs = ['python3', '/home/jdlewis/.local/share/cockpit/pyircx/api.py', cmd].concat(args);
+        // Use system-wide installation path
+        const fullArgs = ['python3', '/usr/share/cockpit/pyircx/api.py', cmd].concat(args);
         return cockpit.spawn(fullArgs, { err: 'message' })
             .then(out => JSON.parse(out))
             .catch(err => ({ error: err.message || 'Unknown error' }));
