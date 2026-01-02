@@ -621,9 +621,13 @@ pyIRCX is the only open-source server combining full IRCX protocol support with 
 pyIRCX is production-ready and suitable for:
 
 ✅ **Small Communities** (10-100 users) — Single server deployment
+
 ✅ **Medium Networks** (100-1,000 users) — 2-3 linked servers
+
 ✅ **Large Networks** (1,000+ users) — Multi-server distributed network
+
 ✅ **Enterprise Deployments** — Secure internal chat with staff hierarchy
+
 ✅ **Retro Projects** — Authentic IRCX for vintage client compatibility
 
 ### Who Should Use pyIRCX?
