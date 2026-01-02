@@ -319,14 +319,36 @@ pyIRCX implements defense-in-depth with multiple security layers:
 git clone https://github.com/AI3I/pyIRCX.git
 cd pyIRCX
 
-# Install dependencies
-pip install aiosqlite bcrypt pyotp
+# Automated installation (recommended)
+sudo ./install.sh
 
-# Run the server
+# OR manual installation
+pip install aiosqlite bcrypt pyotp cryptography
 python3 pyircx.py
 ```
 
 The server will start listening on ports **6667** (plain) and **7000** (alternative) by default.
+
+### Upgrading
+
+```bash
+# Pull latest changes
+cd pyIRCX
+git pull
+
+# Upgrade existing installation
+sudo ./upgrade.sh
+```
+
+### Maintenance
+
+```bash
+# Validate and repair installation
+sudo ./repair.sh
+
+# Uninstall completely
+sudo ./uninstall.sh
+```
 
 ### Basic Configuration
 
