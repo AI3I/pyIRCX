@@ -10,28 +10,59 @@
     <script type="text/javascript" src="pyircx.js"></script>
 </head>
 <body>
+    <!-- Toast Container -->
+    <div class="toast-container" id="toast-container"></div>
+
     <div class="container-fluid">
-        <h1>pyIRCX Server Management</h1>
+        <!-- Dashboard Header -->
+        <div class="dashboard-header fade-in">
+            <h1>⚡ pyIRCX Server Management</h1>
+            <div class="dashboard-subtitle">Comprehensive IRC Extended Protocol Server Administration</div>
+        </div>
+
+        <!-- Stats Overview Grid -->
+        <div class="stats-grid fade-in">
+            <div class="stat-card">
+                <div class="stat-card-icon">👥</div>
+                <div class="stat-card-value" id="stat-users">0</div>
+                <div class="stat-card-label">Connected Users</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-card-icon">💬</div>
+                <div class="stat-card-value" id="stat-channels">0</div>
+                <div class="stat-card-label">Active Channels</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-card-icon">📝</div>
+                <div class="stat-card-value" id="stat-registered">0</div>
+                <div class="stat-card-label">Registered Nicks</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-card-icon">🛡️</div>
+                <div class="stat-card-value" id="stat-staff">0</div>
+                <div class="stat-card-label">Staff Members</div>
+            </div>
+        </div>
 
         <!-- Row 1: Service Status + Real-Time Status -->
         <div class="row">
             <div class="col-6">
-                <div class="card">
-                    <div class="card-header"><h3>Service Status</h3></div>
+                <div class="card fade-in">
+                    <div class="card-header"><h3><span class="card-header-icon">🔌</span> Service Status</h3></div>
                     <div class="card-body">
-                        <div id="service-status">Loading...</div>
-                        <div style="margin-top: 10px;">
-                            <button class="btn btn-primary" id="btn-start">Start</button>
-                            <button class="btn btn-warning" id="btn-restart">Restart</button>
-                            <button class="btn btn-danger" id="btn-stop">Stop</button>
+                        <div id="service-status"><div class="spinner spinner-sm"></div></div>
+                        <div style="margin-top: 15px;">
+                            <button class="btn btn-primary" id="btn-start">▶️ Start</button>
+                            <button class="btn btn-warning" id="btn-restart">🔄 Restart</button>
+                            <button class="btn btn-danger" id="btn-stop">⏹️ Stop</button>
                         </div>
                     </div>
                 </div>
             </div>
             <div class="col-6">
-                <div class="card">
-                    <div class="card-header"><h3>Real-Time Status</h3></div>
-                    <div class="card-body"><div id="realtime-status">Loading...</div></div>
+                <div class="card fade-in">
+                    <div class="card-header"><h3><span class="card-header-icon">📊</span> Real-Time Status</h3></div>
+                    <div class="card-body"><div id="realtime-status"><div class="spinner spinner-sm"></div></div></div>
                 </div>
             </div>
         </div>
@@ -39,15 +70,15 @@
         <!-- Row 2: Connected Users + Active Channels -->
         <div class="row">
             <div class="col-6">
-                <div class="card">
-                    <div class="card-header"><h3>Connected Users <span id="connected-count" class="badge">0</span></h3></div>
-                    <div class="card-body"><div id="connected-users">Loading...</div></div>
+                <div class="card fade-in">
+                    <div class="card-header"><h3><span class="card-header-icon">👥</span> Connected Users <span id="connected-count" class="badge badge-success">0</span></h3></div>
+                    <div class="card-body"><div id="connected-users"><div class="spinner spinner-sm"></div></div></div>
                 </div>
             </div>
             <div class="col-6">
-                <div class="card">
-                    <div class="card-header"><h3>Active Channels <span id="channel-count" class="badge">0</span></h3></div>
-                    <div class="card-body"><div id="active-channels">Loading...</div></div>
+                <div class="card fade-in">
+                    <div class="card-header"><h3><span class="card-header-icon">💬</span> Active Channels <span id="channel-count" class="badge badge-success">0</span></h3></div>
+                    <div class="card-body"><div id="active-channels"><div class="spinner spinner-sm"></div></div></div>
                 </div>
             </div>
         </div>
@@ -55,60 +86,60 @@
         <!-- Row 3: Server Stats + Configuration -->
         <div class="row">
             <div class="col-6">
-                <div class="card">
-                    <div class="card-header"><h3>Server Statistics</h3></div>
-                    <div class="card-body"><div id="server-stats">Loading...</div></div>
+                <div class="card fade-in">
+                    <div class="card-header"><h3><span class="card-header-icon">📈</span> Server Statistics</h3></div>
+                    <div class="card-body"><div id="server-stats"><div class="spinner spinner-sm"></div></div></div>
                 </div>
             </div>
             <div class="col-6">
-                <div class="card">
-                    <div class="card-header"><h3>Configuration</h3></div>
+                <div class="card fade-in">
+                    <div class="card-header"><h3><span class="card-header-icon">⚙️</span> Configuration</h3></div>
                     <div class="card-body">
-                        <div id="server-config">Loading...</div>
-                        <button class="btn btn-info" id="btn-edit-config" style="margin-top: 10px;">Edit Configuration</button>
+                        <div id="server-config"><div class="spinner spinner-sm"></div></div>
+                        <button class="btn btn-info" id="btn-edit-config" style="margin-top: 15px;">✏️ Edit Configuration</button>
                     </div>
                 </div>
             </div>
         </div>
 
         <!-- Full Width: Access Management -->
-        <div class="card">
-            <div class="card-header"><h3>Server Access Management</h3></div>
+        <div class="card fade-in">
+            <div class="card-header"><h3><span class="card-header-icon">🛡️</span> Server Access Management</h3></div>
             <div class="card-body">
-                <button class="btn btn-success" id="btn-add-access">Add Access Rule</button>
-                <div id="access-list" style="margin-top: 10px;">Loading...</div>
+                <button class="btn btn-success" id="btn-add-access">➕ Add Access Rule</button>
+                <div id="access-list" style="margin-top: 15px;"><div class="spinner spinner-sm"></div></div>
             </div>
         </div>
 
         <!-- Full Width: Newsflash Management -->
-        <div class="card">
-            <div class="card-header"><h3>Newsflash Management</h3></div>
+        <div class="card fade-in">
+            <div class="card-header"><h3><span class="card-header-icon">📢</span> Newsflash Management</h3></div>
             <div class="card-body">
-                <button class="btn btn-success" id="btn-add-newsflash">Add Newsflash</button>
-                <div id="newsflash-list" style="margin-top: 10px;">Loading...</div>
+                <button class="btn btn-success" id="btn-add-newsflash">➕ Add Newsflash</button>
+                <div id="newsflash-list" style="margin-top: 15px;"><div class="spinner spinner-sm"></div></div>
             </div>
         </div>
 
         <!-- Full Width: Mailbox Messages -->
-        <div class="card">
-            <div class="card-header"><h3>Mailbox Messages</h3></div>
-            <div class="card-body"><div id="mailbox-list">Loading...</div></div>
+        <div class="card fade-in">
+            <div class="card-header"><h3><span class="card-header-icon">📬</span> Mailbox Messages</h3></div>
+            <div class="card-body"><div id="mailbox-list"><div class="spinner spinner-sm"></div></div></div>
         </div>
 
         <!-- Full Width: Search -->
-        <div class="card">
-            <div class="card-header"><h3>Search</h3></div>
+        <div class="card fade-in">
+            <div class="card-header"><h3><span class="card-header-icon">🔍</span> Search</h3></div>
             <div class="card-body">
-                <div style="margin-bottom: 10px;">
+                <div style="margin-bottom: 15px;">
                     <label>Search Nicknames:</label>
                     <input type="text" id="search-nicks-input" class="form-control" placeholder="Enter nickname..." style="display: inline-block; width: 300px; margin-left: 10px;">
-                    <button class="btn btn-primary" id="btn-search-nicks">Search</button>
+                    <button class="btn btn-primary" id="btn-search-nicks">🔍 Search</button>
                 </div>
                 <div id="search-nicks-results"></div>
                 <div style="margin-top: 20px;">
                     <label>Search Channels:</label>
                     <input type="text" id="search-channels-input" class="form-control" placeholder="Enter channel..." style="display: inline-block; width: 300px; margin-left: 10px;">
-                    <button class="btn btn-primary" id="btn-search-channels">Search</button>
+                    <button class="btn btn-primary" id="btn-search-channels">🔍 Search</button>
                 </div>
                 <div id="search-channels-results"></div>
             </div>
@@ -117,30 +148,30 @@
         <!-- Row 4: Staff + Recent Registrations -->
         <div class="row">
             <div class="col-6">
-                <div class="card">
-                    <div class="card-header"><h3>Staff Members</h3></div>
-                    <div class="card-body"><div id="staff-list">Loading...</div></div>
+                <div class="card fade-in">
+                    <div class="card-header"><h3><span class="card-header-icon">👮</span> Staff Members</h3></div>
+                    <div class="card-body"><div id="staff-list"><div class="spinner spinner-sm"></div></div></div>
                 </div>
             </div>
             <div class="col-6">
-                <div class="card">
-                    <div class="card-header"><h3>Recent Nick Registrations</h3></div>
-                    <div class="card-body"><div id="recent-registrations">Loading...</div></div>
+                <div class="card fade-in">
+                    <div class="card-header"><h3><span class="card-header-icon">📝</span> Recent Nick Registrations</h3></div>
+                    <div class="card-body"><div id="recent-registrations"><div class="spinner spinner-sm"></div></div></div>
                 </div>
             </div>
         </div>
 
         <!-- Full Width: Registered Channels -->
-        <div class="card">
-            <div class="card-header"><h3>Registered Channels</h3></div>
-            <div class="card-body"><div id="channels-list">Loading...</div></div>
+        <div class="card fade-in">
+            <div class="card-header"><h3><span class="card-header-icon">📋</span> Registered Channels</h3></div>
+            <div class="card-body"><div id="channels-list"><div class="spinner spinner-sm"></div></div></div>
         </div>
 
         <!-- Full Width: Logs -->
-        <div class="card">
-            <div class="card-header"><h3>Server Logs</h3></div>
+        <div class="card fade-in">
+            <div class="card-header"><h3><span class="card-header-icon">📄</span> Server Logs</h3></div>
             <div class="card-body">
-                <div style="margin-bottom: 10px;">
+                <div style="margin-bottom: 15px;">
                     <label>Level:</label>
                     <select id="log-level-filter" class="form-control" style="display: inline-block; width: 120px; margin-left: 5px;">
                         <option value="">All</option>
@@ -150,9 +181,9 @@
                     </select>
                     <label style="margin-left: 20px;">Search:</label>
                     <input type="text" id="log-search-input" class="form-control" placeholder="Search logs..." style="display: inline-block; width: 200px; margin-left: 5px;">
-                    <button class="btn btn-secondary" id="btn-refresh-logs">Refresh</button>
+                    <button class="btn btn-secondary" id="btn-refresh-logs">🔄 Refresh</button>
                 </div>
-                <pre id="server-logs" style="max-height: 400px; overflow-y: auto;">Loading...</pre>
+                <pre id="server-logs" style="max-height: 400px; overflow-y: auto;"><div class="spinner spinner-sm"></div></pre>
             </div>
         </div>
     </div>

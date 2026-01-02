@@ -22,6 +22,45 @@
             .replace(/'/g, "&#039;");
     }
 
+    // Toast notification system
+    function showToast(title, message, type = 'info') {
+        const container = $('#toast-container');
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+
+        const icons = {
+            success: '✅',
+            error: '❌',
+            warning: '⚠️',
+            info: 'ℹ️'
+        };
+
+        toast.innerHTML = `
+            <div class="toast-icon">${icons[type] || icons.info}</div>
+            <div class="toast-content">
+                <div class="toast-title">${escapeHtml(title)}</div>
+                <div class="toast-message">${escapeHtml(message)}</div>
+            </div>
+            <div class="toast-close">×</div>
+        `;
+
+        container.appendChild(toast);
+
+        // Close button
+        toast.querySelector('.toast-close').addEventListener('click', () => {
+            toast.style.animation = 'slideOut 0.3s ease';
+            setTimeout(() => toast.remove(), 300);
+        });
+
+        // Auto dismiss after 5 seconds
+        setTimeout(() => {
+            if (toast.parentNode) {
+                toast.style.animation = 'slideOut 0.3s ease';
+                setTimeout(() => toast.remove(), 300);
+            }
+        }, 5000);
+    }
+
     function formatTimestamp(ts) {
         if (!ts) return 'Never';
         return new Date(ts * 1000).toLocaleString();
@@ -58,9 +97,24 @@
 
     // Service control
     function controlService(action) {
+        const actionLabels = {
+            start: '▶️ Starting',
+            stop: '⏹️ Stopping',
+            restart: '🔄 Restarting'
+        };
+
+        showToast('Service Control', `${actionLabels[action]} pyIRCX service...`, 'info');
+
         cockpit.spawn(['sudo', 'systemctl', action, 'pyircx.service'], { err: 'message', superuser: 'try' })
-            .then(() => setTimeout(loadServiceStatus, 1000))
-            .catch(err => alert(`Failed to ${action}: ${err.message}`));
+            .then(() => {
+                showToast('Success', `Service ${action}ed successfully`, 'success');
+                setTimeout(() => {
+                    loadServiceStatus();
+                    loadRealtimeStatus();
+                    loadAll();
+                }, 1000);
+            })
+            .catch(err => showToast('Error', `Failed to ${action}: ${err.message}`, 'error'));
     }
 
     // Load functions
@@ -68,14 +122,22 @@
         cockpit.spawn(['systemctl', 'is-active', 'pyircx.service'], { err: 'ignore', superuser: 'try' })
             .then(out => {
                 const status = out.trim();
-                let html = status === 'active' ? '<span class="label label-success">Running</span>' :
-                          status === 'inactive' ? '<span class="label label-default">Stopped</span>' :
-                          status === 'failed' ? '<span class="label label-danger">Failed</span>' :
-                          '<span class="label label-warning">Unknown</span>';
+                let html, dotClass;
+
+                if (status === 'active') {
+                    html = '<span class="label label-success"><span class="status-dot green"></span>Running</span>';
+                } else if (status === 'inactive') {
+                    html = '<span class="label label-default"><span class="status-dot yellow"></span>Stopped</span>';
+                } else if (status === 'failed') {
+                    html = '<span class="label label-danger"><span class="status-dot red"></span>Failed</span>';
+                } else {
+                    html = '<span class="label label-warning"><span class="status-dot yellow"></span>Unknown</span>';
+                }
+
                 $('#service-status').innerHTML = html;
             })
             .catch(() => {
-                $('#service-status').innerHTML = '<span class="label label-warning">Service not found or no permission</span>';
+                $('#service-status').innerHTML = '<span class="label label-warning"><span class="status-dot red"></span>Service not found or no permission</span>';
             });
     }
 
@@ -83,10 +145,12 @@
         callAPI('realtime-status').then(data => {
             if (data.error) {
                 $('#realtime-status').innerHTML = `<div class="alert alert-warning">${escapeHtml(data.error)}</div>`;
-                $('#connected-users').innerHTML = '<p>Server not running.</p>';
-                $('#active-channels').innerHTML = '<p>Server not running.</p>';
+                $('#connected-users').innerHTML = '<div class="empty-state"><div class="empty-state-icon">💤</div><div class="empty-state-text">Server Not Running</div><div class="empty-state-subtext">Start the service to see connected users</div></div>';
+                $('#active-channels').innerHTML = '<div class="empty-state"><div class="empty-state-icon">💤</div><div class="empty-state-text">Server Not Running</div><div class="empty-state-subtext">Start the service to see active channels</div></div>';
                 $('#connected-count').textContent = '0';
                 $('#channel-count').textContent = '0';
+                $('#stat-users').textContent = '0';
+                $('#stat-channels').textContent = '0';
                 return;
             }
 
@@ -96,9 +160,10 @@
 
             const users = data.connected_users || [];
             $('#connected-count').textContent = users.length;
+            $('#stat-users').textContent = users.length;
 
             if (users.length === 0) {
-                $('#connected-users').innerHTML = '<p>No users connected.</p>';
+                $('#connected-users').innerHTML = '<div class="empty-state"><div class="empty-state-icon">👤</div><div class="empty-state-text">No Users Connected</div><div class="empty-state-subtext">Waiting for users to join</div></div>';
             } else {
                 let html = '<table class="table table-striped table-bordered table-condensed">';
                 html += '<thead><tr><th>Nick</th><th>Host</th><th>Connected</th><th>Channels</th></tr></thead><tbody>';
@@ -114,9 +179,10 @@
 
             const chans = data.active_channels || [];
             $('#channel-count').textContent = chans.length;
+            $('#stat-channels').textContent = chans.length;
 
             if (chans.length === 0) {
-                $('#active-channels').innerHTML = '<p>No active channels.</p>';
+                $('#active-channels').innerHTML = '<div class="empty-state"><div class="empty-state-icon">💬</div><div class="empty-state-text">No Active Channels</div><div class="empty-state-subtext">Create a channel to get started</div></div>';
             } else {
                 let html = '<table class="table table-striped table-bordered table-condensed">';
                 html += '<thead><tr><th>Channel</th><th>Topic</th><th>Members</th></tr></thead><tbody>';
@@ -135,13 +201,22 @@
         callAPI('stats').then(data => {
             if (data.error) {
                 $('#server-stats').innerHTML = `<div class="alert alert-danger">${escapeHtml(data.error)}</div>`;
+                $('#stat-registered').textContent = '0';
+                $('#stat-staff').textContent = '0';
                 return;
             }
+
+            // Update stat cards
+            $('#stat-registered').textContent = data.registered_nicks || 0;
+            $('#stat-staff').textContent = data.staff.total || 0;
+
+            // Update detailed stats
             let html = '<dl class="dl-horizontal">';
-            html += `<dt>Staff:</dt><dd>${data.staff.total}</dd>`;
-            html += `<dt>Registered Nicks:</dt><dd>${data.registered_nicks}</dd>`;
-            html += `<dt>Registered Channels:</dt><dd>${data.registered_channels}</dd>`;
-            html += `<dt>Unread Mailbox:</dt><dd>${data.unread_mailbox}</dd>`;
+            html += `<dt>Staff:</dt><dd><strong>${data.staff.total}</strong></dd>`;
+            html += `<dt>Registered Nicks:</dt><dd><strong>${data.registered_nicks}</strong></dd>`;
+            html += `<dt>Registered Channels:</dt><dd><strong>${data.registered_channels}</strong></dd>`;
+            html += `<dt>Unread Mailbox:</dt><dd><strong>${data.unread_mailbox}</strong></dd>`;
+            html += `<dt>Newsflash Count:</dt><dd><strong>${data.newsflash_count || 0}</strong></dd>`;
             html += '</dl>';
             $('#server-stats').innerHTML = html;
         });
@@ -154,7 +229,7 @@
                 return;
             }
             if (data.length === 0) {
-                $('#access-list').innerHTML = '<p>No access rules configured.</p>';
+                $('#access-list').innerHTML = '<div class="empty-state"><div class="empty-state-icon">🛡️</div><div class="empty-state-text">No Access Rules</div><div class="empty-state-subtext">Add rules to control server access</div></div>';
                 return;
             }
             let html = '<table class="table table-striped table-bordered">';
@@ -181,8 +256,11 @@
                     const pattern = this.getAttribute('data-pattern');
                     if (confirm(`Remove ${type} for ${pattern}?`)) {
                         callAPI('remove-server-access', [type, pattern]).then(res => {
-                            if (res.error) alert(`Error: ${res.error}`);
-                            else loadAccessList();
+                            if (res.error) showToast('Error', res.error, 'error');
+                            else {
+                                showToast('Success', 'Access rule removed', 'success');
+                                loadAccessList();
+                            }
                         });
                     }
                 });
@@ -221,8 +299,11 @@
                     const id = this.getAttribute('data-id');
                     if (confirm('Delete this newsflash?')) {
                         callAPI('delete-newsflash', [id]).then(res => {
-                            if (res.error) alert(`Error: ${res.error}`);
-                            else loadNewsflash();
+                            if (res.error) showToast('Error', res.error, 'error');
+                            else {
+                                showToast('Success', 'Newsflash deleted', 'success');
+                                loadNewsflash();
+                            }
                         });
                     }
                 });
@@ -459,16 +540,17 @@
                 const reason = $('#access-reason').value;
                 const timeout = $('#access-timeout').value || '0';
                 if (!pattern || !reason) {
-                    alert('Fill in all fields');
+                    showToast('Validation Error', 'Please fill in all required fields', 'warning');
                     return;
                 }
                 callAPI('add-server-access', [type, pattern, currentUser.name, reason, timeout]).then(res => {
-                    if (res.error) alert(`Error: ${res.error}`);
+                    if (res.error) showToast('Error', res.error, 'error');
                     else {
                         $('#modal-add-access').style.display = 'none';
                         $('#access-pattern').value = '';
                         $('#access-reason').value = '';
                         $('#access-timeout').value = '0';
+                        showToast('Success', 'Access rule added', 'success');
                         loadAccessList();
                     }
                 });
@@ -491,15 +573,16 @@
                 const msg = $('#newsflash-message').value;
                 const priority = $('#newsflash-priority').value;
                 if (!msg) {
-                    alert('Enter a message');
+                    showToast('Validation Error', 'Please enter a message', 'warning');
                     return;
                 }
                 callAPI('add-newsflash', [msg, currentUser.name, priority]).then(res => {
-                    if (res.error) alert(`Error: ${res.error}`);
+                    if (res.error) showToast('Error', res.error, 'error');
                     else {
                         $('#modal-add-newsflash').style.display = 'none';
                         $('#newsflash-message').value = '';
                         $('#newsflash-priority').value = '0';
+                        showToast('Success', 'Newsflash added', 'success');
                         loadNewsflash();
                     }
                 });
@@ -540,14 +623,15 @@
                 try {
                     JSON.parse(configText);
                 } catch (e) {
-                    alert(`Invalid JSON: ${e.message}`);
+                    showToast('Invalid JSON', e.message, 'error');
                     return;
                 }
                 if (confirm('Save config and restart?')) {
                     callAPI('set-config', [configText]).then(res => {
-                        if (res.error) alert(`Error: ${res.error}`);
+                        if (res.error) showToast('Error', res.error, 'error');
                         else {
                             $('#modal-edit-config').style.display = 'none';
+                            showToast('Success', 'Configuration saved, restarting service...', 'success');
                             controlService('restart');
                         }
                     });
