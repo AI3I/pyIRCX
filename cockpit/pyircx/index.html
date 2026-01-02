@@ -44,12 +44,13 @@
             </div>
         </div>
 
-        <!-- Row 1: Service Status + Real-Time Status -->
-        <div class="row">
-            <div class="col-6">
-                <div class="card fade-in">
-                    <div class="card-header"><h3><span class="card-header-icon">🔌</span> Service Status</h3></div>
-                    <div class="card-body">
+        <!-- Combined Server Overview -->
+        <div class="card fade-in">
+            <div class="card-header"><h3><span class="card-header-icon">🖥️</span> Server Overview</h3></div>
+            <div class="card-body">
+                <div class="row" style="margin-bottom: 0;">
+                    <div class="col-4">
+                        <h4 style="font-size: 14px; font-weight: 700; color: #2c3e50; margin-bottom: 12px;">🔌 Service Status</h4>
                         <div id="service-status"><div class="spinner spinner-sm"></div></div>
                         <div style="margin-top: 15px;">
                             <button class="btn btn-primary" id="btn-start">▶️ Start</button>
@@ -57,17 +58,19 @@
                             <button class="btn btn-danger" id="btn-stop">⏹️ Stop</button>
                         </div>
                     </div>
-                </div>
-            </div>
-            <div class="col-6">
-                <div class="card fade-in">
-                    <div class="card-header"><h3><span class="card-header-icon">📊</span> Real-Time Status</h3></div>
-                    <div class="card-body"><div id="realtime-status"><div class="spinner spinner-sm"></div></div></div>
+                    <div class="col-4">
+                        <h4 style="font-size: 14px; font-weight: 700; color: #2c3e50; margin-bottom: 12px;">📊 Real-Time Status</h4>
+                        <div id="realtime-status"><div class="spinner spinner-sm"></div></div>
+                    </div>
+                    <div class="col-4">
+                        <h4 style="font-size: 14px; font-weight: 700; color: #2c3e50; margin-bottom: 12px;">📈 Server Statistics</h4>
+                        <div id="server-stats"><div class="spinner spinner-sm"></div></div>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <!-- Row 2: Connected Users + Active Channels -->
+        <!-- Row: Connected Users + Active Channels -->
         <div class="row">
             <div class="col-6">
                 <div class="card fade-in">
@@ -83,22 +86,12 @@
             </div>
         </div>
 
-        <!-- Row 3: Server Stats + Configuration -->
-        <div class="row">
-            <div class="col-6">
-                <div class="card fade-in">
-                    <div class="card-header"><h3><span class="card-header-icon">📈</span> Server Statistics</h3></div>
-                    <div class="card-body"><div id="server-stats"><div class="spinner spinner-sm"></div></div></div>
-                </div>
-            </div>
-            <div class="col-6">
-                <div class="card fade-in">
-                    <div class="card-header"><h3><span class="card-header-icon">⚙️</span> Configuration</h3></div>
-                    <div class="card-body">
-                        <div id="server-config"><div class="spinner spinner-sm"></div></div>
-                        <button class="btn btn-info" id="btn-edit-config" style="margin-top: 15px;">✏️ Edit Configuration</button>
-                    </div>
-                </div>
+        <!-- Configuration -->
+        <div class="card fade-in">
+            <div class="card-header"><h3><span class="card-header-icon">⚙️</span> Configuration</h3></div>
+            <div class="card-body">
+                <div id="server-config"><div class="spinner spinner-sm"></div></div>
+                <button class="btn btn-info" id="btn-edit-config" style="margin-top: 15px;">✏️ Edit Configuration</button>
             </div>
         </div>
 
@@ -239,17 +232,17 @@
 
     <!-- Modal: Edit Config -->
     <div id="modal-edit-config" class="modal" style="display: none;">
-        <div class="modal-dialog modal-lg">
+        <div class="modal-dialog modal-xl">
             <div class="modal-content">
-                <div class="modal-header"><h4>Edit Configuration</h4></div>
+                <div class="modal-header"><h4>✏️ Edit Configuration</h4></div>
                 <div class="modal-body">
                     <div class="alert alert-warning">
-                        <strong>Warning:</strong> Invalid JSON will be rejected. Restart required.
+                        <strong>⚠️ Warning:</strong> Invalid JSON will be rejected. Service will restart after saving.
                     </div>
-                    <textarea id="config-editor" class="form-control" rows="20" style="font-family: monospace;"></textarea>
+                    <textarea id="config-editor" class="form-control" rows="25" style="font-family: monospace; font-size: 13px;"></textarea>
                 </div>
                 <div class="modal-footer">
-                    <button class="btn btn-primary" id="btn-save-config">Save & Restart</button>
+                    <button class="btn btn-primary" id="btn-save-config">💾 Save & Restart</button>
                     <button class="btn btn-default" id="btn-cancel-config">Cancel</button>
                 </div>
             </div>
