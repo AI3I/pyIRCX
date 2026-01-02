@@ -49,39 +49,36 @@
             <div class="card-header"><h3><span class="card-header-icon">🖥️</span> Server Overview</h3></div>
             <div class="card-body">
                 <div class="row" style="margin-bottom: 0;">
-                    <div class="col-4">
-                        <h4 style="font-size: 14px; font-weight: 700; color: #2c3e50; margin-bottom: 12px;">🔌 Service Status</h4>
-                        <div id="service-status"><div class="spinner spinner-sm"></div></div>
-                        <div style="margin-top: 15px;">
-                            <button class="btn btn-primary" id="btn-start">▶️ Start</button>
-                            <button class="btn btn-warning" id="btn-restart">🔄 Restart</button>
-                            <button class="btn btn-danger" id="btn-stop">⏹️ Stop</button>
+                    <div class="col-3">
+                        <h4 style="font-size: 13px; font-weight: 700; color: #2c3e50; margin-bottom: 10px;">🔌 Service Status</h4>
+                        <div id="service-status" style="margin-bottom: 10px;"><div class="spinner spinner-sm"></div></div>
+                        <div id="realtime-status" style="margin-bottom: 12px; font-size: 12px;"><div class="spinner spinner-sm"></div></div>
+                        <div>
+                            <button class="btn btn-primary btn-sm" id="btn-start">▶️ Start</button>
+                            <button class="btn btn-warning btn-sm" id="btn-restart">🔄 Restart</button>
+                            <button class="btn btn-danger btn-sm" id="btn-stop">⏹️ Stop</button>
                         </div>
                     </div>
-                    <div class="col-4">
-                        <h4 style="font-size: 14px; font-weight: 700; color: #2c3e50; margin-bottom: 12px;">📊 Real-Time Status</h4>
-                        <div id="realtime-status"><div class="spinner spinner-sm"></div></div>
+                    <div class="col-3">
+                        <h4 style="font-size: 13px; font-weight: 700; color: #2c3e50; margin-bottom: 10px;">📈 Server Statistics</h4>
+                        <div id="server-stats" style="font-size: 13px;"><div class="spinner spinner-sm"></div></div>
                     </div>
-                    <div class="col-4">
-                        <h4 style="font-size: 14px; font-weight: 700; color: #2c3e50; margin-bottom: 12px;">📈 Server Statistics</h4>
-                        <div id="server-stats"><div class="spinner spinner-sm"></div></div>
+                    <div class="col-3">
+                        <h4 style="font-size: 13px; font-weight: 700; color: #2c3e50; margin-bottom: 10px;">🔍 Search Nicknames</h4>
+                        <div style="margin-bottom: 8px;">
+                            <input type="text" id="search-nicks-input" class="form-control input-sm" placeholder="Enter nickname..." style="margin-bottom: 5px;">
+                            <button class="btn btn-primary btn-sm btn-block" id="btn-search-nicks">Search</button>
+                        </div>
+                        <div id="search-nicks-results" style="font-size: 12px; max-height: 200px; overflow-y: auto;"></div>
                     </div>
-                </div>
-                <!-- Search Section -->
-                <div style="margin-top: 25px; padding-top: 20px; border-top: 1px solid #e0e0e0;">
-                    <h4 style="font-size: 14px; font-weight: 700; color: #2c3e50; margin-bottom: 15px;">🔍 Search</h4>
-                    <div style="margin-bottom: 15px;">
-                        <label>Search Nicknames:</label>
-                        <input type="text" id="search-nicks-input" class="form-control" placeholder="Enter nickname..." style="display: inline-block; width: 300px; margin-left: 10px;">
-                        <button class="btn btn-primary" id="btn-search-nicks">🔍 Search</button>
+                    <div class="col-3">
+                        <h4 style="font-size: 13px; font-weight: 700; color: #2c3e50; margin-bottom: 10px;">🔍 Search Channels</h4>
+                        <div style="margin-bottom: 8px;">
+                            <input type="text" id="search-channels-input" class="form-control input-sm" placeholder="Enter channel..." style="margin-bottom: 5px;">
+                            <button class="btn btn-primary btn-sm btn-block" id="btn-search-channels">Search</button>
+                        </div>
+                        <div id="search-channels-results" style="font-size: 12px; max-height: 200px; overflow-y: auto;"></div>
                     </div>
-                    <div id="search-nicks-results"></div>
-                    <div style="margin-top: 20px;">
-                        <label>Search Channels:</label>
-                        <input type="text" id="search-channels-input" class="form-control" placeholder="Enter channel..." style="display: inline-block; width: 300px; margin-left: 10px;">
-                        <button class="btn btn-primary" id="btn-search-channels">🔍 Search</button>
-                    </div>
-                    <div id="search-channels-results"></div>
                 </div>
             </div>
         </div>
