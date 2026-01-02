@@ -174,6 +174,21 @@ The upgrade script will:
 
 ### New Files
 
+**upgrade.sh** ⭐ NEW
+- Intelligent upgrade script for existing installations
+- Detects what needs updating (missing files, old configs, etc.)
+- Creates backup before upgrading
+- Preserves existing configuration
+- Handles migration from old Cockpit location
+- Restarts service automatically if it was running
+
+**repair.sh** ⭐ NEW
+- Comprehensive validation and repair script
+- Checks: files, permissions, service, database, Cockpit, dependencies
+- Offers to fix issues automatically
+- Non-destructive repairs
+- Perfect for troubleshooting installations
+
 **uninstall.sh**
 - Complete uninstallation script with safety features
 - Database backup functionality
