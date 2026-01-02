@@ -80,17 +80,64 @@ case $REPLY in
         # Check if certbot is installed
         if ! command -v certbot &> /dev/null; then
             echo -e "${YELLOW}Installing certbot...${NC}"
-            if command -v apt &> /dev/null; then
-                apt update && apt install -y certbot
-            elif command -v dnf &> /dev/null; then
-                dnf install -y certbot
-            elif command -v yum &> /dev/null; then
-                yum install -y certbot
+
+            # Detect OS for package installation
+            if [ -f /etc/os-release ]; then
+                . /etc/os-release
+                OS_ID=$ID
             else
-                echo -e "${RED}Could not install certbot automatically${NC}"
-                echo "Please install certbot manually and run this script again"
-                exit 1
+                OS_ID="unknown"
             fi
+
+            case "$OS_ID" in
+                ubuntu|debian|linuxmint|pop|elementary|zorin|kali|parrot|raspbian)
+                    apt update && apt install -y certbot
+                    ;;
+                fedora)
+                    dnf install -y certbot
+                    ;;
+                centos|rhel|rocky|almalinux|oracle|scientific)
+                    dnf install -y certbot || yum install -y certbot
+                    ;;
+                arch|manjaro|endeavouros|garuda|artix)
+                    pacman -Sy --noconfirm certbot
+                    ;;
+                opensuse*|sles|tumbleweed)
+                    zypper install -y certbot
+                    ;;
+                gentoo|funtoo)
+                    emerge --ask=n app-crypt/certbot
+                    ;;
+                void)
+                    xbps-install -Sy certbot
+                    ;;
+                alpine)
+                    apk add --no-cache certbot
+                    ;;
+                *)
+                    # Generic fallback
+                    if command -v apt &> /dev/null; then
+                        apt update && apt install -y certbot
+                    elif command -v dnf &> /dev/null; then
+                        dnf install -y certbot
+                    elif command -v yum &> /dev/null; then
+                        yum install -y certbot
+                    elif command -v pacman &> /dev/null; then
+                        pacman -Sy --noconfirm certbot
+                    elif command -v zypper &> /dev/null; then
+                        zypper install -y certbot
+                    elif command -v apk &> /dev/null; then
+                        apk add --no-cache certbot
+                    elif command -v emerge &> /dev/null; then
+                        emerge --ask=n app-crypt/certbot
+                    else
+                        echo -e "${RED}Could not install certbot automatically${NC}"
+                        echo "Please install certbot manually and run this script again"
+                        echo "Visit: https://certbot.eff.org/instructions"
+                        exit 1
+                    fi
+                    ;;
+            esac
         fi
 
         echo -e "${YELLOW}Obtaining certificate from Let's Encrypt...${NC}"
