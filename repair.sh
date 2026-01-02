@@ -245,7 +245,7 @@ if [[ ! $REPLY =~ ^[Nn]$ ]]; then
         chmod 644 "$INSTALL_DIR/pyircx.db" 2>/dev/null || true  # Database readable
         chmod 755 "$INSTALL_DIR/pyircx.py" 2>/dev/null || true
         chmod 755 "$INSTALL_DIR/linking.py" 2>/dev/null || true
-        chmod 640 "$CONFIG_DIR/pyircx_config.json" 2>/dev/null || true
+        chmod 644 "$CONFIG_DIR/pyircx_config.json" 2>/dev/null || true  # Config readable for Cockpit
         echo -e "${GREEN}✓ Permissions fixed${NC}"
         ((FIXES_APPLIED++))
     fi
