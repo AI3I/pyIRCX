@@ -422,6 +422,6 @@ With proper deployment and maintenance, pyIRCX provides a secure platform for IR
 
 ---
 
-**Document Version:** 1.0.3
+**Document Version:** 1.0.4
 **Last Updated:** 2026-01-02
 **Next Review:** 2026-06-01
