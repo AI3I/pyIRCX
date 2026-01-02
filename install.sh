@@ -192,8 +192,9 @@ copy_files() {
     # Get the directory where this script is located
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-    # Copy main script
+    # Copy main script and modules
     cp "$SCRIPT_DIR/pyircx.py" "$INSTALL_DIR/"
+    cp "$SCRIPT_DIR/linking.py" "$INSTALL_DIR/"
 
     # Copy or create config
     if [ -f "$SCRIPT_DIR/pyircx_config.json" ]; then

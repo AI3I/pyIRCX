@@ -20,10 +20,10 @@ SyslogIdentifier=pyircx
 
 # Security hardening
 NoNewPrivileges=true
-ProtectSystem=strict
+ProtectSystem=full
 ProtectHome=true
 PrivateTmp=true
-PrivateDevices=true
+PrivateDevices=false
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true
@@ -31,7 +31,6 @@ RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 RestrictRealtime=true
 RestrictSUIDSGID=true
 LockPersonality=true
-MemoryDenyWriteExecute=true
 
 # Allow binding to privileged ports if needed (< 1024)
 AmbientCapabilities=CAP_NET_BIND_SERVICE
@@ -40,6 +39,9 @@ CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 # Read-write paths for data
 ReadWritePaths=/opt/pyircx/transcripts
 ReadWritePaths=/opt/pyircx
+
+# Read-only paths for configuration
+ReadOnlyPaths=/etc/pyircx
 
 # Restart policy
 Restart=on-failure
