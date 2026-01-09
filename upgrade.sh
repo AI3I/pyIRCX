@@ -51,6 +51,8 @@ NEEDS_LINKING_PY=0
 NEEDS_SYSTEMD_UPDATE=0
 NEEDS_COCKPIT_UPDATE=0
 NEEDS_PERMISSION_FIX=0
+NEEDS_WEBCHAT_UPDATE=0
+WEBCHAT_SERVICE_WAS_RUNNING=0
 SERVICE_WAS_RUNNING=0
 
 # Check if service is running
@@ -88,6 +90,21 @@ elif [ -d /usr/share/cockpit/pyircx ]; then
     echo -e "${GREEN}✓ Cockpit installed system-wide${NC}"
 fi
 
+
+# Check WebChat installation
+if [ -d "$INSTALL_DIR/webchat" ]; then
+    if [ -f "$SCRIPT_DIR/webchat/gateway.py" ]; then
+        echo -e "${YELLOW}✗ WebChat may need updating${NC}"
+        NEEDS_WEBCHAT_UPDATE=1
+    else
+        echo -e "${GREEN}✓ WebChat installed${NC}"
+    fi
+    # Check if webchat service is running
+    if systemctl is-active --quiet pyircx-webchat 2>/dev/null; then
+        WEBCHAT_SERVICE_WAS_RUNNING=1
+    fi
+fi
+
 # Check file permissions
 if [ -f "$INSTALL_DIR/pyircx.py" ]; then
     if [ ! -x "$INSTALL_DIR/pyircx.py" ]; then
@@ -97,7 +114,7 @@ if [ -f "$INSTALL_DIR/pyircx.py" ]; then
 fi
 
 # Calculate total updates needed
-TOTAL_UPDATES=$((NEEDS_LINKING_PY + NEEDS_SYSTEMD_UPDATE + NEEDS_COCKPIT_UPDATE + NEEDS_PERMISSION_FIX))
+TOTAL_UPDATES=$((NEEDS_LINKING_PY + NEEDS_SYSTEMD_UPDATE + NEEDS_COCKPIT_UPDATE + NEEDS_PERMISSION_FIX + NEEDS_WEBCHAT_UPDATE))
 
 echo ""
 if [ $TOTAL_UPDATES -eq 0 ]; then
@@ -121,6 +138,13 @@ if [ $SERVICE_WAS_RUNNING -eq 1 ]; then
     echo -e "${YELLOW}Stopping pyircx service...${NC}"
     systemctl stop pyircx
     echo -e "${GREEN}✓ Service stopped${NC}"
+fi
+
+# Stop webchat service if running
+if [ $WEBCHAT_SERVICE_WAS_RUNNING -eq 1 ]; then
+    echo -e "${YELLOW}Stopping webchat service...${NC}"
+    systemctl stop pyircx-webchat
+    echo -e "${GREEN}✓ WebChat service stopped${NC}"
 fi
 
 # Backup current installation
@@ -193,6 +217,43 @@ if [ $NEEDS_COCKPIT_UPDATE -eq 1 ] || [ -d "$SCRIPT_DIR/cockpit/pyircx" ]; then
     fi
 fi
 
+
+
+# Update WebChat installation
+if [ -d "$SCRIPT_DIR/webchat" ]; then
+    echo ""
+    echo -e "${BLUE}Updating WebChat...${NC}"
+    
+    if [ -d "$INSTALL_DIR/webchat" ]; then
+        cp "$SCRIPT_DIR/webchat/gateway.py" "$INSTALL_DIR/webchat/"
+        cp "$SCRIPT_DIR/webchat/index.html" "$INSTALL_DIR/webchat/"
+        echo -e "${GREEN}✓ WebChat files updated${NC}"
+    fi
+    
+    # Update webchat service file
+    if [ -f "$SCRIPT_DIR/pyircx-webchat.service" ]; then
+        cp "$SCRIPT_DIR/pyircx-webchat.service" /etc/systemd/system/
+        systemctl daemon-reload
+        echo -e "${GREEN}✓ WebChat service updated${NC}"
+    fi
+    
+    # Update webchat config example
+    if [ -f "$SCRIPT_DIR/webchat.conf.example" ] && [ ! -f "$CONFIG_DIR/webchat.conf" ]; then
+        cp "$SCRIPT_DIR/webchat.conf.example" "$CONFIG_DIR/webchat.conf"
+        echo -e "${GREEN}✓ WebChat config created${NC}"
+    fi
+fi
+
+# Update certbot renewal service if present
+if [ -f "$SCRIPT_DIR/pyircx-certbot-renew.service" ]; then
+    echo ""
+    echo -e "${BLUE}Updating certbot renewal service...${NC}"
+    cp "$SCRIPT_DIR/pyircx-certbot-renew.service" /etc/systemd/system/
+    cp "$SCRIPT_DIR/pyircx-certbot-renew.timer" /etc/systemd/system/
+    systemctl daemon-reload
+    echo -e "${GREEN}✓ Certbot renewal service updated${NC}"
+fi
+
 # Fix permissions
 echo ""
 echo -e "${BLUE}Fixing permissions...${NC}"
@@ -222,6 +283,17 @@ if [ $SERVICE_WAS_RUNNING -eq 1 ]; then
 else
     echo -e "${YELLOW}Service was not running, not starting${NC}"
     echo "Start with: systemctl start pyircx"
+fi
+
+# Restart webchat service if it was running
+if [ $WEBCHAT_SERVICE_WAS_RUNNING -eq 1 ]; then
+    echo -e "${BLUE}Restarting webchat service...${NC}"
+    systemctl start pyircx-webchat
+    if systemctl is-active --quiet pyircx-webchat; then
+        echo -e "${GREEN}✓ WebChat service restarted${NC}"
+    else
+        echo -e "${RED}✗ WebChat service failed to start${NC}"
+    fi
 fi
 
 # Summary

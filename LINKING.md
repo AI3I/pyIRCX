@@ -54,7 +54,7 @@ NICK <nickname> <hopcount> <timestamp> <username> <hostname> <servername> <modes
 ```
 SJOIN <timestamp> <channel> <modes> :<prefixed-nicklist>
 ```
-- Prefixed nicklist: `@nick1 +nick2 nick3` (@ = op, + = voice)
+- Prefixed nicklist: `@nick1 +nick2 nick3` (@ = host, + = voice)
 
 **Channel topic:**
 ```
@@ -93,7 +93,7 @@ PONG <source> <target>
 
 **Channel timestamp:**
 - Older timestamp = authoritative
-- Merge modes/ops based on timestamp
+- Merge modes/hosts based on timestamp
 
 ## Splits (Netsplits)
 

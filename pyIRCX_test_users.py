@@ -2471,7 +2471,7 @@ async def test_mode_no_external():
 
 @runner.test("Mode: Topic Lock (+t)")
 async def test_mode_topic_lock():
-    """Test +t restricts topic changes to ops"""
+    """Test +t restricts topic changes to hosts"""
     client1 = IRCTestClient("mode_topic1")
     client2 = IRCTestClient("mode_topic2")
 

@@ -204,6 +204,111 @@ if [ $MISSING_DEPS -gt 0 ]; then
 fi
 echo ""
 
+# Check 9: WebChat (optional)
+echo "=== Checking WebChat (Optional) ==="
+WEBCHAT_ISSUES=0
+if [ -d "$INSTALL_DIR/webchat" ]; then
+    echo -e "${GREEN}✓${NC} WebChat directory exists"
+
+    # Check gateway.py
+    if [ -f "$INSTALL_DIR/webchat/gateway.py" ]; then
+        echo -e "${GREEN}✓${NC} gateway.py exists"
+        if [ -x "$INSTALL_DIR/webchat/gateway.py" ]; then
+            echo -e "${GREEN}✓${NC} gateway.py is executable"
+        else
+            echo -e "${YELLOW}⚠${NC} gateway.py is not executable ${YELLOW}(FIXABLE)${NC}"
+            ((WEBCHAT_ISSUES++))
+        fi
+    else
+        echo -e "${RED}✗${NC} gateway.py missing ${YELLOW}(ISSUE)${NC}"
+        ((WEBCHAT_ISSUES++))
+    fi
+
+    # Check index.html
+    if [ -f "$INSTALL_DIR/webchat/index.html" ]; then
+        echo -e "${GREEN}✓${NC} index.html exists"
+    else
+        echo -e "${RED}✗${NC} index.html missing ${YELLOW}(ISSUE)${NC}"
+        ((WEBCHAT_ISSUES++))
+    fi
+
+    # Check webchat config
+    if [ -f "$CONFIG_DIR/webchat.conf" ]; then
+        echo -e "${GREEN}✓${NC} webchat.conf exists"
+    else
+        echo -e "${YELLOW}⚠${NC} webchat.conf missing ${YELLOW}(FIXABLE)${NC}"
+        ((WEBCHAT_ISSUES++))
+    fi
+
+    # Check websockets module
+    if python3 -c "import websockets" 2>/dev/null; then
+        echo -e "${GREEN}✓${NC} websockets module installed"
+    else
+        echo -e "${RED}✗${NC} websockets module missing ${YELLOW}(FIXABLE)${NC}"
+        ((WEBCHAT_ISSUES++))
+    fi
+
+    # Check service
+    if systemctl list-unit-files | grep -q pyircx-webchat.service; then
+        echo -e "${GREEN}✓${NC} WebChat service installed"
+        if systemctl is-enabled --quiet pyircx-webchat 2>/dev/null; then
+            echo -e "${GREEN}✓${NC} WebChat service is enabled"
+        else
+            echo -e "${YELLOW}⚠${NC} WebChat service is not enabled ${YELLOW}(FIXABLE)${NC}"
+            ((WEBCHAT_ISSUES++))
+        fi
+        if systemctl is-active --quiet pyircx-webchat 2>/dev/null; then
+            echo -e "${GREEN}✓${NC} WebChat service is running"
+        else
+            echo -e "${YELLOW}⚠${NC} WebChat service is not running ${YELLOW}(INFO)${NC}"
+        fi
+    else
+        echo -e "${YELLOW}⚠${NC} WebChat service not installed"
+    fi
+
+    if [ $WEBCHAT_ISSUES -gt 0 ]; then
+        ((ISSUES_FOUND++))
+    fi
+else
+    echo -e "${BLUE}ℹ${NC} WebChat not installed ${BLUE}(Optional)${NC}"
+fi
+echo ""
+
+
+# Check 10: SSL/Certbot (optional)
+echo ""
+echo -e "${BLUE}Check 10: SSL Configuration${NC}"
+
+# Check if SSL is enabled in config
+if grep -q '"enabled": true' "$CONFIG_DIR/pyircx_config.json" 2>/dev/null | head -1 | grep -q ssl; then
+    SSL_ENABLED=1
+else
+    SSL_ENABLED=0
+fi
+
+# Check certbot timer
+if [ -f /etc/systemd/system/pyircx-certbot-renew.timer ]; then
+    echo -e "${GREEN}✓${NC} Certbot renewal timer installed"
+    if systemctl is-enabled --quiet pyircx-certbot-renew.timer 2>/dev/null; then
+        echo -e "${GREEN}✓${NC} Certbot timer enabled"
+    else
+        echo -e "${YELLOW}⚠${NC} Certbot timer not enabled ${YELLOW}(FIXABLE)${NC}"
+        ISSUES=$((ISSUES + 1))
+        FIXABLE=$((FIXABLE + 1))
+    fi
+fi
+
+# Check ssl-cert group
+if getent group ssl-cert &>/dev/null; then
+    if groups "$SERVICE_USER" 2>/dev/null | grep -q ssl-cert; then
+        echo -e "${GREEN}✓${NC} User in ssl-cert group"
+    else
+        echo -e "${YELLOW}⚠${NC} User not in ssl-cert group ${YELLOW}(FIXABLE)${NC}"
+        ISSUES=$((ISSUES + 1))
+        FIXABLE=$((FIXABLE + 1))
+    fi
+fi
+
 # Summary
 echo "========================================"
 if [ $ISSUES_FOUND -eq 0 ]; then
@@ -270,10 +375,56 @@ if [[ ! $REPLY =~ ^[Nn]$ ]]; then
     # Enable service if not enabled
     if systemctl list-unit-files | grep -q pyircx.service; then
         if ! systemctl is-enabled --quiet pyircx 2>/dev/null; then
-            echo -e "${YELLOW}Enabling service...${NC}"
+            echo -e "${YELLOW}Enabling pyircx service...${NC}"
             systemctl enable pyircx
-            echo -e "${GREEN}✓ Service enabled${NC}"
+            echo -e "${GREEN}✓ pyircx service enabled${NC}"
             ((FIXES_APPLIED++))
+        fi
+    fi
+
+    # Fix WebChat issues if installed
+    if [ -d "$INSTALL_DIR/webchat" ]; then
+        # Fix gateway.py permissions
+        if [ -f "$INSTALL_DIR/webchat/gateway.py" ] && [ ! -x "$INSTALL_DIR/webchat/gateway.py" ]; then
+            echo -e "${YELLOW}Fixing WebChat gateway permissions...${NC}"
+            chmod 755 "$INSTALL_DIR/webchat/gateway.py"
+            echo -e "${GREEN}✓ WebChat gateway permissions fixed${NC}"
+            ((FIXES_APPLIED++))
+        fi
+
+        # Install websockets if missing
+        if ! python3 -c "import websockets" 2>/dev/null; then
+            echo -e "${YELLOW}Installing websockets module...${NC}"
+            pip3 install websockets
+            echo -e "${GREEN}✓ websockets module installed${NC}"
+            ((FIXES_APPLIED++))
+        fi
+
+        # Create webchat.conf if missing
+        if [ ! -f "$CONFIG_DIR/webchat.conf" ]; then
+            echo -e "${YELLOW}Creating webchat.conf...${NC}"
+            cat > "$CONFIG_DIR/webchat.conf" <<EOF
+# pyIRCX WebChat Gateway Configuration
+WS_PORT=8765
+WS_HOST=0.0.0.0
+IRC_HOST=localhost
+IRC_PORT=6667
+WEBIRC_PASS=changeme
+EOF
+            chown "$SERVICE_USER:$SERVICE_GROUP" "$CONFIG_DIR/webchat.conf"
+            chmod 640 "$CONFIG_DIR/webchat.conf"
+            echo -e "${GREEN}✓ webchat.conf created${NC}"
+            ((FIXES_APPLIED++))
+        fi
+
+        # Enable webchat service if not enabled
+        if systemctl list-unit-files | grep -q pyircx-webchat.service; then
+            if ! systemctl is-enabled --quiet pyircx-webchat 2>/dev/null; then
+                echo -e "${YELLOW}Enabling pyircx-webchat service...${NC}"
+                systemctl enable pyircx-webchat
+                echo -e "${GREEN}✓ pyircx-webchat service enabled${NC}"
+                ((FIXES_APPLIED++))
+            fi
         fi
     fi
 

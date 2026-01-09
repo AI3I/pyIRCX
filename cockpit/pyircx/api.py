@@ -26,6 +26,7 @@ import os
 import time
 import re
 import hashlib
+import bcrypt
 from pathlib import Path
 from datetime import datetime
 
@@ -623,11 +624,11 @@ def add_staff(username, password, level):
             return {"error": f"Staff member '{username}' already exists"}
 
         # Hash password (same method as pyircx.py uses)
-        password_hash = hashlib.sha256(password.encode('utf-8')).hexdigest()
+        password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
         # Insert new staff member
         cursor.execute("""
-            INSERT INTO users (username, password, level)
+            INSERT INTO users (username, password_hash, level)
             VALUES (?, ?, ?)
         """, (username, password_hash, level))
 
@@ -693,11 +694,11 @@ def change_staff_password(username, new_password):
             return {"error": f"Staff member '{username}' not found"}
 
         # Hash password
-        password_hash = hashlib.sha256(new_password.encode('utf-8')).hexdigest()
+        password_hash = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
         # Update password
         cursor.execute("""
-            UPDATE users SET password = ? WHERE username = ?
+            UPDATE users SET password_hash = ? WHERE username = ?
         """, (password_hash, username))
 
         conn.commit()
@@ -809,6 +810,38 @@ def get_logs(lines=100, level_filter=None, search=None):
         return {"error": str(e)}
 
 # ============================================================================
+# NEWSFLASH SETTINGS
+# ============================================================================
+
+def get_newsflash_settings():
+    """Get newsflash broadcast settings"""
+    config = load_config()
+    newsflash = config.get('newsflash', {})
+    return {
+        'on_connect': newsflash.get('on_connect', False),
+        'periodic_enabled': newsflash.get('periodic_enabled', False),
+        'periodic_interval': newsflash.get('periodic_interval', 30)
+    }
+
+def set_newsflash_settings(on_connect, periodic_enabled, periodic_interval):
+    """Set newsflash broadcast settings"""
+    try:
+        config = load_config()
+        if 'newsflash' not in config:
+            config['newsflash'] = {}
+        
+        config['newsflash']['on_connect'] = on_connect == 'true' or on_connect == True
+        config['newsflash']['periodic_enabled'] = periodic_enabled == 'true' or periodic_enabled == True
+        config['newsflash']['periodic_interval'] = int(periodic_interval)
+        
+        result = save_config(config)
+        if 'error' in result:
+            return result
+        return {"success": True, "message": "NewsFlash settings updated"}
+    except Exception as e:
+        return {"error": str(e)}
+
+# ============================================================================
 # MAIN COMMAND DISPATCHER
 # ============================================================================
 
@@ -858,6 +891,13 @@ def main():
             result = {"error": "Usage: delete-newsflash <id>"}
         else:
             result = delete_newsflash(sys.argv[2])
+    elif command == "newsflash-settings":
+        result = get_newsflash_settings()
+    elif command == "set-newsflash-settings":
+        if len(sys.argv) < 5:
+            result = {"error": "Usage: set-newsflash-settings <on_connect> <periodic_enabled> <periodic_interval>"}
+        else:
+            result = set_newsflash_settings(sys.argv[2], sys.argv[3], sys.argv[4])
 
     # Mailbox
     elif command == "mailbox-list":

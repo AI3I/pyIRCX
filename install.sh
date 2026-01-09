@@ -311,14 +311,109 @@ install_systemd() {
     # Copy service file
     cp "$SCRIPT_DIR/pyircx.service" /etc/systemd/system/
 
+    # Copy certbot renewal service/timer if available
+    if [ -f "$SCRIPT_DIR/pyircx-certbot-renew.service" ]; then
+        cp "$SCRIPT_DIR/pyircx-certbot-renew.service" /etc/systemd/system/
+        cp "$SCRIPT_DIR/pyircx-certbot-renew.timer" /etc/systemd/system/
+    fi
+
     # Reload systemd
     systemctl daemon-reload
 
-    echo -e "${GREEN}Systemd service installed${NC}"
+    # Enable and start pyircx service
+    systemctl enable pyircx
+    systemctl start pyircx
+
+    echo -e "${GREEN}Systemd service installed and started${NC}"
     echo ""
-    echo "To enable and start the service:"
-    echo "  systemctl enable pyircx"
-    echo "  systemctl start pyircx"
+    echo "Service commands:"
+    echo "  systemctl status pyircx   - Check status"
+    echo "  systemctl restart pyircx  - Restart server"
+    echo "  systemctl stop pyircx     - Stop server"
+}
+
+# Install WebChat browser client
+install_webchat() {
+    echo -e "${YELLOW}Installing WebChat browser client...${NC}"
+
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+    # Check for websockets Python module
+    if ! python3 -c "import websockets" 2>/dev/null; then
+        echo -e "${YELLOW}Installing Python websockets module...${NC}"
+        pip3 install websockets
+    fi
+
+    # Create webchat directory
+    mkdir -p "$INSTALL_DIR/webchat"
+
+    # Copy webchat files
+    if [ -d "$SCRIPT_DIR/webchat" ]; then
+        cp "$SCRIPT_DIR/webchat/gateway.py" "$INSTALL_DIR/webchat/"
+        cp "$SCRIPT_DIR/webchat/index.html" "$INSTALL_DIR/webchat/"
+        chmod 755 "$INSTALL_DIR/webchat/gateway.py"
+    else
+        echo -e "${RED}WebChat files not found in $SCRIPT_DIR/webchat${NC}"
+        return 1
+    fi
+
+    # Set permissions
+    chown -R "$SERVICE_USER:$SERVICE_GROUP" "$INSTALL_DIR/webchat"
+
+    # Create webchat config file
+    if [ ! -f "$CONFIG_DIR/webchat.conf" ]; then
+        cat > "$CONFIG_DIR/webchat.conf" <<EOF
+# pyIRCX WebChat Gateway Configuration
+# This file is sourced by the systemd service
+
+# WebSocket server settings
+WS_PORT=8765
+WS_HOST=0.0.0.0
+
+# IRC server connection
+IRC_HOST=localhost
+IRC_PORT=6667
+
+# WEBIRC password (must match pyircx.py security.webirc.hosts config)
+# IMPORTANT: Change this in production!
+WEBIRC_PASS=changeme
+EOF
+        chown "$SERVICE_USER:$SERVICE_GROUP" "$CONFIG_DIR/webchat.conf"
+        chmod 640 "$CONFIG_DIR/webchat.conf"
+    fi
+
+    # Copy systemd service
+    if [ -f "$SCRIPT_DIR/pyircx-webchat.service" ]; then
+        cp "$SCRIPT_DIR/pyircx-webchat.service" /etc/systemd/system/
+        systemctl daemon-reload
+        # Enable and start the webchat service
+        systemctl enable pyircx-webchat
+        systemctl start pyircx-webchat
+    fi
+
+    # Configure firewall for WebSocket port
+    if command -v firewall-cmd &>/dev/null; then
+        echo -e "${YELLOW}Configuring firewall for WebChat...${NC}"
+        firewall-cmd --permanent --add-port=8765/tcp 2>/dev/null || true
+        firewall-cmd --reload 2>/dev/null || true
+    elif command -v ufw &>/dev/null; then
+        ufw allow 8765/tcp 2>/dev/null || true
+    fi
+
+    echo -e "${GREEN}WebChat installed and started!${NC}"
+    echo ""
+    echo "WebChat files: $INSTALL_DIR/webchat/"
+    echo "Configuration: $CONFIG_DIR/webchat.conf"
+    echo ""
+    echo "Service commands:"
+    echo "  systemctl status pyircx-webchat   - Check status"
+    echo "  systemctl restart pyircx-webchat  - Restart gateway"
+    echo ""
+    echo "WebSocket endpoint: ws://localhost:8765"
+    echo ""
+    echo "For HTTPS/WSS setup, see: apache/ssl-webchat.conf.example"
+    echo "Copy webchat/index.html to your web server document root"
+    echo ""
 }
 
 # Main installation
@@ -415,6 +510,20 @@ main() {
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         install_cockpit
+    fi
+
+    echo ""
+    echo "========================================"
+    echo -e "${YELLOW}Optional: WebChat (Browser IRC Client)${NC}"
+    echo "========================================"
+    echo ""
+    echo "WebChat provides a browser-based IRC client that connects"
+    echo "via WebSocket. Requires a web server for HTTPS."
+    echo ""
+    read -p "Install WebChat browser client? [y/N] " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        install_webchat
     fi
 }
 

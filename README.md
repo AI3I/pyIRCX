@@ -4,7 +4,7 @@
 
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.0.4-brightgreen.svg)](#)
+[![Version](https://img.shields.io/badge/version-1.0.5-brightgreen.svg)](#)
 [![Tests](https://img.shields.io/badge/tests-54%20passing-brightgreen.svg)](#testing)
 
 ---
@@ -24,6 +24,20 @@ If you remember the days of **Microsoft Comic Chat**, chat rooms with real nicks
 ---
 
 ## Recent Updates
+
+### Version 1.0.5 (January 2026)
+**WebChat Browser Client & WEBIRC Support**
+
+- **WebChat Client** — Full-featured web-based IRC client with modern UI
+  - WebSocket-to-IRC gateway for browser access
+  - Dark mode toggle with localStorage persistence
+  - Staff user detection and icons (ADMIN/SYSOP/GUIDE)
+  - Channel owner/host/voice icons
+  - Full IRCX command support (PROP, ACCESS, WHISPER, LISTX)
+- **WEBIRC Protocol** — Forward real client IPs through web gateway
+- **SSL Improvements** — Fixed ssl-cert group creation on Fedora/RHEL
+- **Service Management** — Install script now auto-enables services
+- **366 Numeric Fix** — Fixed NAMES reply format
 
 ### Version 1.0.4 (January 2026)
 **License Migration to GPLv3**
@@ -411,6 +425,36 @@ The script automatically:
 - Sets up auto-renewal (Let's Encrypt)
 - Restarts the server
 
+### WebChat Browser Client
+
+Access pyIRCX from any web browser:
+
+```bash
+# During install.sh, answer "y" to install WebChat
+# Or install manually:
+sudo cp -r webchat /opt/pyircx/
+sudo cp pyircx-webchat.service /etc/systemd/system/
+sudo cp webchat.conf.example /etc/pyircx/webchat.conf
+sudo systemctl enable --now pyircx-webchat
+```
+
+**Configuration** (`/etc/pyircx/webchat.conf`):
+```bash
+WS_HOST=0.0.0.0
+WS_PORT=8765
+IRC_HOST=127.0.0.1
+IRC_PORT=6667
+WEBIRC_PASS=changeme  # Change this!
+```
+
+**Apache HTTPS Proxy** (for wss://):
+```bash
+sudo cp apache/ssl-webchat.conf.example /etc/httpd/conf.d/ssl-webchat.conf
+# Edit with your domain, then restart Apache
+```
+
+Access at `https://yourserver/` after setup.
+
 ### Connecting
 
 Connect with any IRC client:
@@ -436,9 +480,7 @@ For IRCX features, use the IRCX command after connecting:
 - **[LINKING.md](LINKING.md)** — Server linking protocol and setup
 - **[CONFIG.md](CONFIG.md)** — Full configuration reference
 - **[MANUAL.md](MANUAL.md)** — User and operator command guide
-- **[DATABASE_USERS_REVIEW.md](DATABASE_USERS_REVIEW.md)** — Staff account management
 - **[STAFF_ACCOUNT_REFERENCE.md](STAFF_ACCOUNT_REFERENCE.md)** — Quick reference for staff commands
-- **[TEST_RESULTS.md](TEST_RESULTS.md)** — Comprehensive test results
 
 ---
 
@@ -675,7 +717,7 @@ GNU General Public License v3.0 — See [LICENSE](LICENSE) for details.
 <p align="center">
   <i>Bringing back the chat rooms of yesterday, with the technology of today.</i>
   <br><br>
-  <b>pyIRCX 1.0.4</b> — The production-ready IRCX server for distributed networks
+  <b>pyIRCX 1.0.5</b> — The production-ready IRCX server for distributed networks
   <br><br>
   ⭐ <b>Star this project on GitHub if you find it useful!</b> ⭐
 </p>

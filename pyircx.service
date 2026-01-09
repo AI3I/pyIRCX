@@ -1,6 +1,6 @@
 [Unit]
-Description=pyIRCX IRC/IRCX Server
-Documentation=https://github.com/pyircx/pyircx
+Description=pyIRCX Internet Relay Chat Service
+Documentation=https://github.com/AI3I/pyIRCX
 After=network.target
 Wants=network-online.target
 
