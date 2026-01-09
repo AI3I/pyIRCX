@@ -16,6 +16,134 @@ NC='\033[0m'
 CONFIG_FILE="${1:-/etc/pyircx/pyircx_config.json}"
 DOMAIN=""
 EMAIL=""
+CONFIGURE_WEBCHAT_SSL=0
+PYIRCX_WAS_RUNNING=0
+CERT_FILE=""
+KEY_FILE=""
+
+# Function to configure HTTPS for webchat
+configure_webchat_https() {
+    local cert_file="$1"
+    local key_file="$2"
+    local domain="$3"
+
+    echo ""
+    echo -e "${BLUE}Configuring HTTPS for WebChat...${NC}"
+
+    # Detect OS
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        OS_ID=$ID
+    else
+        OS_ID="unknown"
+    fi
+
+    # Install mod_ssl for Apache if needed
+    if [ -d /etc/httpd ]; then
+        # RHEL/Fedora/CentOS
+        if ! rpm -q mod_ssl &>/dev/null; then
+            echo -e "${YELLOW}Installing mod_ssl...${NC}"
+            dnf install -y mod_ssl 2>/dev/null || yum install -y mod_ssl
+        fi
+        APACHE_SSL_CONF="/etc/httpd/conf.d/ssl-webchat.conf"
+        APACHE_SERVICE="httpd"
+    elif [ -d /etc/apache2 ]; then
+        # Debian/Ubuntu
+        if ! a2query -m ssl &>/dev/null; then
+            echo -e "${YELLOW}Enabling mod_ssl...${NC}"
+            a2enmod ssl
+        fi
+        APACHE_SSL_CONF="/etc/apache2/sites-available/ssl-webchat.conf"
+        APACHE_SERVICE="apache2"
+    else
+        echo -e "${YELLOW}⚠ Apache not found, skipping HTTPS configuration${NC}"
+        return 1
+    fi
+
+    # Create Apache SSL config
+    echo -e "${YELLOW}Creating Apache SSL configuration...${NC}"
+    cat > "$APACHE_SSL_CONF" <<SSLCONF
+# pyIRCX WebChat HTTPS Configuration
+<VirtualHost *:443>
+    ServerName ${domain}
+    DocumentRoot /var/www/html
+
+    SSLEngine on
+    SSLCertificateFile ${cert_file}
+    SSLCertificateKeyFile ${key_file}
+
+    # Modern SSL configuration
+    SSLProtocol all -SSLv2 -SSLv3 -TLSv1 -TLSv1.1
+    SSLCipherSuite ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384
+    SSLHonorCipherOrder off
+
+    # WebSocket proxy for secure WebSocket (wss://)
+    ProxyPreserveHost On
+    ProxyRequests Off
+
+    # Proxy WebSocket connections to the gateway
+    RewriteEngine On
+    RewriteCond %{HTTP:Upgrade} websocket [NC]
+    RewriteCond %{HTTP:Connection} upgrade [NC]
+    RewriteRule ^/ws$ ws://127.0.0.1:8765/ [P,L]
+
+    ProxyPass /ws ws://127.0.0.1:8765/
+    ProxyPassReverse /ws ws://127.0.0.1:8765/
+
+    <Directory /var/www/html>
+        Options -Indexes +FollowSymLinks
+        AllowOverride None
+        Require all granted
+    </Directory>
+
+    ErrorLog logs/webchat-ssl-error.log
+    CustomLog logs/webchat-ssl-access.log combined
+</VirtualHost>
+SSLCONF
+
+    # Enable required Apache modules
+    if [ -d /etc/httpd ]; then
+        # Check and enable modules for RHEL/Fedora
+        if ! httpd -M 2>/dev/null | grep -q proxy_wstunnel; then
+            echo "LoadModule proxy_wstunnel_module modules/mod_proxy_wstunnel.so" >> /etc/httpd/conf.modules.d/00-proxy.conf 2>/dev/null || true
+        fi
+    elif [ -d /etc/apache2 ]; then
+        # Enable modules for Debian/Ubuntu
+        a2enmod proxy proxy_wstunnel rewrite 2>/dev/null || true
+        a2ensite ssl-webchat 2>/dev/null || true
+    fi
+
+    # Configure SELinux to allow Apache to connect to backend WebSocket server
+    if command -v getenforce &>/dev/null && [ "$(getenforce)" != "Disabled" ]; then
+        echo -e "${YELLOW}Configuring SELinux for WebSocket proxy...${NC}"
+        setsebool -P httpd_can_network_connect 1 2>/dev/null || true
+        echo -e "${GREEN}✓ SELinux configured${NC}"
+    fi
+
+    # Update webchat HTML to use secure WebSocket when on HTTPS
+    WEBCHAT_HTML="/opt/pyircx/webchat/index.html"
+    if [ -f "$WEBCHAT_HTML" ]; then
+        # Update WebSocket URL to auto-detect protocol
+        if grep -q "ws://\${window.location.hostname}:8765" "$WEBCHAT_HTML"; then
+            sed -i "s|ws://\${window.location.hostname}:8765|window.location.protocol === 'https:' ? 'wss://' + window.location.host + '/ws' : 'ws://' + window.location.hostname + ':8765'|g" "$WEBCHAT_HTML"
+            echo -e "${GREEN}✓ WebChat updated to use secure WebSocket${NC}"
+        fi
+    fi
+
+    # Restart Apache
+    echo -e "${YELLOW}Restarting Apache...${NC}"
+    systemctl restart "$APACHE_SERVICE"
+
+    if systemctl is-active --quiet "$APACHE_SERVICE"; then
+        echo -e "${GREEN}✓ Apache HTTPS configured successfully${NC}"
+    else
+        echo -e "${RED}Failed to restart Apache${NC}"
+        echo "Check logs: journalctl -u $APACHE_SERVICE -n 50"
+        return 1
+    fi
+
+    return 0
+}
 
 echo ""
 echo "========================================"
@@ -161,9 +289,17 @@ case $REPLY in
 
             # Ensure pyircx user can read certificates
             if id pyircx &>/dev/null; then
-                usermod -a -G ssl-cert pyircx 2>/dev/null || true
+                # Create ssl-cert group if it doesn't exist (Debian/Ubuntu have it, others don't)
+                if ! getent group ssl-cert &>/dev/null; then
+                    groupadd ssl-cert
+                    echo -e "${GREEN}Created ssl-cert group${NC}"
+                fi
+                usermod -a -G ssl-cert pyircx
+                # Set group ownership and permissions on Let's Encrypt directories
+                chgrp -R ssl-cert /etc/letsencrypt/live/$DOMAIN /etc/letsencrypt/archive/$DOMAIN
                 chmod 755 /etc/letsencrypt/live /etc/letsencrypt/archive
                 chmod 750 /etc/letsencrypt/live/$DOMAIN /etc/letsencrypt/archive/$DOMAIN
+                echo -e "${GREEN}Certificate permissions configured for pyircx user${NC}"
             fi
 
             # Set up auto-renewal
@@ -271,6 +407,14 @@ EOF
         ;;
 esac
 
+# Ask about webchat HTTPS
+echo ""
+read -p "Configure HTTPS for WebChat? [y/N]: " -n 1 -r WEBCHAT_REPLY
+echo
+if [[ $WEBCHAT_REPLY =~ ^[Yy]$ ]]; then
+    CONFIGURE_WEBCHAT_SSL=1
+fi
+
 # Update configuration
 echo ""
 echo -e "${YELLOW}Updating pyIRCX configuration...${NC}"
@@ -335,6 +479,11 @@ if [ $PYIRCX_WAS_RUNNING -eq 1 ] || systemctl is-enabled --quiet pyircx 2>/dev/n
     fi
 fi
 
+# Configure webchat HTTPS if requested
+if [ $CONFIGURE_WEBCHAT_SSL -eq 1 ]; then
+    configure_webchat_https "$CERT_FILE" "$KEY_FILE" "$DOMAIN"
+fi
+
 # Summary
 echo ""
 echo "========================================"
@@ -357,8 +506,17 @@ if [ "$REPLY" == "1" ]; then
     echo ""
 fi
 
+if [ $CONFIGURE_WEBCHAT_SSL -eq 1 ]; then
+    echo "WebChat HTTPS: ENABLED"
+    echo "  URL: https://$DOMAIN/chat.html"
+    echo ""
+fi
+
 echo "Firewall configuration:"
-echo "  firewall-cmd --add-port=6697/tcp --permanent  # SSL port"
+echo "  firewall-cmd --add-port=6697/tcp --permanent  # IRC SSL port"
+if [ $CONFIGURE_WEBCHAT_SSL -eq 1 ]; then
+    echo "  firewall-cmd --add-port=443/tcp --permanent   # HTTPS port"
+fi
 echo "  firewall-cmd --reload"
 echo ""
 

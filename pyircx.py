@@ -22,9 +22,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
 # Version info - updated with each release
-__version__ = "1.0.4"
+__version__ = "1.0.5"
 __version_label__ = "pyIRCX"
-__created__ = "Thu Jan 02 2026"
+__created__ = "Fri Jan  9 12:58:28 PM EST 2026"
 
 import asyncio
 import aiosqlite
@@ -179,6 +179,16 @@ class ServerConfig:
                 "proxy_score": 30,  # Points for open proxy
                 "no_ident_score": 10,  # Points for no ident response
                 "generic_hostname_score": 5  # Points for generic ISP hostname
+            },
+            "webirc": {
+                "enabled": True,
+                "hosts": {
+                    # gateway_name: { "password": "secret", "allowed_ips": ["127.0.0.1", "::1"] }
+                    "pyircx-webchat": {
+                        "password": "changeme",
+                        "allowed_ips": ["127.0.0.1", "::1"]
+                    }
+                }
             }
         },
         "persistence": {
@@ -688,6 +698,7 @@ class User:
         self.dnsbl_listed = []  # List of DNSBLs this IP is on (if any)
         self.connection_score = 0  # Risk score for this connection
         self.connection_factors = {}  # Factors contributing to score
+        self.webirc_gateway = None  # Name of WEBIRC gateway if used
 
         # Enhanced: Flood protection and rate limiting
         self.flood_protection = FloodProtection(
@@ -1695,7 +1706,7 @@ RESPONSES = {
     "219": "{flag} :End of /STATS report",
     "221": "+{modes}",
     "251": "There are {users} users and {invisible} invisible on {server_count} servers",
-    "252": "{ops} :{staff_term} online",
+    "252": "{ops} :staff and services online",
     "253": "{unknown} :unknown connection(s)",
     "254": "{channels} :channels formed",
     "255": "I have {users} clients and {server_count} servers",
@@ -2483,7 +2494,6 @@ class pyIRCXServer:
             "created_date": __created__,
             "usermodes": CONFIG.get('modes', 'user', default='agiorxz'),
             "chanmodes": CONFIG.get('modes', 'channel', default='adfikmnprstuwxy'),
-            "staff_term": CONFIG.get('system', 'staff_term', default='staff and services'),
             "uptime": int(time.time() - self.boot_time),
             "loc1": CONFIG.get('admin', 'loc1', default=''),
             "loc2": CONFIG.get('admin', 'loc2', default=''),
@@ -2500,7 +2510,7 @@ class pyIRCXServer:
             if code == "800":
                 return f":{self.servername} 800 {recipient.nickname if recipient.registered else '*'} {txt}"
             no_colon = ["004", "005", "311", "312",
-                "315", "317", "319", "352", "353", "324", "433"]
+                "315", "317", "319", "352", "353", "324", "366", "433"]
             if code == "433":
                 return f":{self.servername} 433 {recipient.nickname if recipient.nickname != '*' else '*'} {txt}"
             sep = " " if code in no_colon else " :"
@@ -2665,6 +2675,9 @@ class pyIRCXServer:
             user.send(
                 f":{self.servername} PONG {self.servername} :{params[0] if params else ''}")
             return
+        elif cmd == "WEBIRC":
+            await self.handle_webirc(user, params)
+            return
         elif cmd == "NICK":
             await self.handle_nick(user, params)
             return
@@ -2673,7 +2686,7 @@ class pyIRCXServer:
             return
 
         if not user.registered:
-            if cmd not in ["NICK", "USER", "PASS", "IRCX", "ISIRCX", "PING"]:
+            if cmd not in ["NICK", "USER", "PASS", "IRCX", "ISIRCX", "PING", "WEBIRC"]:
                 user.send(self.get_reply("451", user))
             return
 
@@ -2877,6 +2890,65 @@ class pyIRCXServer:
 
         await self.check_reg(user)
 
+    async def handle_webirc(self, user, params):
+        """Handle WEBIRC command for IP spoofing from trusted gateways.
+
+        WEBIRC password gateway hostname ip [:realhost]
+
+        This allows trusted WebSocket/CGI gateways to pass through the real
+        client IP address. Must be sent BEFORE NICK/USER registration.
+        """
+        if user.registered:
+            # Too late, already registered
+            return
+
+        if len(params) < 4:
+            user.send(self.get_reply("461", user, command="WEBIRC"))
+            return
+
+        # Check if WEBIRC is enabled
+        if not CONFIG.get('security', 'webirc', 'enabled', default=False):
+            logger.warning(f"WEBIRC attempt from {user.ip} but WEBIRC is disabled")
+            return
+
+        password = params[0]
+        gateway = params[1]
+        hostname = params[2]
+        client_ip = params[3]
+
+        # Get trusted hosts configuration
+        hosts_config = CONFIG.get('security', 'webirc', 'hosts', default={})
+        gateway_config = hosts_config.get(gateway)
+
+        if not gateway_config:
+            logger.warning(f"WEBIRC: Unknown gateway '{gateway}' from {user.ip}")
+            return
+
+        # Verify password
+        if gateway_config.get('password') != password:
+            logger.warning(f"WEBIRC: Invalid password from gateway '{gateway}' at {user.ip}")
+            return
+
+        # Verify source IP is allowed
+        allowed_ips = gateway_config.get('allowed_ips', [])
+        if user.ip not in allowed_ips:
+            logger.warning(f"WEBIRC: Gateway '{gateway}' not allowed from {user.ip}")
+            return
+
+        # Validate client IP (basic validation for IPv4/IPv6)
+        import ipaddress
+        try:
+            ip_obj = ipaddress.ip_address(client_ip)
+            # Update user's IP and hostname to the real client values
+            old_ip = user.ip
+            user.ip = str(ip_obj)
+            user.hostname = hostname if hostname != client_ip else str(ip_obj)
+            user.webirc_gateway = gateway
+            logger.info(f"WEBIRC: {gateway} spoofed {old_ip} -> {user.ip} ({user.hostname})")
+        except ValueError:
+            logger.warning(f"WEBIRC: Invalid client IP '{client_ip}' from gateway '{gateway}'")
+            return
+
     async def handle_user(self, user, params):
         if len(params) < 4:
             user.send(self.get_reply("461", user, command="USER"))
@@ -2997,6 +3069,9 @@ class pyIRCXServer:
             logger.info(f"Auth: {user.nickname} as {level}")
 
         await self.fire_trap("CONNECT", "USER LOGON", user)
+
+        # Send newsflash on connect
+        await self.send_newsflash_on_connect(user)
 
         # Notify watchers that this user has come online
         self.notify_watchers_online(user)
@@ -3607,7 +3682,7 @@ class pyIRCXServer:
 
         channel = self.channels[channel_name]
 
-        # Check permissions - must be channel owner/op or staff
+        # Check permissions - must be channel owner/host or staff
         is_chanop = user.nickname in channel.owners or user.nickname in channel.hosts
         is_staff = user.has_mode('o') or user.has_mode('a')
         if not (is_chanop or is_staff):
@@ -6966,6 +7041,54 @@ class pyIRCXServer:
         self._service_reply("NewsFlash", user, f"News pushed to {count} user(s)")
         logger.info(f"NewsFlash: Push by {user.nickname}: {message}")
 
+    async def send_newsflash_on_connect(self, user):
+        """Send a random newsflash message to a user on connect"""
+        if not CONFIG.get('newsflash', 'on_connect', default=False):
+            return
+        
+        try:
+            async with aiosqlite.connect(CONFIG.get('database', 'path')) as db:
+                async with db.execute("""SELECT message FROM newsflash 
+                                        WHERE active = 1 
+                                        ORDER BY RANDOM() LIMIT 1""") as cursor:
+                    row = await cursor.fetchone()
+                    if row:
+                        source = f":NewsFlash!NewsFlash@{self.servername}"
+                        user.send(f"{source} NOTICE {user.nickname} :[NEWS] {row[0]}")
+        except Exception as e:
+            logger.debug(f"NewsFlash on-connect error: {e}")
+
+    async def newsflash_periodic_broadcast(self):
+        """Broadcast a random newsflash message to all users periodically"""
+        while True:
+            try:
+                interval = CONFIG.get('newsflash', 'periodic_interval', default=30) * 60
+                await asyncio.sleep(interval)
+                
+                if not CONFIG.get('newsflash', 'periodic_enabled', default=False):
+                    continue
+                
+                async with aiosqlite.connect(CONFIG.get('database', 'path')) as db:
+                    async with db.execute("""SELECT message FROM newsflash 
+                                            WHERE active = 1 
+                                            ORDER BY RANDOM() LIMIT 1""") as cursor:
+                        row = await cursor.fetchone()
+                        if row:
+                            source = f":NewsFlash!NewsFlash@{self.servername}"
+                            out = f"{source} NOTICE * :[NEWS] {row[0]}"
+                            count = 0
+                            for recipient in self.users.values():
+                                if not recipient.is_virtual and recipient.registered:
+                                    recipient.send(out)
+                                    count += 1
+                            if count > 0:
+                                logger.info(f"NewsFlash: Periodic broadcast to {count} user(s)")
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"NewsFlash periodic error: {e}")
+
+
     async def handle_kill(self, staff, params):
         if not (staff.has_mode('o') or staff.has_mode('a')):
             staff.send(self.get_reply("481", staff))
@@ -7507,6 +7630,10 @@ class ServerManager:
             ssl_monitor_task = asyncio.create_task(self._ssl_monitor_loop())
             server_tasks.append(ssl_monitor_task)
 
+        # Add newsflash periodic broadcast task
+        newsflash_task = asyncio.create_task(self.server.newsflash_periodic_broadcast())
+        server_tasks.append(newsflash_task)
+
         # Add status dump task for admin interface
         status_dump_task = asyncio.create_task(self._status_dump_loop())
         server_tasks.append(status_dump_task)
@@ -7781,7 +7908,7 @@ Examples:
     parser.add_argument(
         '--version', '-v',
         action='version',
-        version='pyIRCX 1.0.4'
+        version='pyIRCX 1.0.5'
     )
     return parser.parse_args()
 

@@ -5,6 +5,37 @@ All notable changes to pyIRCX will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.5] - 2026-01-09
+
+### Added
+- **WebChat Browser Client**: Full-featured web-based IRC client
+  - WebSocket-to-IRC gateway (`webchat/gateway.py`)
+  - Modern responsive HTML5 client (`webchat/index.html`)
+  - Dark mode toggle with localStorage persistence
+  - Staff user detection and icons (ADMIN/SYSOP/GUIDE)
+  - Channel owner/host/voice icons
+  - Status window for server messages
+  - Full IRCX command support (PROP, ACCESS, WHISPER, LISTX)
+- **WEBIRC Protocol Support**: Forward real client IPs through gateway
+  - Configurable trusted hosts and passwords
+  - IPv4 and IPv6 support
+- **WebChat Systemd Service**: `pyircx-webchat.service` with config file support
+- **WebChat Configuration**: `/etc/pyircx/webchat.conf` for gateway settings
+- **Apache HTTPS Template**: `apache/ssl-webchat.conf.example` for WSS proxy
+- **WebChat Test Harness**: `pyIRCX_test_webchat.py` for comprehensive testing
+- **Certbot Auto-Renewal**: `pyircx-certbot-renew.service` and `.timer` for Let's Encrypt
+
+### Changed
+- **Install Script**: Now enables and starts services automatically
+- **Install Script**: Added optional WebChat installation prompt
+- **Repair Script**: Added WebChat validation and repair capabilities
+- **Setup SSL Script**: Fixed ssl-cert group creation on non-Debian systems
+- **Setup SSL Script**: Improved Let's Encrypt directory permissions
+
+### Fixed
+- **366 Numeric Format**: Fixed NAMES reply format (no extra colon before channel)
+- **SSL Certificate Permissions**: ssl-cert group now created if missing (Fedora/RHEL)
+
 ## [1.0.4] - 2026-01-02
 
 ### Changed

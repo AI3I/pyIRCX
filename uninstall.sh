@@ -61,12 +61,37 @@ else
     echo "Service not enabled"
 fi
 
+
+# Stop and disable webchat service
+echo ""
+echo -e "${BLUE}Stopping WebChat service...${NC}"
+if systemctl is-active --quiet pyircx-webchat 2>/dev/null; then
+    systemctl stop pyircx-webchat
+    echo -e "${GREEN}✓ WebChat service stopped${NC}"
+else
+    echo "WebChat service not running"
+fi
+
+if systemctl is-enabled --quiet pyircx-webchat 2>/dev/null; then
+    systemctl disable pyircx-webchat
+    echo -e "${GREEN}✓ WebChat service disabled${NC}"
+else
+    echo "WebChat service not enabled"
+fi
+
 # Remove systemd service files
 echo ""
 echo -e "${BLUE}Removing systemd service files...${NC}"
 if [ -f /etc/systemd/system/pyircx.service ]; then
     rm -f /etc/systemd/system/pyircx.service
     echo -e "${GREEN}✓ Removed pyircx.service${NC}"
+fi
+
+
+# Remove webchat service file
+if [ -f /etc/systemd/system/pyircx-webchat.service ]; then
+    rm -f /etc/systemd/system/pyircx-webchat.service
+    echo -e "${GREEN}✓ Removed pyircx-webchat.service${NC}"
 fi
 
 # Remove certbot auto-renewal (if exists)

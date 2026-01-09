@@ -1,0 +1,14 @@
+# pyIRCX WebChat Gateway Configuration
+# Copy to /etc/pyircx/webchat.conf and customize
+
+# WebSocket server settings
+WS_HOST=0.0.0.0
+WS_PORT=8765
+
+# IRC server to connect to
+IRC_HOST=127.0.0.1
+IRC_PORT=6667
+
+# WEBIRC password (must match pyircx_config.json webirc section)
+# IMPORTANT: Change this in production!
+WEBIRC_PASS=changeme

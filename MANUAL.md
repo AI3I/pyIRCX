@@ -1,6 +1,6 @@
 # pyIRCX Server Manual
 
-**Version:** 1.0.4
+**Version:** 1.0.5
 **Last Updated:** 2026-01-02
 **License:** GNU General Public License v3.0
 
@@ -658,7 +658,7 @@ Remove user from channel.
 ```
 KICK <#channel> <nick> [:<reason>]
 ```
-- Requires +q (owner), +o (op), or ADMIN
+- Requires +q (owner), +o (host), or ADMIN
 
 #### INVITE
 Invite user to channel.
@@ -673,7 +673,7 @@ Request invite to invite-only channel.
 KNOCK <#channel> [:<message>]
 ```
 - 60-second cooldown per channel
-- Sends notice to channel operators
+- Sends notice to channel hosts
 
 #### NAMES
 List channel members.

@@ -19,8 +19,7 @@
   },
   "system": {
     "nick": "System",
-    "ident": "System",
-    "staff_term": "staff and services"
+    "ident": "System"
   },
   "modes": {
     "user": "agiorxz",
@@ -73,7 +72,12 @@
     },
     "proxy_detection": {
       "enabled": false,
-      "ports": [8080, 3128, 1080, 9050],
+      "ports": [
+        8080,
+        3128,
+        1080,
+        9050
+      ],
       "timeout": 2.0,
       "action": "warn"
     },
@@ -84,6 +88,18 @@
       "proxy_score": 30,
       "no_ident_score": 10,
       "generic_hostname_score": 5
+    },
+    "webirc": {
+      "enabled": false,
+      "hosts": {
+        "pyircx-webchat": {
+          "password": "changeme",
+          "allowed_ips": [
+            "127.0.0.1",
+            "::1"
+          ]
+        }
+      }
     }
   },
   "persistence": {
@@ -95,7 +111,10 @@
     "profanity_filter": {
       "enabled": true,
       "action": "warn",
-      "words": ["badword", "testbad"],
+      "words": [
+        "badword",
+        "testbad"
+      ],
       "warn_message": "Please watch your language.",
       "case_sensitive": false
     },
@@ -124,13 +143,20 @@
   },
   "ssl": {
     "enabled": false,
-    "ports": [6697],
+    "ports": [
+      6697
+    ],
     "cert_file": "/etc/letsencrypt/live/irc.example.com/fullchain.pem",
     "key_file": "/etc/letsencrypt/live/irc.example.com/privkey.pem",
     "min_version": "TLSv1.2",
     "auto_reload": true,
     "reload_interval": 3600,
-    "expiry_warn_days": [14, 7, 3, 1]
+    "expiry_warn_days": [
+      14,
+      7,
+      3,
+      1
+    ]
   },
   "linking": {
     "enabled": false,

@@ -90,7 +90,7 @@
     function callAPI(cmd, args = []) {
         // Use system-wide installation path
         const fullArgs = ['python3', '/usr/share/cockpit/pyircx/api.py', cmd].concat(args);
-        return cockpit.spawn(fullArgs, { err: 'message' })
+        return cockpit.spawn(fullArgs, { err: 'message', superuser: 'try' })
             .then(out => JSON.parse(out))
             .catch(err => ({ error: err.message || 'Unknown error' }));
     }
@@ -350,6 +350,44 @@
             });
         });
     }
+
+    function loadNewsflashSettings() {
+        callAPI('newsflash-settings').then(data => {
+            if (data.error) {
+                console.error('Error loading newsflash settings:', data.error);
+                return;
+            }
+            if ($('#newsflash-on-connect')) {
+                $('#newsflash-on-connect').checked = data.on_connect;
+            }
+            if ($('#newsflash-periodic-enabled')) {
+                $('#newsflash-periodic-enabled').checked = data.periodic_enabled;
+            }
+            if ($('#newsflash-interval')) {
+                $('#newsflash-interval').value = data.periodic_interval;
+            }
+        });
+    }
+
+    function saveNewsflashSettings() {
+        const onConnect = $('#newsflash-on-connect').checked;
+        const periodicEnabled = $('#newsflash-periodic-enabled').checked;
+        const interval = $('#newsflash-interval').value;
+        
+        callAPI('set-newsflash-settings', [onConnect.toString(), periodicEnabled.toString(), interval]).then(res => {
+            if (res.error) {
+                showToast('Error', res.error, 'error');
+                $('#newsflash-settings-status').innerHTML = '<span style="color: red;">Failed to save</span>';
+            } else {
+                showToast('Success', 'NewsFlash settings saved', 'success');
+                $('#newsflash-settings-status').innerHTML = '<span style="color: green;">Settings saved!</span>';
+                setTimeout(() => {
+                    $('#newsflash-settings-status').innerHTML = '';
+                }, 3000);
+            }
+        });
+    }
+
 
     function loadMailbox() {
         callAPI('mailbox-list', ['30']).then(data => {
@@ -665,6 +703,7 @@
         loadStats();
         loadAccessList();
         loadNewsflash();
+        loadNewsflashSettings();
         loadMailbox();
         loadStaff();
         loadChannels();
@@ -750,6 +789,11 @@
                     }
                 });
             });
+        }
+        
+        // NewsFlash Settings
+        if ($('#btn-save-newsflash-settings')) {
+            $('#btn-save-newsflash-settings').addEventListener('click', saveNewsflashSettings);
         }
 
         // Staff Management

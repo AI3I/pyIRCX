@@ -1,0 +1,25 @@
+[Unit]
+Description=pyIRCX WebChat Gateway
+Documentation=https://github.com/AI3I/pyIRCX
+After=network.target pyircx.service
+Wants=pyircx.service
+
+[Service]
+Type=simple
+User=pyircx
+Group=pyircx
+WorkingDirectory=/opt/pyircx/webchat
+EnvironmentFile=-/etc/pyircx/webchat.conf
+ExecStart=/usr/bin/python3 /opt/pyircx/webchat/gateway.py --ws-port ${WS_PORT} --ws-host ${WS_HOST} --irc-host ${IRC_HOST} --irc-port ${IRC_PORT} --webirc-pass ${WEBIRC_PASS}
+Restart=on-failure
+RestartSec=5
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/pyircx/webchat
+
+[Install]
+WantedBy=multi-user.target

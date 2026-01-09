@@ -1,0 +1,1130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>pyIRCX WebChat</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        :root {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f8fafc;
+            --bg-tertiary: #e2e8f0;
+            --bg-dark: #1e293b;
+            --text-primary: #1e293b;
+            --text-secondary: #475569;
+            --text-muted: #94a3b8;
+            --border-color: #e2e8f0;
+            --accent: #3b82f6;
+            --accent-hover: #2563eb;
+            --accent-light: #eff6ff;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --online: #22c55e;
+            --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.1);
+            --shadow-lg: 0 10px 25px -5px rgba(0,0,0,0.15);
+            --msg-error-bg: #fef2f2;
+            --msg-notice-bg: #f5f3ff;
+            --msg-whisper-bg: #f0fdfa;
+        }
+
+        /* Dark Mode */
+        body.dark {
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-tertiary: #334155;
+            --bg-dark: #0f172a;
+            --text-primary: #f1f5f9;
+            --text-secondary: #cbd5e1;
+            --text-muted: #64748b;
+            --border-color: #334155;
+            --accent: #60a5fa;
+            --accent-hover: #3b82f6;
+            --accent-light: #1e3a5f;
+            --shadow-sm: 0 1px 2px rgba(0,0,0,0.3);
+            --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.4);
+            --shadow-lg: 0 10px 25px -5px rgba(0,0,0,0.5);
+            --msg-error-bg: #450a0a;
+            --msg-notice-bg: #2e1065;
+            --msg-whisper-bg: #042f2e;
+        }
+        body.dark .header { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); }
+        body.dark .message.error { background: var(--msg-error-bg); color: #fca5a5; }
+        body.dark .message.notice { background: var(--msg-notice-bg); color: #c4b5fd; }
+        body.dark .message.whisper { background: var(--msg-whisper-bg); color: #5eead4; }
+        body.dark .modal-overlay { background: rgba(0,0,0,0.8); }
+
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Inter', sans-serif; background: var(--bg-secondary); color: var(--text-primary); height: 100vh; display: flex; flex-direction: column; font-size: 15px; transition: background 0.3s, color 0.3s; }
+
+        /* Header */
+        .header { background: linear-gradient(135deg, var(--bg-dark) 0%, #334155 100%); padding: 12px 20px; display: flex; align-items: center; justify-content: space-between; box-shadow: var(--shadow-md); }
+        .header h1 { font-size: 22px; font-weight: 700; color: #fff; letter-spacing: -0.5px; }
+        .header-status { display: flex; align-items: center; gap: 16px; font-size: 15px; color: #cbd5e1; }
+        .status-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--text-muted); box-shadow: 0 0 0 3px rgba(148,163,184,0.2); transition: all 0.3s; }
+        .status-dot.connected { background: var(--online); box-shadow: 0 0 0 3px rgba(34,197,94,0.3), 0 0 12px rgba(34,197,94,0.4); }
+        .user-modes { color: var(--accent); font-weight: 600; background: rgba(59,130,246,0.15); padding: 4px 10px; border-radius: 12px; font-size: 14px; }
+        #currentNick { font-weight: 600; color: #fff; }
+        .dark-toggle { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #fff; width: 40px; height: 36px; border-radius: 8px; cursor: pointer; font-size: 18px; transition: all 0.2s; display: flex; align-items: center; justify-content: center; }
+        .dark-toggle:hover { background: rgba(255,255,255,0.2); }
+        #darkIcon { display: inline-block; width: 20px; text-align: center; }
+
+        /* Main Layout */
+        .main-container { display: flex; flex: 1; overflow: hidden; }
+
+        /* Channel List */
+        .channel-list { width: 200px; background: var(--bg-primary); border-right: 1px solid var(--border-color); display: flex; flex-direction: column; }
+        .panel-header { padding: 14px 16px; font-size: 13px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); border-bottom: 1px solid var(--border-color); letter-spacing: 0.8px; background: var(--bg-secondary); }
+        .channel-list-items { flex: 1; overflow-y: auto; padding: 8px; }
+        .channel-item { padding: 10px 14px; cursor: pointer; font-size: 15px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-radius: 8px; margin-bottom: 2px; transition: all 0.15s; }
+        .channel-item:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+        .channel-item.active { background: var(--accent-light); color: var(--accent); font-weight: 600; border-left: 3px solid var(--accent); }
+        .channel-item .unread { float: right; background: var(--accent); color: white; font-size: 12px; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
+        .channel-item.private { font-style: italic; }
+        .channel-item.status { font-weight: 600; color: var(--accent); }
+
+        /* Chat Area */
+        .chat-area { flex: 1; display: flex; flex-direction: column; background: var(--bg-primary); min-width: 0; }
+        .chat-header { padding: 14px 20px; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; min-height: 60px; background: var(--bg-primary); }
+        .chat-info { overflow: hidden; }
+        .chat-title { font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 10px; color: var(--text-primary); }
+        .chat-modes { font-size: 14px; color: var(--accent); font-weight: 500; background: var(--accent-light); padding: 3px 10px; border-radius: 12px; }
+        .chat-topic { font-size: 14px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 500px; margin-top: 4px; }
+        .chat-actions { display: flex; gap: 8px; flex-shrink: 0; }
+        .chat-actions button { background: var(--bg-secondary); border: 1px solid var(--border-color); padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500; color: var(--text-secondary); transition: all 0.15s; }
+        .chat-actions button:hover { background: var(--bg-tertiary); color: var(--text-primary); border-color: var(--text-muted); }
+
+        /* Messages */
+        .messages-container { flex: 1; overflow-y: auto; padding: 16px 20px; font-size: 15px; background: linear-gradient(to bottom, var(--bg-secondary) 0%, var(--bg-primary) 100%); }
+        .message { margin-bottom: 6px; line-height: 1.6; word-wrap: break-word; padding: 4px 0; }
+        .message .ts { color: var(--text-muted); font-size: 13px; margin-right: 10px; font-weight: 500; }
+        .message .nick { font-weight: 700; margin-right: 6px; cursor: pointer; }
+        .message .nick:hover { text-decoration: underline; }
+        .message.action { font-style: italic; color: var(--text-secondary); background: var(--bg-secondary); padding: 6px 12px; border-radius: 6px; display: inline-block; }
+        .message.system { color: var(--text-muted); font-family: 'SF Mono', 'Consolas', monospace; font-size: 14px; }
+        .message.error { color: var(--danger); font-family: 'SF Mono', 'Consolas', monospace; font-size: 14px; background: #fef2f2; padding: 6px 12px; border-radius: 6px; border-left: 3px solid var(--danger); }
+        .message.notice { color: #7c3aed; background: #f5f3ff; padding: 6px 12px; border-radius: 6px; }
+        .message.whisper { color: #0d9488; background: #f0fdfa; padding: 6px 12px; border-radius: 6px; border-left: 3px solid #14b8a6; }
+        .message.event { color: var(--text-muted); font-size: 14px; font-style: italic; }
+        .message.motd { color: var(--text-secondary); font-family: 'SF Mono', 'Consolas', monospace; font-size: 14px; }
+        .nick-0{color:#dc2626}.nick-1{color:#2563eb}.nick-2{color:#16a34a}.nick-3{color:#9333ea}.nick-4{color:#ea580c}.nick-5{color:#0d9488}.nick-6{color:#475569}.nick-7{color:#db2777}
+
+        /* Input Area */
+        .input-area { padding: 16px 20px; border-top: 1px solid var(--border-color); display: flex; gap: 12px; background: var(--bg-primary); }
+        .input-area input { flex: 1; padding: 12px 16px; border: 2px solid var(--border-color); border-radius: 10px; font-size: 15px; outline: none; transition: all 0.2s; }
+        .input-area input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(59,130,246,0.15); }
+        .input-area button { padding: 12px 24px; background: linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%); color: white; border: none; border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.2s; box-shadow: var(--shadow-sm); }
+        .input-area button:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
+
+        /* User List */
+        .user-list { width: 200px; background: var(--bg-primary); border-left: 1px solid var(--border-color); display: flex; flex-direction: column; }
+        .user-list-items { flex: 1; overflow-y: auto; padding: 8px; }
+        .user-item { padding: 8px 12px; font-size: 15px; color: var(--text-secondary); cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-radius: 6px; margin-bottom: 2px; transition: all 0.15s; }
+        .user-item:hover { background: var(--bg-tertiary); }
+        .user-item.admin { color: #eab308; font-weight: 700; }
+        .user-item.sysop { color: #f97316; font-weight: 700; }
+        .user-item.guide { color: #3b82f6; font-weight: 700; }
+        .user-item.owner { color: #a855f7; font-weight: 600; }
+        .user-item.host { color: #ef4444; font-weight: 600; }
+        .user-item.voice { color: #22c55e; }
+        .user-item.away { font-style: italic; opacity: 0.6; }
+        .user-icon { display: inline-block; width: 22px; text-align: center; font-size: 16px; }
+
+        /* Modal */
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15,23,42,0.6); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+        .modal-overlay.hidden { display: none; }
+        .modal { background: var(--bg-primary); border-radius: 16px; padding: 32px; width: 400px; box-shadow: var(--shadow-lg); }
+        .modal h2 { margin-bottom: 24px; font-size: 24px; text-align: center; font-weight: 700; color: var(--text-primary); }
+        .modal .form-group { margin-bottom: 18px; }
+        .modal label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; color: var(--text-secondary); }
+        .modal input, .modal select { width: 100%; padding: 12px 14px; border: 2px solid var(--border-color); border-radius: 10px; font-size: 16px; transition: all 0.2s; }
+        .modal input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(59,130,246,0.15); }
+        .modal button { width: 100%; padding: 14px; background: linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%); color: white; border: none; border-radius: 10px; font-size: 16px; font-weight: 600; cursor: pointer; margin-top: 12px; transition: all 0.2s; }
+        .modal button:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
+        .modal .error-message { color: var(--danger); font-size: 14px; margin-top: 12px; text-align: center; font-weight: 500; }
+
+        /* Info Panel */
+        .info-panel { position: fixed; right: 0; top: 0; bottom: 0; width: 320px; background: var(--bg-primary); border-left: 1px solid var(--border-color); transform: translateX(100%); transition: transform 0.25s ease; z-index: 100; display: flex; flex-direction: column; box-shadow: var(--shadow-lg); }
+        .info-panel.open { transform: translateX(0); }
+        .info-panel-header { padding: 16px 20px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background: var(--bg-secondary); }
+        .info-panel-header h3 { font-size: 18px; font-weight: 700; }
+        .info-panel-close { background: none; border: none; font-size: 24px; cursor: pointer; color: var(--text-muted); transition: color 0.15s; }
+        .info-panel-close:hover { color: var(--text-primary); }
+        .info-panel-content { flex: 1; overflow-y: auto; padding: 20px; font-size: 15px; }
+        .info-section { margin-bottom: 20px; }
+        .info-section h4 { font-size: 13px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 10px; font-weight: 700; letter-spacing: 0.5px; }
+        .info-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--bg-tertiary); }
+        .info-row .label { color: var(--text-muted); }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: var(--bg-secondary); }
+        ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+        @media (max-width: 768px) { .channel-list, .user-list { display: none; } }
+    </style>
+</head>
+<body>
+    <div class="modal-overlay" id="loginModal">
+        <div class="modal">
+            <h2>Connect to pyIRCX</h2>
+            <div class="form-group"><label>Nickname</label><input type="text" id="loginNick" maxlength="30" autocomplete="off"></div>
+            <div class="form-group"><label>Channel</label><input type="text" id="loginChannel" value="#lobby"></div>
+            <div class="form-group"><label>Password (staff)</label><input type="password" id="loginPassword"></div>
+            <button id="connectBtn">Connect</button>
+            <div class="error-message" id="loginError"></div>
+        </div>
+    </div>
+    <div class="header">
+        <h1>pyIRCX WebChat</h1>
+        <div class="header-status">
+            <div style="display:flex;align-items:center;gap:5px"><div class="status-dot" id="statusDot"></div><span id="statusText">Disconnected</span></div>
+            <span id="currentNick"></span>
+            <span class="user-modes" id="userModes"></span>
+            <button class="dark-toggle" id="darkToggle" title="Toggle dark mode"><span id="darkIcon">&#9790;</span></button>
+        </div>
+    </div>
+    <div class="main-container">
+        <div class="channel-list">
+            <div class="panel-header">Channels</div>
+            <div class="channel-list-items" id="channelList"></div>
+        </div>
+        <div class="chat-area">
+            <div class="chat-header">
+                <div class="chat-info">
+                    <div class="chat-title"><span id="chatTitle">Not connected</span><span class="chat-modes" id="chatModes"></span></div>
+                    <div class="chat-topic" id="chatTopic"></div>
+                </div>
+                <div class="chat-actions">
+                    <button id="joinBtn">Join</button>
+                    <button id="partBtn">Leave</button>
+                    <button id="usersBtn">Users</button>
+                    <button id="propsBtn">Properties</button>
+                </div>
+            </div>
+            <div class="messages-container" id="messages"></div>
+            <div class="input-area">
+                <input type="text" id="messageInput" placeholder="Type message or /command..." disabled autocomplete="off">
+                <button id="sendBtn" disabled>Send</button>
+            </div>
+        </div>
+        <div class="user-list">
+            <div class="panel-header">Users <span id="userCount">(0)</span></div>
+            <div class="user-list-items" id="userList"></div>
+        </div>
+    </div>
+    <div class="info-panel" id="infoPanel">
+        <div class="info-panel-header"><h3 id="infoPanelTitle">Info</h3><button class="info-panel-close" id="infoPanelClose">&times;</button></div>
+        <div class="info-panel-content" id="infoPanelContent"></div>
+    </div>
+<script>
+const WS_URL = window.location.protocol === 'https:' ? `wss://${window.location.host}/ws` : `ws://${window.location.hostname}:8765`;
+let ws = null, currentNick = '', currentChannel = '', channels = {}, myModes = new Set(), isIRCX = false, pendingJoinChannel = '';
+const staffUsers = new Map(); // Track server staff: nick -> 'ADMIN'|'SYSOP'|'GUIDE'
+const $ = id => document.getElementById(id);
+const escapeHtml = t => { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; };
+const nickColor = n => 'nick-' + (Math.abs([...n].reduce((h,c) => c.charCodeAt(0) + ((h << 5) - h), 0)) % 8);
+const ts = () => new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+const isChannel = n => n && (n[0] === '#' || n[0] === '&');
+
+// Command queue for throttling - prevents "Too fast" errors
+const cmdQueue = [];
+let cmdTimer = null;
+const CMD_DELAY = 600; // ms between commands
+
+function queueCmd(cmd) {
+    if (ws && ws.readyState === 1) {
+        cmdQueue.push(cmd);
+        if (!cmdTimer) processQueue();
+    }
+}
+
+function processQueue() {
+    if (cmdQueue.length === 0) { cmdTimer = null; return; }
+    const cmd = cmdQueue.shift();
+    if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'raw', command: cmd }));
+    cmdTimer = setTimeout(processQueue, CMD_DELAY);
+}
+
+// Channel mode descriptions
+const MODE_DESC = {
+    a:'Admin only',d:'Clone parent',e:'Clone',f:'Profanity filter',h:'Hidden',i:'Invite only',
+    j:'No invitations',k:'Key required',m:'Moderated',n:'No external',p:'Private',r:'Registered',
+    s:'Secret',t:'Topic lock',u:'Auditorium',w:'No whisper',x:'IRCX',y:'Transcript'
+};
+
+// User mode prefixes - maps mode char to display prefix
+const USER_MODE_PREFIX = {
+    q: '.',   // owner
+    a: '&',   // admin (channel)
+    o: '@',   // host
+    h: '%',   // halfop
+    v: '+'    // voice
+};
+
+// Mode message batching to reduce spam
+const pendingModes = new Map(); // channel -> { nick, modes: [], timer }
+const MODE_BATCH_DELAY = 300; // ms
+
+function addPendingMode(channel, nick, modeStr) {
+    const key = channel.toLowerCase();
+    if (!pendingModes.has(key)) {
+        pendingModes.set(key, { nick, modes: [], timer: null });
+    }
+    const pending = pendingModes.get(key);
+    pending.modes.push(modeStr);
+    // If same nick, keep batching; if different nick, flush first
+    if (pending.nick !== nick && pending.modes.length > 1) {
+        clearTimeout(pending.timer);
+        flushPendingModes(key);
+        pendingModes.set(key, { nick, modes: [modeStr], timer: null });
+    } else {
+        pending.nick = nick;
+    }
+    clearTimeout(pending.timer);
+    pending.timer = setTimeout(() => flushPendingModes(key), MODE_BATCH_DELAY);
+}
+
+function flushPendingModes(key) {
+    const pending = pendingModes.get(key);
+    if (!pending || pending.modes.length === 0) return;
+    const ch = channels[key];
+    if (ch) {
+        const combined = pending.modes.join(' ');
+        addMsg(ch.name, `${escapeHtml(pending.nick)} sets mode ${combined}`, 'event');
+    }
+    pendingModes.delete(key);
+}
+
+function getChannel(name) {
+    if (!name) return null;
+    const lower = name.toLowerCase();
+    if (!channels[lower]) {
+        channels[lower] = {
+            name, topic: '', topicBy: '', topicTime: 0, users: new Map(), messages: [], unread: 0,
+            modes: {}, props: {}, isPrivate: !isChannel(name), key: '', limit: 0, created: 0
+        };
+    }
+    return channels[lower];
+}
+
+function switchChannel(name) {
+    const ch = getChannel(name);
+    if (!ch) return;
+    currentChannel = name;
+    ch.unread = 0;
+    $('chatTitle').textContent = ch.isStatus ? 'Status' : name;
+    updateChannelModeDisplay(ch);
+    $('chatTopic').textContent = ch.topic || (ch.isStatus ? 'Server messages and notifications' : (ch.isPrivate ? 'Private conversation' : ''));
+    $('messages').innerHTML = '';
+    ch.messages.forEach(m => $('messages').appendChild(m.cloneNode(true)));
+    $('messages').scrollTop = $('messages').scrollHeight;
+    renderUserList(ch);
+    renderChannelList();
+}
+
+function updateChannelModeDisplay(ch) {
+    const modeKeys = Object.keys(ch.modes).filter(m => ch.modes[m]);
+    $('chatModes').textContent = modeKeys.length ? '+' + modeKeys.join('') : '';
+}
+
+function renderChannelList() {
+    $('channelList').innerHTML = '';
+    // Sort channels: Status first, then channels, then private messages
+    const sorted = Object.values(channels).sort((a, b) => {
+        if (a.isStatus && !b.isStatus) return -1;
+        if (!a.isStatus && b.isStatus) return 1;
+        if (a.isPrivate && !b.isPrivate) return 1;
+        if (!a.isPrivate && b.isPrivate) return -1;
+        return a.name.localeCompare(b.name);
+    });
+    sorted.forEach(ch => {
+        const div = document.createElement('div');
+        let cls = 'channel-item';
+        if (ch.name.toLowerCase() === currentChannel.toLowerCase()) cls += ' active';
+        if (ch.isStatus) cls += ' status';
+        else if (ch.isPrivate) cls += ' private';
+        div.className = cls;
+        div.innerHTML = ch.isStatus ? '&#9432; Status' : escapeHtml(ch.name);
+        if (ch.unread > 0) div.innerHTML += `<span class="unread">${ch.unread}</span>`;
+        div.onclick = () => switchChannel(ch.name);
+        $('channelList').appendChild(div);
+    });
+}
+
+// User prefix to icon mapping
+function renderUserList(ch) {
+    $('userList').innerHTML = '';
+    if (!ch || ch.isPrivate) { $('userCount').textContent = '(0)'; return; }
+    const users = [...ch.users.entries()].sort((a,b) => {
+        // Sort: staff first, then by channel prefix, then alphabetically
+        const staffOrder = {'ADMIN':0,'SYSOP':1,'GUIDE':2,'':3};
+        const prefixOrder = {'.':0,'~':0,'@':1,'+':2,'':3};
+        const aStaff = staffUsers.get(a[0]) || '';
+        const bStaff = staffUsers.get(b[0]) || '';
+        const staffDiff = (staffOrder[aStaff]??3) - (staffOrder[bStaff]??3);
+        if (staffDiff !== 0) return staffDiff;
+        const prefixDiff = (prefixOrder[a[1].prefix]??3) - (prefixOrder[b[1].prefix]??3);
+        if (prefixDiff !== 0) return prefixDiff;
+        return a[0].localeCompare(b[0]);
+    });
+    users.forEach(([nick, info]) => {
+        const div = document.createElement('div');
+        const p = info.prefix;
+        const staff = staffUsers.get(nick);
+        // Icon priority: ADMIN/SYSOP=crown, GUIDE/owner/host=gavel, voice=speech, else=person
+        let icon, cssClass;
+        if (staff === 'ADMIN') { icon = '👑'; cssClass = 'admin'; }
+        else if (staff === 'SYSOP') { icon = '🏅'; cssClass = 'sysop'; }
+        else if (staff === 'GUIDE') { icon = '🔰'; cssClass = 'guide'; } else if (p === '.' || p === '~') { icon = '🔑'; cssClass = 'owner'; }
+        else if (p === '@') { icon = '⭐'; cssClass = 'host'; }
+        else if (p === '+') { icon = '💬'; cssClass = 'voice'; }
+        else { icon = '👤'; cssClass = ''; }
+        div.className = 'user-item' + (cssClass ? ' ' + cssClass : '') + (info.away ? ' away' : '');
+        div.innerHTML = `<span class="user-icon">${icon}</span> ${escapeHtml(nick)}`;
+        div.title = info.away ? `Away: ${info.away}` : (staff ? `${staff} - ${nick}` : nick);
+        div.onclick = () => showUserInfo(nick);
+        $('userList').appendChild(div);
+    });
+    $('userCount').textContent = `(${users.length})`;
+}
+
+function addMsg(target, html, cls = '') {
+    const ch = getChannel(target);
+    if (!ch) return;
+    const div = document.createElement('div');
+    div.className = 'message' + (cls ? ' ' + cls : '');
+    div.innerHTML = `<span class="ts">${ts()}</span>${html}`;
+    ch.messages.push(div);
+    if (ch.messages.length > 500) ch.messages.shift();
+    if (target.toLowerCase() === currentChannel.toLowerCase()) {
+        $('messages').appendChild(div.cloneNode(true));
+        $('messages').scrollTop = $('messages').scrollHeight;
+    } else {
+        ch.unread++;
+        renderChannelList();
+    }
+}
+
+function sysMsg(text, cls = 'system') {
+    // Always send system messages to Status window
+    const status = getChannel('Status');
+    status.isStatus = true;
+    addMsg('Status', escapeHtml(text), cls);
+}
+
+function connect() {
+    const nick = $('loginNick').value.trim();
+    const channel = $('loginChannel').value.trim() || '#lobby';
+    const password = $('loginPassword').value.trim();
+    if (!nick) { $('loginError').textContent = 'Enter a nickname'; return; }
+    $('loginError').textContent = 'Connecting...';
+    $('connectBtn').disabled = true;
+    try {
+        ws = new WebSocket(WS_URL);
+        ws.onopen = () => {
+            currentNick = nick;
+            pendingJoinChannel = channel;
+            // Enable IRCX mode first
+            ws.send(JSON.stringify({ type: 'raw', command: 'IRCX' }));
+            ws.send(JSON.stringify({ type: 'connect', nick, username: password ? nick : 'webchat', realname: 'pyIRCX WebChat', password: password || undefined }));
+        };
+        ws.onmessage = e => handleMessage(JSON.parse(e.data));
+        ws.onerror = () => { $('loginError').textContent = 'Connection failed'; $('connectBtn').disabled = false; };
+        ws.onclose = () => setDisconnected();
+    } catch (e) { $('loginError').textContent = e.message; $('connectBtn').disabled = false; }
+}
+
+function setConnected() {
+    $('loginModal').classList.add('hidden');
+    $('statusDot').classList.add('connected');
+    $('statusText').textContent = 'Connected';
+    $('currentNick').textContent = currentNick;
+    $('messageInput').disabled = false;
+    $('sendBtn').disabled = false;
+    $('messageInput').focus();
+    // Create Status window and switch to it
+    const status = getChannel('Status');
+    status.isStatus = true;
+    switchChannel('Status');
+}
+
+function setDisconnected() {
+    ws = null;
+    cmdQueue.length = 0;
+    if (cmdTimer) { clearTimeout(cmdTimer); cmdTimer = null; }
+    $('loginModal').classList.remove('hidden');
+    $('statusDot').classList.remove('connected');
+    $('statusText').textContent = 'Disconnected';
+    $('currentNick').textContent = '';
+    $('userModes').textContent = '';
+    $('messageInput').disabled = true;
+    $('sendBtn').disabled = true;
+    $('connectBtn').disabled = false;
+    $('loginError').textContent = '';
+    channels = {}; currentChannel = ''; myModes.clear(); pendingJoinChannel = ''; staffUsers.clear();
+    $('channelList').innerHTML = ''; $('userList').innerHTML = ''; $('messages').innerHTML = '';
+    $('chatTitle').textContent = 'Not connected'; $('chatTopic').textContent = ''; $('chatModes').textContent = '';
+}
+
+function updateMyModes() {
+    $('userModes').textContent = myModes.size ? '+' + [...myModes].join('') : '';
+}
+
+// Parse and apply mode changes directly to channel/user state
+function applyModeChanges(ch, modeStr, modeArgs) {
+    let adding = true;
+    let argIndex = 0;
+    const userModes = 'qaohv'; // modes that take a nick parameter
+    const paramModes = 'kl'; // modes that take parameters
+
+    for (const c of modeStr) {
+        if (c === '+') { adding = true; continue; }
+        if (c === '-') { adding = false; continue; }
+
+        if (userModes.includes(c)) {
+            // User mode change (host, voice, etc)
+            const targetNick = modeArgs[argIndex++];
+            if (targetNick && ch.users.has(targetNick)) {
+                const user = ch.users.get(targetNick);
+                const prefix = USER_MODE_PREFIX[c] || '';
+                if (adding) {
+                    // Only upgrade prefix if higher rank
+                    const ranks = '.~&@%+';
+                    if (!user.prefix || ranks.indexOf(prefix) < ranks.indexOf(user.prefix)) {
+                        user.prefix = prefix;
+                    }
+                } else {
+                    // Remove prefix if it matches
+                    if (user.prefix === prefix) {
+                        user.prefix = '';
+                    }
+                }
+            }
+        } else if (paramModes.includes(c)) {
+            // Modes with parameters
+            const param = modeArgs[argIndex++];
+            if (c === 'k') ch.key = adding ? param : '';
+            if (c === 'l') ch.limit = adding ? parseInt(param) : 0;
+            ch.modes[c] = adding;
+        } else if (c === 'b' || c === 'e' || c === 'I') {
+            // Ban/exception/invite masks - skip the parameter
+            argIndex++;
+        } else {
+            // Simple channel mode
+            ch.modes[c] = adding;
+        }
+    }
+}
+
+function handleMessage(data) {
+    if (data.type === 'error') { sysMsg(data.message, 'error'); return; }
+    if (data.type !== 'irc') return;
+    const { command, params, nick, prefix } = data;
+    const p = params || [];
+
+    switch (command) {
+        // Connection & Welcome
+        case '001':
+            // Sync nick from server response (p[0] is the accepted nick)
+            if (p[0]) { currentNick = p[0]; $('currentNick').textContent = p[0]; }
+            setConnected();
+            sysMsg(p[p.length-1]);
+            // Join pending channel after registration completes
+            if (pendingJoinChannel && ws?.readyState === 1) {
+                ws.send(JSON.stringify({ type: 'join', channel: pendingJoinChannel }));
+                pendingJoinChannel = '';
+            }
+            break;
+        case '002': case '003': sysMsg(p[p.length-1], 'system'); break;
+        case '004': break; // Server info
+        case '005': break; // ISUPPORT
+
+        // MOTD - all go to Status window
+        case '372': sysMsg(p[p.length-1], 'motd'); break;
+        case '375': sysMsg('--- Message of the Day ---', 'motd'); break;
+        case '376': case '422': sysMsg('--- End of MOTD ---', 'motd'); break;
+
+        // User/Server info
+        case '251': case '252': case '253': case '254': case '255': case '265': case '266':
+            sysMsg(p[p.length-1]); break;
+
+        // LUSERS/ADMIN
+        case '256': case '257': case '258': case '259': sysMsg(p[p.length-1]); break;
+
+        // WHO replies
+        case '315': // End of WHO - update user list
+            if (p.length >= 2 && isChannel(p[1]) && p[1].toLowerCase() === currentChannel.toLowerCase()) {
+                renderUserList(getChannel(currentChannel));
+            }
+            break;
+        case '352': // WHO reply - detect staff from flags
+            if (p.length >= 7) {
+                const whoNick = p[5];
+                const flags = p[6] || '';
+                // IRCX flags: a=admin, o=oper/sysop, g=guide; standard: *=oper
+                if (flags.includes('a')) staffUsers.set(whoNick, 'ADMIN');
+                else if (flags.includes('o')) staffUsers.set(whoNick, 'SYSOP');
+                else if (flags.includes('g')) staffUsers.set(whoNick, 'GUIDE');
+                else if (flags.includes('*')) staffUsers.set(whoNick, 'SYSOP');
+            }
+            break;
+
+        // WHOIS
+        case '311': if (p.length >= 5) showWhoisStart(p[1], p[2], p[3], p[5]); break;
+        case '312': if (p.length >= 3) appendWhois('Server', p[2]); break;
+        case '313': // Staff status
+            if (p.length >= 2) {
+                const targetNick = p[1];
+                const status = p[p.length-1].toLowerCase();
+                if (status.includes('administrator')) staffUsers.set(targetNick, 'ADMIN');
+                else if (status.includes('operator')) staffUsers.set(targetNick, 'SYSOP');
+                else if (status.includes('guide')) staffUsers.set(targetNick, 'GUIDE');
+                appendWhois('Status', p[p.length-1]);
+                if (currentChannel) renderUserList(getChannel(currentChannel));
+            }
+            break;
+        case '317': if (p.length >= 4) appendWhois('Idle', `${p[2]}s, signon: ${new Date(p[3]*1000).toLocaleString()}`); break;
+        case '318': endWhois(); break;
+        case '319': if (p.length >= 2) appendWhois('Channels', p[p.length-1]); break;
+        case '320': if (p.length >= 2) appendWhois('IP', p[p.length-1].replace('from IP ','')); break;
+        case '301': // Away
+            if (p.length >= 3) {
+                const t = p[1], m = p[2];
+                Object.values(channels).forEach(ch => { if (ch.users.has(t)) ch.users.get(t).away = m; });
+                appendWhois('Away', m);
+            }
+            break;
+
+        // WHOWAS
+        case '314': sysMsg(`WHOWAS: ${p[1]} was ${p[2]}@${p[3]} (${p[p.length-1]})`, 'system'); break;
+        case '369': break;
+
+        // LIST
+        case '321': break;
+        case '322': case '812': // LIST/LISTX reply
+            if (p.length >= 3) sysMsg(`${p[1]} (${p[2]} users): ${p[3]||''}`, 'system');
+            break;
+        case '323': case '813': sysMsg('End of channel list', 'system'); break;
+
+        // Topic
+        case '331': break; // No topic
+        case '332':
+            if (p.length >= 3) {
+                const ch = getChannel(p[1]);
+                if (ch) { ch.topic = p[2]; if (p[1].toLowerCase() === currentChannel.toLowerCase()) $('chatTopic').textContent = p[2]; }
+            }
+            break;
+        case '333': // Topic set by
+            if (p.length >= 4) {
+                const ch = getChannel(p[1]);
+                if (ch) { ch.topicBy = p[2]; ch.topicTime = parseInt(p[3]); }
+            }
+            break;
+
+        // Channel modes (reply to MODE query)
+        case '324':
+            if (p.length >= 2) {
+                const ch = getChannel(p[1]);
+                if (ch) {
+                    // Clear existing modes and set from response
+                    ch.modes = {};
+                    const modeStr = p[2] || '';
+                    const modeArgs = p.slice(3);
+                    applyModeChanges(ch, modeStr, modeArgs);
+                    if (p[1].toLowerCase() === currentChannel.toLowerCase()) {
+                        updateChannelModeDisplay(ch);
+                    }
+                }
+            }
+            break;
+
+        // NAMES
+        case '353':
+            if (p.length >= 4 && isChannel(p[2])) {
+                // Only process if we already have this channel (we joined it)
+                const lower = p[2].toLowerCase();
+                if (channels[lower]) {
+                    const ch = channels[lower];
+                    p[3].split(' ').forEach(n => {
+                        if (!n) return;
+                        let pfx = '', name = n;
+                        // Strip prefixes: .~&@%+ - keep the FIRST (highest rank) prefix
+                        while ('.~&@%+'.includes(name[0])) {
+                            if (!pfx) pfx = name[0]; // Keep first prefix only
+                            name = name.slice(1);
+                        }
+                        if (name) ch.users.set(name, { prefix: pfx, away: null });
+                    });
+                }
+            }
+            break;
+        case '366':
+            // End of /NAMES - request WHO to detect staff, then update display
+            if (p.length >= 2 && isChannel(p[1])) {
+                const lower = p[1].toLowerCase();
+                if (channels[lower]) {
+                    const ch = channels[lower];
+                    if (lower === currentChannel.toLowerCase()) renderUserList(ch);
+                    // Request WHO to get staff flags (a=admin, o=oper, g=guide)
+                    queueCmd(`WHO ${p[1]}`);
+                }
+            }
+            break;
+
+        // Ban list
+        case '367': if (p.length >= 3) sysMsg(`Ban: ${p[2]}`, 'system'); break;
+        case '368': break;
+
+        // INVITE
+        case '341': sysMsg(`Invited ${p[1]} to ${p[2]}`, 'system'); break;
+
+        // Operator
+        case '381': sysMsg(p[p.length-1], 'system'); break;
+        case '386': sysMsg(p[p.length-1], 'system'); break;
+
+        // User modes
+        case '221':
+            const m = (p[0]||'').replace('+','');
+            myModes.clear(); m.split('').forEach(x => myModes.add(x));
+            updateMyModes();
+            break;
+
+        // IRCX
+        case '800': isIRCX = true; break;
+        case '804': sysMsg('Authentication successful', 'system'); break;
+
+        // ACCESS
+        case '805': case '806': sysMsg(p.join(' '), 'system'); break;
+
+        // PROP
+        case '817': case '818': case '819':
+            if (p.length >= 3) {
+                const ch = getChannel(p[1]);
+                if (ch) ch.props[p[2]] = p[3] || '';
+                sysMsg(`PROP ${p[1]} ${p[2]} = ${p[3]||'(empty)'}`, 'system');
+            }
+            break;
+
+        // WATCH
+        case '600': case '604': sysMsg(`${p[1]} is online`, 'system'); break;
+        case '601': case '605': sysMsg(`${p[1]} is offline`, 'system'); break;
+        case '602': case '606': case '607': break;
+
+        // KNOCK
+        case '710': sysMsg(`${p[2]} is knocking on ${p[1]}`, 'system'); break;
+        case '711': sysMsg(`Knock sent to ${p[1]}`, 'system'); break;
+        case '712': case '713': case '714': sysMsg(p[p.length-1], 'error'); break;
+
+        // SILENCE
+        case '271': sysMsg(`Silence: ${p[2]}`, 'system'); break;
+        case '272': break;
+
+        // TIME
+        case '391': sysMsg(p[p.length-1], 'system'); break;
+
+        // VERSION
+        case '351': sysMsg(`${p[1]} ${p[2]}`, 'system'); break;
+
+        // INFO
+        case '371': sysMsg(p[p.length-1], 'system'); break;
+        case '374': break;
+
+        // Errors
+        case '401': sysMsg(`No such nick/channel: ${p[1]}`, 'error'); break;
+        case '403': sysMsg(`No such channel: ${p[1]}`, 'error'); break;
+        case '404': sysMsg(`Cannot send to ${p[1]}`, 'error'); break;
+        case '407': sysMsg('Too many recipients', 'error'); break;
+        case '421': sysMsg(`Unknown command: ${p[1]}`, 'error'); break;
+        case '432': sysMsg(`Invalid nickname: ${p[1]}`, 'error'); break;
+        case '433': sysMsg('Nickname in use', 'error'); $('loginError').textContent = 'Nick in use'; break;
+        case '441': sysMsg(`${p[1]} is not on ${p[2]}`, 'error'); break;
+        case '442': sysMsg(`You're not on ${p[1]}`, 'error'); break;
+        case '443': sysMsg(`${p[1]} is already on ${p[2]}`, 'error'); break;
+        case '451': sysMsg('Not registered', 'error'); break;
+        case '461': sysMsg(`${p[1]}: Not enough parameters`, 'error'); break;
+        case '462': sysMsg('Already registered', 'error'); break;
+        case '468': sysMsg('Invalid username', 'error'); break;
+        case '471': sysMsg(`${p[1]}: Channel is full`, 'error'); break;
+        case '473': sysMsg(`${p[1]}: Invite only`, 'error'); break;
+        case '474': sysMsg(`${p[1]}: You are banned`, 'error'); break;
+        case '475': sysMsg(`${p[1]}: Bad channel key`, 'error'); break;
+        case '481': sysMsg('Permission denied', 'error'); break;
+        case '482': sysMsg(`${p[1]}: You're not channel host`, 'error'); break;
+        case '696': sysMsg(`${p[1]}: Parameter required for ${p[2]}`, 'error'); break;
+
+        // JOIN
+        case 'JOIN':
+            if (p[0] && isChannel(p[0])) {
+                const ch = getChannel(p[0]);
+                ch.users.set(nick, { prefix: '', away: null });
+                if (nick?.toLowerCase() === currentNick?.toLowerCase()) {
+                    switchChannel(p[0]);
+                    addMsg(p[0], `You joined ${p[0]}`, 'event');
+                } else {
+                    addMsg(p[0], `${escapeHtml(nick)} joined`, 'event');
+                    if (p[0].toLowerCase() === currentChannel.toLowerCase()) renderUserList(ch);
+                }
+                renderChannelList();
+            }
+            break;
+
+        // PART
+        case 'PART':
+            if (p[0] && isChannel(p[0])) {
+                const ch = getChannel(p[0]);
+                if (ch) {
+                    ch.users.delete(nick);
+                    if (nick?.toLowerCase() === currentNick?.toLowerCase()) {
+                        delete channels[p[0].toLowerCase()];
+                        const rem = Object.keys(channels);
+                        if (rem.length) switchChannel(channels[rem[0]].name);
+                        else { currentChannel = ''; $('messages').innerHTML = ''; $('userList').innerHTML = ''; $('chatTitle').textContent = 'No channel'; $('chatTopic').textContent = ''; }
+                    } else {
+                        addMsg(p[0], `${escapeHtml(nick)} left${p[1]?' ('+escapeHtml(p[1])+')':''}`, 'event');
+                        if (p[0].toLowerCase() === currentChannel.toLowerCase()) renderUserList(ch);
+                    }
+                    renderChannelList();
+                }
+            }
+            break;
+
+        // QUIT
+        case 'QUIT':
+            Object.values(channels).forEach(ch => {
+                if (ch.users.has(nick)) {
+                    ch.users.delete(nick);
+                    addMsg(ch.name, `${escapeHtml(nick)} quit${p[0]?' ('+escapeHtml(p[0])+')':''}`, 'event');
+                }
+            });
+            if (currentChannel) renderUserList(getChannel(currentChannel));
+            break;
+
+        // KICK
+        case 'KICK':
+            if (p.length >= 2 && isChannel(p[0])) {
+                const ch = getChannel(p[0]);
+                if (ch) {
+                    ch.users.delete(p[1]);
+                    const reason = p[2] || '';
+                    addMsg(p[0], `${escapeHtml(p[1])} was kicked by ${escapeHtml(nick)}${reason?' ('+escapeHtml(reason)+')':''}`, 'event');
+                    if (p[1] === currentNick) {
+                        delete channels[p[0].toLowerCase()];
+                        sysMsg(`You were kicked from ${p[0]}`, 'error');
+                        renderChannelList();
+                    } else if (p[0].toLowerCase() === currentChannel.toLowerCase()) {
+                        renderUserList(ch);
+                    }
+                }
+            }
+            break;
+
+        // NICK
+        case 'NICK':
+            if (p[0]) {
+                Object.values(channels).forEach(ch => {
+                    if (ch.users.has(nick)) {
+                        const info = ch.users.get(nick);
+                        ch.users.delete(nick);
+                        ch.users.set(p[0], info);
+                        addMsg(ch.name, `${escapeHtml(nick)} is now ${escapeHtml(p[0])}`, 'event');
+                    }
+                });
+                if (nick?.toLowerCase() === currentNick?.toLowerCase()) { currentNick = p[0]; $('currentNick').textContent = p[0]; }
+                if (currentChannel) renderUserList(getChannel(currentChannel));
+            }
+            break;
+
+        // MODE
+        case 'MODE':
+            if (p.length >= 2) {
+                if (isChannel(p[0])) {
+                    const lower = p[0].toLowerCase();
+                    if (channels[lower]) {
+                        const ch = channels[lower];
+                        const modeStr = p[1] || '';
+                        const modeArgs = p.slice(2);
+
+                        // Apply mode changes directly
+                        applyModeChanges(ch, modeStr, modeArgs);
+
+                        // Batch mode messages to reduce spam
+                        addPendingMode(p[0], nick || 'Server', p.slice(1).join(' '));
+
+                        // Update displays
+                        if (lower === currentChannel.toLowerCase()) {
+                            updateChannelModeDisplay(ch);
+                            renderUserList(ch);
+                        }
+                    }
+                } else if (p[0] === currentNick) {
+                    // User mode change
+                    const modeStr = p[1] || '';
+                    let adding = true;
+                    for (const c of modeStr) {
+                        if (c === '+') adding = true;
+                        else if (c === '-') adding = false;
+                        else if (adding) myModes.add(c);
+                        else myModes.delete(c);
+                    }
+                    updateMyModes();
+                    sysMsg(`Mode ${modeStr} set`, 'event');
+                }
+            }
+            break;
+
+        // TOPIC
+        case 'TOPIC':
+            if (p.length >= 2 && isChannel(p[0])) {
+                const ch = getChannel(p[0]);
+                if (ch) {
+                    ch.topic = p[1];
+                    ch.topicBy = nick;
+                    ch.topicTime = Date.now()/1000;
+                    addMsg(p[0], `${escapeHtml(nick)} set topic: ${escapeHtml(p[1])}`, 'event');
+                    if (p[0].toLowerCase() === currentChannel.toLowerCase()) $('chatTopic').textContent = p[1];
+                }
+            }
+            break;
+
+        // PRIVMSG
+        case 'PRIVMSG':
+            if (p.length >= 2) {
+                let target = p[0], text = p[1];
+                const action = text.startsWith('\x01ACTION ') && text.endsWith('\x01');
+                if (!isChannel(target)) {
+                    // Private message - create PM channel
+                    target = nick;
+                    const ch = getChannel(target);
+                    ch.isPrivate = true;
+                    renderChannelList();
+                }
+                if (action) {
+                    addMsg(target, `<span class="nick ${nickColor(nick)}">${escapeHtml(nick)}</span> ${escapeHtml(text.slice(8,-1))}`, 'action');
+                } else {
+                    addMsg(target, `<span class="nick ${nickColor(nick)}">${escapeHtml(nick)}:</span> ${escapeHtml(text)}`);
+                }
+            }
+            break;
+
+        // NOTICE
+        case 'NOTICE':
+            if (p.length >= 2) {
+                const text = p[p.length-1];
+                const src = nick || prefix || 'Server';
+                const target = isChannel(p[0]) ? p[0] : currentChannel;
+                if (target) addMsg(target, `<span class="nick">[${escapeHtml(src)}]</span> ${escapeHtml(text)}`, 'notice');
+            }
+            break;
+
+        // WHISPER (IRCX)
+        case 'WHISPER':
+            if (p.length >= 3) {
+                // WHISPER #channel targetnick :message
+                const chan = p[0], targetNick = p[1], text = p[2];
+                if (isChannel(chan)) {
+                    addMsg(chan, `<span class="nick">${escapeHtml(nick)} whispers to ${escapeHtml(targetNick)}:</span> ${escapeHtml(text)}`, 'whisper');
+                }
+            }
+            break;
+
+        // INVITE
+        case 'INVITE':
+            if (p.length >= 2) {
+                sysMsg(`${nick} invites you to ${p[1]}`, 'system');
+            }
+            break;
+
+        default:
+            console.log('Unhandled:', command, p);
+    }
+}
+
+// WHOIS display
+let whoisData = null;
+function showWhoisStart(n, user, host, real) {
+    whoisData = { nick: n, user, host, real, fields: [] };
+}
+function appendWhois(label, value) {
+    if (whoisData) whoisData.fields.push({ label, value });
+}
+function endWhois() {
+    if (!whoisData) return;
+    let html = `<div class="info-section"><h4>User Info</h4>`;
+    html += `<div class="info-row"><span class="label">Nick:</span><span>${escapeHtml(whoisData.nick)}</span></div>`;
+    html += `<div class="info-row"><span class="label">User:</span><span>${escapeHtml(whoisData.user)}@${escapeHtml(whoisData.host)}</span></div>`;
+    html += `<div class="info-row"><span class="label">Name:</span><span>${escapeHtml(whoisData.real)}</span></div>`;
+    whoisData.fields.forEach(f => {
+        html += `<div class="info-row"><span class="label">${escapeHtml(f.label)}:</span><span>${escapeHtml(f.value)}</span></div>`;
+    });
+    html += '</div>';
+    $('infoPanelTitle').textContent = whoisData.nick;
+    $('infoPanelContent').innerHTML = html;
+    $('infoPanel').classList.add('open');
+    whoisData = null;
+}
+
+function showUserInfo(nick) {
+    if (ws) queueCmd(`WHOIS ${nick}`);
+}
+
+function showChannelProps() {
+    if (!currentChannel || !isChannel(currentChannel)) return;
+    if (ws) queueCmd(`PROP ${currentChannel} *`);
+}
+
+function sendMessage() {
+    const text = $('messageInput').value.trim();
+    if (!text || !ws || ws.readyState !== 1) return;
+
+    if (text.startsWith('/')) {
+        const parts = text.slice(1).split(' ');
+        const cmd = parts[0].toLowerCase();
+        const args = parts.slice(1);
+
+        switch (cmd) {
+            case 'join': case 'j':
+                if (args[0]) {
+                    const ch = args[0].startsWith('#') ? args[0] : '#' + args[0];
+                    ws.send(JSON.stringify({ type: 'join', channel: ch, key: args[1] }));
+                }
+                break;
+            case 'part': case 'leave':
+                ws.send(JSON.stringify({ type: 'part', channel: args[0] || currentChannel, reason: args.slice(1).join(' ') }));
+                break;
+            case 'msg': case 'pm': case 'query':
+                if (args.length >= 2) {
+                    ws.send(JSON.stringify({ type: 'message', target: args[0], text: args.slice(1).join(' ') }));
+                    const ch = getChannel(args[0]);
+                    if (ch || !isChannel(args[0])) {
+                        if (!isChannel(args[0])) { getChannel(args[0]).isPrivate = true; renderChannelList(); }
+                        addMsg(args[0], `<span class="nick ${nickColor(currentNick)}">${escapeHtml(currentNick)}:</span> ${escapeHtml(args.slice(1).join(' '))}`);
+                    }
+                }
+                break;
+            case 'nick':
+                if (args[0]) ws.send(JSON.stringify({ type: 'nick', nick: args[0] }));
+                break;
+            case 'me':
+                if (currentChannel && args.length) {
+                    const t = args.join(' ');
+                    ws.send(JSON.stringify({ type: 'message', target: currentChannel, text: '\x01ACTION ' + t + '\x01' }));
+                    addMsg(currentChannel, `<span class="nick ${nickColor(currentNick)}">${escapeHtml(currentNick)}</span> ${escapeHtml(t)}`, 'action');
+                }
+                break;
+            case 'topic':
+                if (currentChannel) queueCmd(`TOPIC ${currentChannel}${args.length?' :'+args.join(' '):''}`);
+                break;
+            case 'kick':
+                if (currentChannel && args[0]) queueCmd(`KICK ${currentChannel} ${args[0]}${args.length>1?' :'+args.slice(1).join(' '):''}`);
+                break;
+            case 'ban':
+                if (currentChannel && args[0]) queueCmd(`MODE ${currentChannel} +b ${args[0]}`);
+                break;
+            case 'unban':
+                if (currentChannel && args[0]) queueCmd(`MODE ${currentChannel} -b ${args[0]}`);
+                break;
+            case 'mode':
+                queueCmd(`MODE ${args.join(' ')}`);
+                break;
+            case 'host':
+                if (currentChannel && args[0]) queueCmd(`MODE ${currentChannel} +o ${args[0]}`);
+                break;
+            case 'dehost':
+                if (currentChannel && args[0]) queueCmd(`MODE ${currentChannel} -o ${args[0]}`);
+                break;
+            case 'voice':
+                if (currentChannel && args[0]) queueCmd(`MODE ${currentChannel} +v ${args[0]}`);
+                break;
+            case 'devoice':
+                if (currentChannel && args[0]) queueCmd(`MODE ${currentChannel} -v ${args[0]}`);
+                break;
+            case 'invite':
+                if (args[0]) queueCmd(`INVITE ${args[0]} ${args[1]||currentChannel}`);
+                break;
+            case 'knock':
+                if (args[0]) queueCmd(`KNOCK ${args[0]}`);
+                break;
+            case 'whois':
+                if (args[0]) queueCmd(`WHOIS ${args[0]}`);
+                break;
+            case 'who':
+                queueCmd(`WHO ${args[0]||currentChannel}`);
+                break;
+            case 'list':
+                queueCmd(`LIST${args[0]?' '+args[0]:''}`);
+                break;
+            case 'listx':
+                queueCmd(`LISTX${args[0]?' '+args[0]:''}`);
+                break;
+            case 'prop':
+                if (args.length >= 1) queueCmd(`PROP ${args.join(' ')}`);
+                else if (currentChannel) queueCmd(`PROP ${currentChannel} *`);
+                break;
+            case 'access':
+                queueCmd(`ACCESS ${args.join(' ')}`);
+                break;
+            case 'whisper':
+                if (currentChannel && args.length >= 2) {
+                    queueCmd(`WHISPER ${currentChannel} ${args[0]} :${args.slice(1).join(' ')}`);
+                    addMsg(currentChannel, `<span class="nick">You whisper to ${escapeHtml(args[0])}:</span> ${escapeHtml(args.slice(1).join(' '))}`, 'whisper');
+                }
+                break;
+            case 'away':
+                queueCmd(args.length ? `AWAY :${args.join(' ')}` : 'AWAY');
+                break;
+            case 'back':
+                queueCmd('AWAY');
+                break;
+            case 'quit':
+                ws.send(JSON.stringify({ type: 'quit', reason: args.join(' ') || 'Leaving' }));
+                ws.close();
+                break;
+            case 'clear':
+                if (currentChannel) { getChannel(currentChannel).messages = []; $('messages').innerHTML = ''; }
+                break;
+            case 'help':
+                sysMsg('Commands: /join /part /msg /nick /me /topic /kick /ban /mode /host /voice /invite /knock /whois /who /list /prop /access /whisper /away /quit /clear', 'system');
+                break;
+            default:
+                queueCmd(text.slice(1));
+        }
+    } else if (currentChannel) {
+        ws.send(JSON.stringify({ type: 'message', target: currentChannel, text }));
+        addMsg(currentChannel, `<span class="nick ${nickColor(currentNick)}">${escapeHtml(currentNick)}:</span> ${escapeHtml(text)}`);
+    }
+    $('messageInput').value = '';
+}
+
+// Event listeners
+$('connectBtn').onclick = connect;
+$('sendBtn').onclick = sendMessage;
+$('messageInput').onkeypress = e => { if (e.key === 'Enter') sendMessage(); };
+$('loginNick').onkeypress = e => { if (e.key === 'Enter') connect(); };
+$('joinBtn').onclick = () => { const c = prompt('Channel:', '#'); if (c && ws) ws.send(JSON.stringify({ type: 'join', channel: c.startsWith('#')?c:'#'+c })); };
+$('partBtn').onclick = () => { if (currentChannel && ws) ws.send(JSON.stringify({ type: 'part', channel: currentChannel })); };
+$('usersBtn').onclick = () => { if (currentChannel && ws) queueCmd(`WHO ${currentChannel}`); };
+$('propsBtn').onclick = showChannelProps;
+$('infoPanelClose').onclick = () => $('infoPanel').classList.remove('open');
+$('loginNick').focus();
+
+// Dark mode toggle
+function updateDarkIcon() {
+    $('darkIcon').innerHTML = document.body.classList.contains('dark') ? '&#9788;' : '&#9790;';
+}
+function toggleDarkMode() {
+    document.body.classList.toggle('dark');
+    localStorage.setItem('darkMode', document.body.classList.contains('dark') ? 'true' : 'false');
+    updateDarkIcon();
+}
+// Load saved preference
+if (localStorage.getItem('darkMode') === 'true') {
+    document.body.classList.add('dark');
+}
+updateDarkIcon();
+$('darkToggle').onclick = toggleDarkMode;
+</script>
+</body>
+</html>
