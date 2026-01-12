@@ -357,6 +357,7 @@ $admin_user = htmlspecialchars($_SESSION["admin_user"]);
                         <div class="config-tabs">
                             <button class="config-tab active" data-tab="server">Server</button>
                             <button class="config-tab" data-tab="limits">Limits</button>
+                            <button class="config-tab" data-tab="motd">MOTD</button>
                             <button class="config-tab" data-tab="security">Security</button>
                             <button class="config-tab" data-tab="services">Services</button>
                             <button class="config-tab" data-tab="ssl">SSL/TLS</button>
@@ -443,6 +444,27 @@ $admin_user = htmlspecialchars($_SESSION["admin_user"]);
                             <div class="form-group">
                                 <label>Maximum Channels Per User</label>
                                 <input type="number" class="form-control" id="cfg-limits-max-channels-user">
+                            </div>
+                        </div>
+
+                        <!-- MOTD Tab -->
+                        <div class="config-tab-content" id="config-tab-motd">
+                            <h4>Message of the Day (MOTD)</h4>
+                            <p>Edit the Message of the Day that users see when they connect to the server. Enter one line per message.</p>
+                            <div class="form-group">
+                                <label>MOTD Lines</label>
+                                <textarea class="form-control" id="motd-editor" rows="10" placeholder="Welcome to the IRCX Network
+Please be respectful of other users.
+Type /help for available commands."></textarea>
+                                <small>Each line will be displayed as a separate line in the MOTD. Users see this when they connect or use the /MOTD command.</small>
+                            </div>
+                            <div style="margin-top: 15px;">
+                                <button type="button" class="btn btn-primary" onclick="saveMotd()">
+                                    <i class="fas fa-save"></i> Save MOTD
+                                </button>
+                                <button type="button" class="btn btn-secondary" onclick="loadMotd()">
+                                    <i class="fas fa-sync"></i> Reload
+                                </button>
                             </div>
                         </div>
 

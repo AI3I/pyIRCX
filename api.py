@@ -71,6 +71,51 @@ def save_config(config):
     except Exception as e:
         return {"error": str(e)}
 
+def get_motd():
+    """Get MOTD (Message of the Day) from configuration"""
+    try:
+        config = load_config()
+        if 'server' in config and 'motd' in config['server']:
+            motd = config['server']['motd']
+            # Return as array of lines
+            if isinstance(motd, str):
+                return {"motd": [motd]}
+            return {"motd": motd}
+        # Return default MOTD if not configured
+        return {"motd": [
+            "Welcome to the IRCX Network",
+            "Please be respectful of other users.",
+            "Type /help for available commands."
+        ]}
+    except Exception as e:
+        return {"error": str(e)}
+
+def set_motd(motd_lines):
+    """Set MOTD (Message of the Day) in configuration"""
+    try:
+        config = load_config()
+        if 'server' not in config:
+            config['server'] = {}
+
+        # Parse motd_lines - can be JSON array or newline-separated string
+        if isinstance(motd_lines, str):
+            try:
+                # Try to parse as JSON first
+                parsed = json.loads(motd_lines)
+                if isinstance(parsed, list):
+                    motd_lines = parsed
+                else:
+                    # Split on newlines
+                    motd_lines = [line.strip() for line in motd_lines.split('\n') if line.strip()]
+            except json.JSONDecodeError:
+                # Not JSON, split on newlines
+                motd_lines = [line.strip() for line in motd_lines.split('\n') if line.strip()]
+
+        config['server']['motd'] = motd_lines
+        return save_config(config)
+    except Exception as e:
+        return {"error": str(e)}
+
 def get_db_path():
     """Get database path from config or use default"""
     config = load_config()
@@ -1925,6 +1970,15 @@ def main():
             result = {"error": "Usage: set-config <json>"}
         else:
             result = set_config(sys.argv[2])
+
+    # MOTD
+    elif command == "get-motd":
+        result = get_motd()
+    elif command == "set-motd":
+        if len(sys.argv) < 3:
+            result = {"error": "Usage: set-motd <motd_lines>"}
+        else:
+            result = set_motd(sys.argv[2])
 
     # Logs
     elif command == "logs":

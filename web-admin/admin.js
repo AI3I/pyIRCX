@@ -1969,5 +1969,64 @@ console.log("=== admin.js LOADING ===");
             });
         }
     }
+
+    // MOTD Editor Functions
+    window.loadMotd = async function() {
+        try {
+            const res = await callAPI('get-motd');
+            if (res.error) {
+                showToast('Error', res.error, 'error');
+                return;
+            }
+
+            const motdEditor = $('#motd-editor');
+            if (res.motd && Array.isArray(res.motd)) {
+                motdEditor.value = res.motd.join('\n');
+            } else {
+                motdEditor.value = '';
+            }
+            showToast('Success', 'MOTD loaded', 'success');
+        } catch (err) {
+            showToast('Error', 'Failed to load MOTD: ' + err.message, 'error');
+        }
+    };
+
+    window.saveMotd = async function() {
+        const motdEditor = $('#motd-editor');
+        const motdText = motdEditor.value.trim();
+
+        if (!motdText) {
+            if (!confirm('Set an empty MOTD? This will use the default MOTD.')) {
+                return;
+            }
+        }
+
+        try {
+            const res = await callAPI('set-motd', [motdText]);
+            if (res.error) {
+                showToast('Error', res.error, 'error');
+                return;
+            }
+
+            showToast('Success', 'MOTD saved successfully! Reload the service for changes to take effect.', 'success');
+        } catch (err) {
+            showToast('Error', 'Failed to save MOTD: ' + err.message, 'error');
+        }
+    };
+
+    // Load MOTD when config page is shown
+    const originalShowPage = window.showPage;
+    window.showPage = function(page) {
+        originalShowPage(page);
+        if (page === 'config') {
+            // Load MOTD if MOTD tab becomes active
+            const motdTab = document.querySelector('[data-tab="motd"]');
+            if (motdTab) {
+                motdTab.addEventListener('click', () => {
+                    setTimeout(() => loadMotd(), 100);
+                }, { once: true });
+            }
+        }
+    };
 })();
 console.log("=== admin.js LOADED ===");

@@ -28,7 +28,7 @@ $method = $_SERVER['REQUEST_METHOD'];
 $allowed_get_commands = ['stats', 'realtime-status', 'staff', 'channels', 'recent-registrations',
                           'config', 'full-config', 'full-config', 'logs', 'server-access-list', 'newsflash-list', 'mailbox-list',
                           'newsflash-settings', 'list-nicks-paginated', 'list-channels-paginated',
-                          'get-channel-access', 'search-nicks', 'search-channels', 'service-status'];
+                          'get-channel-access', 'search-nicks', 'search-channels', 'service-status', 'get-motd'];
 
 // Get command and arguments
 $command = $_REQUEST['cmd'] ?? '';
