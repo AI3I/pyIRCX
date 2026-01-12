@@ -259,13 +259,17 @@ if [ $NEEDS_API_PY -eq 1 ]; then
 fi
 
 # Update or preserve config
-if [ -f "$SCRIPT_DIR/pyircx_config.json" ]; then
-    if [ ! -f "$CONFIG_DIR/pyircx_config.json" ]; then
+if [ ! -f "$CONFIG_DIR/pyircx_config.json" ]; then
+    if [ -f "$SCRIPT_DIR/pyircx_config.json" ]; then
         cp "$SCRIPT_DIR/pyircx_config.json" "$CONFIG_DIR/"
-        echo -e "${GREEN}✓ Created config${NC}"
+        echo -e "${GREEN}✓ Created config from template${NC}"
     else
-        echo -e "${YELLOW}⚠ Preserving existing config${NC}"
+        echo -e "${YELLOW}Generating default config...${NC}"
+        python3 "$SCRIPT_DIR/generate_default_config.py" "$INSTALL_DIR/pyircx.py" "$CONFIG_DIR/pyircx_config.json"
+        echo -e "${GREEN}✓ Generated default config${NC}"
     fi
+else
+    echo -e "${YELLOW}⚠ Preserving existing config${NC}"
 fi
 
 # Ensure config symlink exists

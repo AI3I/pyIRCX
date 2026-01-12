@@ -197,8 +197,12 @@ console.log("=== admin.js LOADING ===");
                     html += `<td>${escapeHtml(u.username)}@${escapeHtml(u.hostname)}</td>`;
                     html += `<td>${timeAgo(u.connected_at)}</td><td>${escapeHtml(chans)}</td>`;
                     html += `<td>`;
-                    html += `<button class="btn btn-sm btn-warning" onclick="killUser('${escapeHtml(u.nickname)}')" title="Disconnect user">⚡ KILL</button> `;
-                    html += `<button class="btn btn-sm btn-danger" onclick="banUser('${escapeHtml(u.nickname)}')" title="Ban user">🚫 BAN</button>`;
+                    // Add REGISTER for unregistered users
+                    if (!u.registered) {
+                        html += `<button class="btn btn-sm btn-primary" onclick="registerUserFromAdmin('${escapeHtml(u.nickname)}')" title="Register this user">📝 Register</button> `;
+                    }
+                    html += `<button class="btn btn-sm btn-warning" onclick="killUser('${escapeHtml(u.nickname)}')" title="Disconnect user">⚡ Kill</button> `;
+                    html += `<button class="btn btn-sm btn-danger" onclick="banUser('${escapeHtml(u.nickname)}')" title="Ban user">🚫 Ban</button>`;
                     html += `</td></tr>`;
                 });
                 html += '</tbody></table>';
@@ -220,17 +224,33 @@ console.log("=== admin.js LOADING ===");
                 chans.forEach(c => {
                     const topic = c.topic || '(No topic)';
                     const modes = c.modes ? `+${c.modes}` : '';
-                    const channelType = c.registered ?
-                        '<span class="label label-success">Registered</span>' :
-                        '<span class="label label-default">Dynamic</span>';
+                    // Detect locked status
+                    const hasZMode = c.modes && c.modes.includes('z');
+                    let channelType;
+                    if (hasZMode) {
+                        channelType = '<span class="label label-danger">Locked</span>';
+                    } else if (c.registered) {
+                        channelType = '<span class="label label-success">Registered</span>';
+                    } else {
+                        channelType = '<span class="label label-default">Dynamic</span>';
+                    }
                     html += `<tr><td><strong>${escapeHtml(c.name)}</strong></td>`;
                     html += `<td>${channelType}</td>`;
                     html += `<td><code style="font-size: 11px;">${escapeHtml(modes)}</code></td>`;
                     html += `<td>${escapeHtml(topic)}</td><td>${c.member_count}</td>`;
                     html += `<td>`;
-                    html += `<button class="btn btn-sm btn-warning" onclick="killChannel('${escapeHtml(c.name)}')" title="Reset channel (kicks all users)">⚡ KILL</button> `;
+                    // Button order: REGISTER/EDIT, KILL, LOCK/UNLOCK
                     if (!c.registered) {
-                        html += `<button class="btn btn-sm btn-danger" onclick="lockChannel('${escapeHtml(c.name)}')" title="Seize control (register + auth-only)">🔒 LOCK</button>`;
+                        html += `<button class="btn btn-sm btn-primary" onclick="registerChannel('${escapeHtml(c.name)}')" title="Register this channel">📝 Register</button> `;
+                        html += `<button class="btn btn-sm btn-warning" onclick="killChannel('${escapeHtml(c.name)}')" title="Reset channel (kicks all users)">⚡ Kill</button>`;
+                    } else {
+                        html += `<button class="btn btn-sm btn-info" onclick="openEditChannelModal('${escapeHtml(c.name)}', '')" title="Edit channel settings">✏️ Edit</button> `;
+                        html += `<button class="btn btn-sm btn-warning" onclick="killChannel('${escapeHtml(c.name)}')" title="Reset channel (kicks all users)">⚡ Kill</button> `;
+                        if (hasZMode) {
+                            html += `<button class="btn btn-sm btn-success" onclick="unlockChannel('${escapeHtml(c.name)}')" title="Unlock channel (remove +z)">🔓 Unlock</button>`;
+                        } else {
+                            html += `<button class="btn btn-sm btn-danger" onclick="lockChannel('${escapeHtml(c.name)}')" title="Lock channel (set +z)">🔒 Lock</button>`;
+                        }
                     }
                     html += `</td></tr>`;
                 });
@@ -437,7 +457,7 @@ console.log("=== admin.js LOADING ===");
                 html += `<td>${escapeHtml(r.reason)}</td>`;
                 html += `<td>${escapeHtml(r.set_by)}</td>`;
                 html += `<td>${formatTimestamp(r.set_at)}</td>`;
-                html += `<td><button class="btn btn-danger btn-xs btn-remove-access" data-type="${r.type}" data-pattern="${escapeHtml(r.pattern)}">Remove</button></td>`;
+                html += `<td><button class="btn btn-sm btn-danger btn-remove-access" data-type="${r.type}" data-pattern="${escapeHtml(r.pattern)}">❌ Remove</button></td>`;
                 html += '</tr>';
             });
             html += '</tbody></table>';
@@ -481,7 +501,7 @@ console.log("=== admin.js LOADING ===");
                 html += `<td>${escapeHtml(n.message)}</td>`;
                 html += `<td>${escapeHtml(n.created_by)}</td>`;
                 html += `<td>${formatTimestamp(n.created_at)}</td>`;
-                html += `<td><button class="btn btn-danger btn-xs btn-delete-newsflash" data-id="${n.id}">Delete</button></td>`;
+                html += `<td><button class="btn btn-sm btn-danger btn-delete-newsflash" data-id="${n.id}">🗑️ Delete</button></td>`;
                 html += '</tr>';
             });
             html += '</tbody></table>';
@@ -728,8 +748,8 @@ console.log("=== admin.js LOADING ===");
                 html += `<td>${formatTimestamp(c.registered_at)}</td>`;
                 html += `<td>${timeAgo(c.last_used)}</td>`;
                 html += `<td>`;
-                html += `<button class="btn btn-info btn-xs" onclick="openEditChannelModal('${escapeHtml(c.name)}', '${escapeHtml(c.owner)}')">Edit</button> `;
-                html += `<button class="btn btn-danger btn-xs" onclick="unregisterChannel('${escapeHtml(c.name)}')">Delete</button>`;
+                html += `<button class="btn btn-sm btn-info" onclick="openEditChannelModal('${escapeHtml(c.name)}', '${escapeHtml(c.owner)}')">✏️ Edit</button> `;
+                html += `<button class="btn btn-sm btn-danger" onclick="unregisterChannel('${escapeHtml(c.name)}')">🗑️ Delete</button>`;
                 html += `</td></tr>`;
             });
             html += '</tbody></table>';
@@ -768,8 +788,8 @@ console.log("=== admin.js LOADING ===");
                 html += `<td>${r.mfa_enabled ? '<span class="label label-success">Yes</span>' : '<span class="label label-default">No</span>'}</td>`;
                 html += `<td>${escapeHtml(r.email)}</td>`;
                 html += `<td>`;
-                html += `<button class="btn btn-info btn-xs" onclick="openEditNickModal('${escapeHtml(r.nickname)}', '${escapeHtml(r.email)}')">Edit</button> `;
-                html += `<button class="btn btn-danger btn-xs" onclick="unregisterNick('${escapeHtml(r.nickname)}')">Delete</button>`;
+                html += `<button class="btn btn-sm btn-info" onclick="openEditNickModal('${escapeHtml(r.nickname)}', '${escapeHtml(r.email)}')">✏️ Edit</button> `;
+                html += `<button class="btn btn-sm btn-danger" onclick="unregisterNick('${escapeHtml(r.nickname)}')">🗑️ Delete</button>`;
                 html += `</td></tr>`;
             });
             html += '</tbody></table>';
@@ -932,12 +952,31 @@ console.log("=== admin.js LOADING ===");
     // ========================================================================
 
     function openEditStaffModal(username, currentLevel) {
-        $('#edit-staff-username').textContent = username;
-        $('#edit-staff-level').value = currentLevel;
-        $('#modal-edit-staff').style.display = 'block';
+        // Fetch staff details to pre-populate form
+        callAPI('get-staff-details', [username]).then(data => {
+            if (data.error) {
+                showToast('Error', data.error, 'error');
+                return;
+            }
 
-        // Store username for later use
-        $('#modal-edit-staff').setAttribute('data-username', username);
+            const staff = data.staff;
+            $('#edit-staff-username').textContent = username;
+            $('#edit-staff-level').value = staff.level || currentLevel;
+
+            const realnameField = $('#edit-staff-realname');
+            const emailField = $('#edit-staff-email');
+            const forceRealnameField = $('#edit-staff-force-realname');
+
+            if (realnameField) realnameField.value = staff.realname || '';
+            if (emailField) emailField.value = staff.email || '';
+            if (forceRealnameField) forceRealnameField.checked = staff.force_realname || false;
+
+            $('#modal-edit-staff').style.display = 'block';
+            $('#modal-edit-staff').setAttribute('data-username', username);
+        }).catch(err => {
+            showToast('Error', 'Failed to load staff details', 'error');
+            console.error(err);
+        });
     }
 
     function addStaff() {
@@ -1211,32 +1250,64 @@ console.log("=== admin.js LOADING ===");
     }
 
     function openEditChannelModal(channelName, owner) {
-        $('#edit-channel-name').textContent = channelName;
-        $('#edit-channel-owner').value = '';
-        $('#edit-channel-description').value = '';
-        $('#edit-channel-topic').value = '';
-        $('#edit-channel-onjoin').value = '';
-        $('#edit-channel-onpart').value = '';
-        $('#edit-channel-memberkey').value = '';
-        $('#edit-channel-hostkey').value = '';
-        $('#edit-channel-ownerkey').value = '';
-        $('#edit-channel-userlimit').value = '';
+        // Fetch channel details to pre-populate form
+        callAPI('get-channel-details', [channelName]).then(data => {
+            if (data.error) {
+                showToast('Error', data.error, 'error');
+                return;
+            }
 
-        // Clear all mode checkboxes
-        ['n', 't', 'i', 'm', 'p', 's', 'a', 'd', 'f', 'h', 'j', 'u', 'w', 'x', 'y'].forEach(mode => {
-            const checkbox = $(`#mode-${mode}`);
-            if (checkbox) checkbox.checked = false;
+            const channel = data.channel;
+            $('#edit-channel-name').textContent = channelName;
+
+            // Handle owners array - API returns array, form expects string
+            const ownerValue = channel.owners && channel.owners.length > 0
+                ? channel.owners.join(', ')
+                : (owner || '');
+            $('#edit-channel-owner').value = ownerValue;
+
+            // Note: description field doesn't exist in API, skip it
+            const descField = $('#edit-channel-description');
+            if (descField) descField.value = '';
+
+            $('#edit-channel-topic').value = channel.topic || '';
+            $('#edit-channel-onjoin').value = channel.onjoin || '';
+            $('#edit-channel-onpart').value = channel.onpart || '';
+            $('#edit-channel-memberkey').value = channel.memberkey || '';
+            $('#edit-channel-hostkey').value = channel.hostkey || '';
+            $('#edit-channel-ownerkey').value = channel.ownerkey || '';
+            $('#edit-channel-userlimit').value = channel.user_limit || '';
+
+            // Clear all mode checkboxes first
+            ['n', 't', 'i', 'm', 'p', 's', 'a', 'd', 'f', 'h', 'j', 'u', 'w', 'x', 'y'].forEach(mode => {
+                const checkbox = $(`#mode-${mode}`);
+                if (checkbox) checkbox.checked = false;
+            });
+            $('#mode-clear').checked = false;
+
+            // Set mode checkboxes based on channel modes
+            // API returns modes as object: {"n": true, "r": true}
+            if (channel.modes && typeof channel.modes === 'object') {
+                Object.keys(channel.modes).forEach(mode => {
+                    if (channel.modes[mode]) {
+                        const checkbox = $(`#mode-${mode}`);
+                        if (checkbox) checkbox.checked = true;
+                    }
+                });
+            }
+
+            // Load ACCESS lists for this channel
+            loadAccessLists(channelName);
+
+            // Show first ACCESS tab by default
+            showAccessTab('owner');
+
+            $('#modal-edit-channel').style.display = 'block';
+            $('#modal-edit-channel').setAttribute('data-channel', channelName);
+        }).catch(err => {
+            showToast('Error', 'Failed to load channel details', 'error');
+            console.error(err);
         });
-        $('#mode-clear').checked = false;
-
-        // Load ACCESS lists for this channel
-        loadAccessLists(channelName);
-
-        // Show first ACCESS tab by default
-        showAccessTab('owner');
-
-        $('#modal-edit-channel').style.display = 'block';
-        $('#modal-edit-channel').setAttribute('data-channel', channelName);
     }
 
     function editChannel() {
@@ -1845,7 +1916,7 @@ console.log("=== admin.js LOADING ===");
             const mask = entry[0] || entry;  // Support both array format and simple string
             html += `<div style="padding: 5px; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center;">
                 <code>${escapeHtml(mask)}</code>
-                <button type="button" class="btn btn-sm btn-danger" onclick="removeAccessEntry('${level}', ${index})" style="padding: 2px 8px;">Remove</button>
+                <button type="button" class="btn btn-sm btn-danger" onclick="removeAccessEntry('${level}', ${index})" style="padding: 2px 8px;">❌ Remove</button>
             </div>`;
         });
         html += '</div>';
@@ -2186,6 +2257,48 @@ console.log("=== admin.js LOADING ===");
                 }, { once: true });
             }
         }
+    };
+
+    // Additional channel management functions
+    window.unlockChannel = function(channelName) {
+        if (!confirm(`Are you sure you want to UNLOCK ${channelName}?\n\nThis will remove +z mode, allowing all users to join.`)) {
+            return;
+        }
+        callAPI('set-channel-mode', [channelName, '-z']).then(res => {
+            if (res.error) {
+                showToast('Error', res.error, 'error');
+            } else {
+                showToast('Success', `Channel ${channelName} unlocked`, 'success');
+                setTimeout(() => loadRealtimeStatus(), 1000);
+            }
+        });
+    };
+
+    window.registerChannel = function(channelName) {
+        const owner = prompt(`Register channel ${channelName}\n\nEnter owner (staff username or registered nickname):`, 'System');
+        if (owner === null) return;
+        callAPI('register-channel', [channelName, owner || 'System']).then(res => {
+            if (res.error) {
+                showToast('Error', res.error, 'error');
+            } else {
+                showToast('Success', res.message || `Channel ${channelName} registered`, 'success');
+                setTimeout(() => loadRealtimeStatus(), 1000);
+            }
+        });
+    };
+
+    window.registerUserFromAdmin = function(nickname) {
+        const password = prompt(`Register user ${nickname}\n\nEnter password for this user:`, '');
+        if (password === null || password === '') return;
+        const email = prompt(`Register user ${nickname}\n\nEnter email (optional):`, '');
+        callAPI('register-nick', [nickname, password, email || '']).then(res => {
+            if (res.error) {
+                showToast('Error', res.error, 'error');
+            } else {
+                showToast('Success', res.message || `User ${nickname} registered`, 'success');
+                setTimeout(() => loadRealtimeStatus(), 1000);
+            }
+        });
     };
 })();
 console.log("=== admin.js LOADED ===");

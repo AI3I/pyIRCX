@@ -340,6 +340,44 @@ def send_irc_lock_channel(channel_name, owner="System"):
     except Exception as e:
         return {"error": f"Failed to write admin command: {str(e)}"}
 
+def set_channel_mode(channel_name, mode_string):
+    """Set channel mode via admin command queue
+    
+    Args:
+        channel_name: Channel name (e.g., #channel)
+        mode_string: Mode string (e.g., "+z" or "-z")
+    
+    Returns:
+        dict with success/error status
+    """
+    try:
+        cmd_file = '/opt/pyircx/admin_commands.queue'
+        with open(cmd_file, 'a') as f:
+            f.write(f"SET_CHANNEL_MODE:{channel_name}:{mode_string}\n")
+        return {"success": True, "message": f"Mode {mode_string} will be set on {channel_name}"}
+    except Exception as e:
+        return {"error": f"Failed to write admin command: {str(e)}"}
+    except Exception as e:
+        return {"error": f"Failed to write admin command: {str(e)}"}
+
+def set_channel_topic(channel_name, topic):
+    """Set channel topic via admin command queue
+    
+    Args:
+        channel_name: Channel name (e.g., #channel)
+        topic: New topic (empty string to clear)
+    
+    Returns:
+        dict with success/error status
+    """
+    try:
+        cmd_file = '/opt/pyircx/admin_commands.queue'
+        with open(cmd_file, 'a') as f:
+            f.write(f"SET_CHANNEL_TOPIC:{channel_name}:{topic}\n")
+        return {"success": True, "message": f"Topic will be set on {channel_name}"}
+    except Exception as e:
+        return {"error": f"Failed to write admin command: {str(e)}"}
+
 def apply_channel_modes_live(channel_name, modes):
     """Apply channel modes by killing channel to force reload from database
 
@@ -762,7 +800,7 @@ def search_registered_nicks(query):
         return {"error": str(e)}
 
 def search_channels(query):
-    """Search registered channels"""
+    """Search registered channels from both reg_chans and registered_channels tables"""
     db_path = get_db_path()
 
     if not os.path.exists(db_path):
@@ -773,22 +811,29 @@ def search_channels(query):
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
+        # Search both tables using UNION
         cursor.execute("""
-            SELECT rc.name, rc.registered_at, rc.registered_at, json_extract(rc.data, '$.owners[0]') as owner
-            FROM reg_chans rc
-            
-            WHERE rc.name LIKE ?
-            ORDER BY rc.name
+            SELECT name as channel_name, registered_at, 0 as last_used,
+                   json_extract(data, '$.owners[0]') as owner
+            FROM reg_chans
+            WHERE name LIKE ?
+            UNION
+            SELECT channel_name, registered_at, last_used,
+                   (SELECT nickname FROM registered_nicks WHERE uuid = registered_channels.owner_uuid) as owner
+            FROM registered_channels
+            WHERE channel_name LIKE ?
+            ORDER BY channel_name
             LIMIT 50
-        """, (f"%{query}%",))
+        """, (f"%{query}%", f"%{query}%"))
 
         results = []
         for row in cursor.fetchall():
+            # Use indices instead of keys to avoid issues with UNION
             results.append({
-                'name': row['channel_name'],
-                'owner': row['owner'] if row['owner'] else 'Unknown',
-                'registered_at': row['registered_at'],
-                'last_used': row['last_used']
+                'name': row[0],  # channel_name
+                'registered_at': row[1],  # registered_at
+                'last_used': row[2],  # last_used
+                'owner': row[3] if row[3] else 'Unknown'  # owner
             })
 
         conn.close()
@@ -796,6 +841,7 @@ def search_channels(query):
 
     except Exception as e:
         return {"error": str(e)}
+
 
 # ============================================================================
 # EXISTING FUNCTIONS (keeping for compatibility)
@@ -1302,119 +1348,65 @@ RESERVED_SERVICES = {
 
 def register_channel(channel_name, owner_nickname, topic=None, modes=None, onjoin=None, onpart=None,
                      memberkey=None, hostkey=None, ownerkey=None, description=None):
-    """Register a new channel with optional properties"""
+    """Register a new channel (simplified to match actual database schema)"""
     db_path = get_db_path()
 
     if not os.path.exists(db_path):
         return {"error": f"Database not found at {db_path}"}
 
     # Validate channel name
-    if not re.match(r'^#[a-zA-Z0-9_\-]+$', channel_name):
-        return {"error": "Invalid channel name. Must start with # and contain only letters, numbers, _, -"}
+    if not re.match(r'^[#&][a-zA-Z0-9_\-]+$', channel_name):
+        return {"error": "Invalid channel name. Must start with # or & and contain only letters, numbers, _, -"}
 
     try:
-        import uuid
+        import uuid as uuid_mod
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
 
         # Check if channel already exists
-        cursor.execute("SELECT name FROM reg_chans WHERE LOWER(name) = LOWER(?)", (channel_name,))
+        cursor.execute("SELECT channel_name FROM registered_channels WHERE LOWER(channel_name) = LOWER(?)", (channel_name,))
         if cursor.fetchone():
             conn.close()
             return {"error": f"Channel '{channel_name}' is already registered"}
 
-        # Get owner's UUID - check registered_nicks first, then staff users table, then special "System" owner
-        # Use case-insensitive matching
-        cursor.execute("SELECT uuid, nickname FROM registered_nicks WHERE LOWER(nickname) = LOWER(?)", (owner_nickname,))
+        # Get owner's UUID from registered_nicks
+        cursor.execute("SELECT uuid FROM registered_nicks WHERE LOWER(nickname) = LOWER(?)", (owner_nickname,))
         owner_row = cursor.fetchone()
 
         if not owner_row:
             # Check if this is a reserved service name
-            if owner_nickname.lower() in RESERVED_SERVICES:
-                # Capitalize service names properly
+            if owner_nickname.lower() in ['system', 'registrar', 'messenger', 'newsflash', 'services']:
                 service_name_mapping = {
-                    'operserv': 'OperServ', 'helpserv': 'HelpServ', 'infoserv': 'InfoServ',
-                    'nickserv': 'NickServ', 'chanserv': 'ChanServ', 'memoserv': 'MemoServ',
-                    'botserv': 'BotServ', 'hostserv': 'HostServ', 'statserv': 'StatServ',
-                    'global': 'Global', 'alis': 'ALIS', 'services': 'Services',
                     'system': 'System', 'registrar': 'Registrar', 'messenger': 'Messenger',
-                    'newsflash': 'NewsFlash'
+                    'newsflash': 'NewsFlash', 'services': 'Services'
                 }
                 proper_name = service_name_mapping.get(owner_nickname.lower(), owner_nickname.title())
 
-                # Check if service already has a registered_nicks entry
-                cursor.execute("SELECT uuid FROM registered_nicks WHERE LOWER(nickname) = ?", (owner_nickname.lower(),))
-                service_row = cursor.fetchone()
+                # Auto-create registered_nicks entry for service
+                service_uuid = str(uuid_mod.uuid4())
+                now_temp = int(time.time())
 
-                if service_row:
-                    owner_uuid = service_row[0]
-                else:
-                    # Auto-create registered_nicks entry for service
-                    service_uuid = str(uuid.uuid4())
-                    now_temp = int(time.time())
+                cursor.execute("""
+                    INSERT INTO registered_nicks (uuid, nickname, password_hash, registered_at, last_seen, registered_by)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (service_uuid, proper_name, "", now_temp, now_temp, "AUTO (service account)"))
 
-                    cursor.execute("""
-                        INSERT INTO registered_nicks (uuid, nickname, password_hash, registered_at, last_seen, registered_by)
-                        VALUES (?, ?, ?, ?, ?, ?)
-                    """, (service_uuid, proper_name, "", now_temp, now_temp, f"AUTO (service account)"))
-
-                    owner_uuid = service_uuid
-
+                owner_uuid = service_uuid
             else:
-                # Check if this is a staff account (case-insensitive)
-                cursor.execute("SELECT username, level FROM users WHERE LOWER(username) = LOWER(?)", (owner_nickname,))
-                staff_row = cursor.fetchone()
-
-                if staff_row:
-                    # Get the actual username from the database (with correct case)
-                    actual_username = staff_row[0]
-                    staff_level = staff_row[1]
-
-                    # Check if already has a registered_nicks entry (shouldn't happen but be safe)
-                    cursor.execute("SELECT uuid FROM registered_nicks WHERE LOWER(nickname) = LOWER(?)", (actual_username,))
-                    existing = cursor.fetchone()
-
-                    if existing:
-                        owner_uuid = existing[0]
-                    else:
-                        # Auto-create registered_nicks entry for staff account
-                        staff_uuid = str(uuid.uuid4())
-                        now_temp = int(time.time())
-
-                        cursor.execute("""
-                            INSERT INTO registered_nicks (uuid, nickname, password_hash, registered_at, last_seen, registered_by)
-                            VALUES (?, ?, ?, ?, ?, ?)
-                        """, (staff_uuid, actual_username, "", now_temp, now_temp, f"Cockpit Admin (staff account - {staff_level})"))
-
-                        owner_uuid = staff_uuid
-                else:
-                    conn.close()
-                    return {"error": f"Owner '{owner_nickname}' not found. Valid options: registered nickname, staff username (ADMIN/SYSOP/GUIDE), or service name (System, Registrar, Messenger, NickServ, ChanServ, etc.)."}
+                conn.close()
+                return {"error": f"Owner '{owner_nickname}' not found. Valid options: registered nickname, staff username (ADMIN/SYSOP/GUIDE), or service name (System, Registrar, Messenger, NickServ, ChanServ, etc.)"}
         else:
             owner_uuid = owner_row[0]
 
-        # Generate UUID for channel
-        chan_uuid = str(uuid.uuid4())
+        # Insert new channel using correct schema
+        chan_uuid = str(uuid_mod.uuid4())
         now = int(time.time())
-
-        # Sanitize inputs (convert empty strings to None)
-        topic = topic if topic and topic.strip() else None
-        modes = modes if modes and modes.strip() else None
-        onjoin = onjoin if onjoin and onjoin.strip() else None
-        onpart = onpart if onpart and onpart.strip() else None
-        memberkey = memberkey if memberkey and memberkey.strip() else None
-        hostkey = hostkey if hostkey and hostkey.strip() else None
-        ownerkey = ownerkey if ownerkey and ownerkey.strip() else None
-        description = description if description and description.strip() else None
-
-        # Insert new channel with all properties
+        
         cursor.execute("""
             INSERT INTO registered_channels
-            (uuid, channel_name, owner_uuid, registered_at, last_used, description, topic, modes,
-             onjoin, onpart, memberkey, hostkey, ownerkey)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (chan_uuid, channel_name, owner_uuid, now, now, description, topic, modes,
-              onjoin, onpart, memberkey, hostkey, ownerkey))
+            (uuid, channel_name, owner_uuid, registered_at, last_used, description)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (chan_uuid, channel_name, owner_uuid, now, now, description or ""))
 
         conn.commit()
         conn.close()
@@ -1423,6 +1415,7 @@ def register_channel(channel_name, owner_nickname, topic=None, modes=None, onjoi
 
     except Exception as e:
         return {"error": str(e)}
+
 
 def unregister_nickname(nickname):
     """Unregister a nickname"""
@@ -2301,6 +2294,7 @@ def main():
         if len(sys.argv) < 3:
             result = {"error": "Usage: kill-channel <channel>"}
         else:
+
             channel = sys.argv[2]
             result = send_irc_kill_channel(channel)
     elif command == "lock-channel":
@@ -2310,6 +2304,23 @@ def main():
             channel = sys.argv[2]
             owner = sys.argv[3] if len(sys.argv) > 3 else "System"
             result = send_irc_lock_channel(channel, owner)
+
+    elif command == "set-channel-mode":
+        if len(sys.argv) < 4:
+            result = {"error": "Usage: set-channel-mode <channel> <mode_string>"}
+        else:
+            channel = sys.argv[2]
+            mode_string = sys.argv[3]
+            result = set_channel_mode(channel, mode_string)
+
+    elif command == "set-channel-topic":
+        if len(sys.argv) < 3:
+            result = {"error": "Usage: set-channel-topic <channel> [topic]"}
+        else:
+            channel = sys.argv[2]
+            topic = sys.argv[3] if len(sys.argv) > 3 else ""
+            result = set_channel_topic(channel, topic)
+
 
     else:
         result = {"error": f"Unknown command: {command}"}

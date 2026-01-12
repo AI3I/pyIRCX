@@ -22,9 +22,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
 # Version info - updated with each release
-__version__ = "1.1.0"
+__version__ = "1.1.1"
 __version_label__ = "pyIRCX"
-__created__ = "Sun Jan 11 09:21:32 PM EST 2026"
+__created__ = "Mon Jan 12 05:59:36 PM EST 2026"
 
 import asyncio
 import aiosqlite
@@ -126,11 +126,6 @@ class ServerConfig:
         "system": {
             "nick": "System",
             "ident": "System",
-            "staff_term": "staff and services"
-        },
-        "modes": {
-            "user": "agiosrxz",  # Alphabetized: admin, guide, invisible, oper, service, registered, ircx, gagged
-            "channel": "adfhijkmnprstuwxy"  # Alphabetized: admin, cloneable, filter, hidden, invite, no-invitations, key, moderated, no-external, private, registered, secret, topic-lock, user-limit, no-whisper, auditorium, transcript
         },
         "limits": {
             "max_users": 1000,
@@ -247,13 +242,15 @@ class ServerConfig:
         if Path(self.config_file).exists():
             try:
                 with open(self.config_file, 'r') as f:
-                    loaded = json.load(f)
-                    self._merge(self.data, loaded)
+                    self.data = json.load(f)
                 logger.info(f"Loaded config from {self.config_file}")
             except Exception as e:
                 logger.error(f"Config error: {e}")
         else:
+            # Create complete default config file
+            self.data = self._deep_copy(self.DEFAULT)
             self.save()
+            logger.info(f"Created default config at {self.config_file}")
 
     def save(self):
         try:
@@ -263,12 +260,6 @@ class ServerConfig:
         except Exception as e:
             logger.error(f"Save error: {e}")
 
-    def _merge(self, base, override):
-        for key, value in override.items():
-            if key in base and isinstance(base[key], dict) and isinstance(value, dict):
-                self._merge(base[key], value)
-            else:
-                base[key] = value
 
     def get(self, *path, default=None):
         value = self.data
@@ -1542,7 +1533,7 @@ class Channel:
         self.hosts = set()
         self.voices = set()
         self.modes = {m: False for m in CONFIG.get(
-            'modes', 'channel', default='adfimnprstuwxz')}
+            'modes', 'channel', default='adefhijkmnprstuwxyz')}
         # Apply default channel modes from config
         default_modes = CONFIG.get('modes', 'channel_defaults', default='nt')
         for mode in default_modes:
@@ -2065,9 +2056,9 @@ class pyIRCXServer:
             'DENY': []    # timeout=0 means permanent, else Unix timestamp when entry expires
         }
 
-        # K-line (server-level bans): {ip_address: (expires_at, reason, set_by)}
+        # Server-level IP bans: {ip_address: (expires_at, reason, set_by)}
         # expires_at is Unix timestamp when ban expires, 0 for permanent
-        self.klines = {}
+        self.server_bans = {}
 
         # WATCH: maps nickname (lowercase) -> set of User objects watching that nick
         self.watchers = {}
@@ -2645,12 +2636,24 @@ class pyIRCXServer:
         """Load a registered channel from database if it exists"""
         try:
             async with aiosqlite.connect(CONFIG.get('database', 'path')) as db:
+                # First try reg_chans (JSON serialized channels)
                 async with db.execute("SELECT data FROM reg_chans WHERE LOWER(name) = LOWER(?)", (channel_name,)) as cursor:
                     row = await cursor.fetchone()
                     if row:
                         data = json.loads(row[0])
                         channel = Channel.from_dict(data)
                         logger.info(f"Loaded registered channel: {channel.name}")
+                        return channel
+                
+                # If not found, check registered_channels table (web admin registrations)
+                async with db.execute("SELECT uuid, owner_uuid FROM registered_channels WHERE LOWER(channel_name) = LOWER(?)", (channel_name,)) as cursor:
+                    row = await cursor.fetchone()
+                    if row:
+                        # Create a new channel object and mark it as registered
+                        channel = Channel(channel_name)
+                        channel.registered = True
+                        channel.account_uuid = row[0]
+                        logger.info(f"Loaded registered channel from registered_channels table: {channel.name}")
                         return channel
         except Exception as e:
             logger.error(f"Error loading registered channel {channel_name}: {e}")
@@ -2722,8 +2725,8 @@ class pyIRCXServer:
             "version": __version__,
             "version_label": __version_label__,
             "created_date": __created__,
-            "usermodes": CONFIG.get('modes', 'user', default='agiorxz'),
-            "chanmodes": CONFIG.get('modes', 'channel', default='adfikmnprstuwxy'),
+            "usermodes": CONFIG.get('modes', 'user', default='agiorsxz'),
+            "chanmodes": CONFIG.get('modes', 'channel', default='adefhijkmnprstuwxyz'),
             "uptime": int(time.time() - self.boot_time),
             "loc1": CONFIG.get('admin', 'loc1', default=''),
             "loc2": CONFIG.get('admin', 'loc2', default=''),
@@ -2817,16 +2820,16 @@ class pyIRCXServer:
     async def handle_client(self, reader, writer):
         user = User(reader, writer)
 
-        # Check K-line (server-level ban)
-        if user.ip in self.klines:
-            expires_at, reason, set_by = self.klines[user.ip]
+        # Check server-level IP ban
+        if user.ip in self.server_bans:
+            expires_at, reason, set_by = self.server_bans[user.ip]
             # Check if ban has expired
             if expires_at > 0 and time.time() > expires_at:
                 # Ban expired, remove it
-                del self.klines[user.ip]
+                del self.server_bans[user.ip]
             else:
                 # Ban is still active, refuse connection
-                logger.warning(f"K-lined connection refused: {user.ip} - {reason}")
+                logger.warning(f"Banned connection refused: {user.ip} - {reason}")
                 try:
                     writer.write(f"ERROR :You are banned from this server: {reason}\r\n".encode('utf-8'))
                     await writer.drain()
@@ -7861,6 +7864,30 @@ class pyIRCXServer:
             elif char == 'r':
                 # Registered mode (+r) can only be set by REGISTER command, not manually
                 user.send(f":{self.servername} 696 {user.nickname} {channel.name} r :Cannot manually set or unset +r mode. Use REGISTER/UNREGISTER commands.")
+            elif char == 'z':
+                # Locked mode (+z) - high staff only, auto-sets +a and +r
+                if not user.is_high_staff():
+                    user.send(f":{self.servername} 696 {user.nickname} {channel.name} z :Only SYSOPs and ADMINs can set +z (locked) mode.")
+                    continue
+                if adding:
+                    # Setting +z: lock the channel
+                    if not channel.registered:
+                        user.send(f":{self.servername} 696 {user.nickname} {channel.name} z :Channel must be registered before it can be locked. Use REGISTER first.")
+                        continue
+                    # Set +z, +a (auth-only), and +r (registered) automatically
+                    channel.modes['z'] = True
+                    channel.modes['a'] = True
+                    channel.modes['r'] = True
+                    msg = f":{user.prefix()} MODE {channel.name} +zar"
+                    channel.broadcast(msg)
+                    logger.info(f"Channel {channel.name} locked (+z) by {user.nickname}")
+                else:
+                    # Removing -z: unlock the channel (keep +r, optionally remove +a)
+                    channel.modes['z'] = False
+                    channel.modes['a'] = False
+                    msg = f":{user.prefix()} MODE {channel.name} -za"
+                    channel.broadcast(msg)
+                    logger.info(f"Channel {channel.name} unlocked (-z) by {user.nickname}")
             elif char in channel.modes:
                 channel.modes[char] = adding
                 sign = '+' if adding else '-'
@@ -8266,13 +8293,17 @@ class ServerManager:
                         if chan_name != '#System':
                             # Count only real users
                             real_members = [n for n, u in channel.members.items() if not u.is_virtual]
+# Get mode string with +r for registered channels
+                            mode_str = ''.join(k for k, v in channel.modes.items() if v)
+                            if channel.registered and 'r' not in mode_str:
+                                mode_str += 'r'
                             channel_data = {
                                 'name': chan_name,
                                 'topic': channel.topic,
                                 'member_count': len(real_members),
                                 'members': real_members[:50],  # Limit to first 50 for brevity
                                 'registered': channel.registered,
-                                'modes': ''.join(k for k, v in channel.modes.items() if v),
+                                'modes': mode_str,
                                 'is_local': channel.is_local
                             }
                             status_data['active_channels'].append(channel_data)
@@ -8435,9 +8466,9 @@ class ServerManager:
                             user = self.server.users.get(nickname)
                             if user and not user.is_virtual:
                                 ip = user.ip
-                                # Add K-line (ban)
+                                # Add server-level IP ban
                                 expires_at = time.time() + duration if duration > 0 else 0
-                                self.server.klines[ip] = (expires_at, reason, "WebAdmin")
+                                self.server.server_bans[ip] = (expires_at, reason, "WebAdmin")
 
                                 # Send KILL message to user
                                 user.send(f":{CONFIG.get('system', 'nick', default='System')} KILL {nickname} :Banned: {reason}")
@@ -8499,6 +8530,42 @@ class ServerManager:
                             except Exception as e:
                                 logger.error(f"Error locking channel {channel_name}: {e}")
 
+                    elif cmd == 'SET_CHANNEL_MODE':
+                        # Format: SET_CHANNEL_MODE:channel:mode_string
+                        parts = arg.split(':', 1)
+                        if len(parts) >= 2:
+                            channel_name = parts[0].strip()
+                            mode_string = parts[1].strip()
+
+                            # Get the System user to send the MODE command
+                            system_nick = CONFIG.get('system', 'nick', default='System')
+                            system_user = self.server.users.get(system_nick)
+
+                            if system_user:
+                                # Apply the mode using the MODE handler
+                                await self.server.handle_mode(system_user, [channel_name, mode_string])
+                                logger.info(f"Admin command: Set mode {mode_string} on {channel_name}")
+                            else:
+                                logger.error(f"Admin command: System user not found for SET_CHANNEL_MODE")
+
+
+                    elif cmd == 'SET_CHANNEL_TOPIC':
+                        # Format: SET_CHANNEL_TOPIC:channel:topic
+                        parts = arg.split(':', 1)
+                        if len(parts) >= 2:
+                            channel_name = parts[0].strip()
+                            topic = parts[1] if len(parts) > 1 else ''
+
+                            # Get the System user to send the TOPIC command
+                            system_nick = CONFIG.get('system', 'nick', default='System')
+                            system_user = self.server.users.get(system_nick)
+
+                            if system_user:
+                                # Apply the topic using the TOPIC handler
+                                await self.server.handle_topic(system_user, [channel_name, topic])
+                                logger.info(f"Admin command: Set topic on {channel_name}")
+                            else:
+                                logger.error(f"Admin command: System user not found for SET_CHANNEL_TOPIC")
         except Exception as e:
             logger.error(f"Error processing admin commands: {e}")
 

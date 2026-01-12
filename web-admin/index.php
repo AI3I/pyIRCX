@@ -139,7 +139,7 @@ $admin_user = htmlspecialchars($_SESSION["admin_user"]);
                     <div class="card-body">
                         <div class="search-box">
                             <input type="text" id="search-nicks-input" class="form-control" placeholder="Enter nickname...">
-                            <button class="btn btn-primary" id="btn-search-nicks">Search</button>
+                            <button class="btn btn-primary btn-sm" id="btn-search-nicks">🔍 Search</button>
                         </div>
                         <div id="search-nicks-results"></div>
                     </div>
@@ -159,7 +159,7 @@ $admin_user = htmlspecialchars($_SESSION["admin_user"]);
                 <div class="card">
                     <div class="card-header">
                         <h3>📝 Registered Nicknames</h3>
-                        <button class="btn btn-primary btn-sm" onclick="openModal('modal-register-nick')">Register Nickname</button>
+                        <button class="btn btn-primary btn-sm" onclick="openModal('modal-register-nick')">📝 Register Nickname</button>
                     </div>
                     <div class="card-body">
                         <div id="recent-registrations">Loading...</div>
@@ -183,7 +183,7 @@ $admin_user = htmlspecialchars($_SESSION["admin_user"]);
                     <div class="card-body">
                         <div class="search-box">
                             <input type="text" id="search-channels-input" class="form-control" placeholder="Enter channel name...">
-                            <button class="btn btn-primary" id="btn-search-channels">Search</button>
+                            <button class="btn btn-primary btn-sm" id="btn-search-channels">🔍 Search</button>
                         </div>
                         <div id="search-channels-results"></div>
                     </div>
@@ -203,7 +203,7 @@ $admin_user = htmlspecialchars($_SESSION["admin_user"]);
                 <div class="card">
                     <div class="card-header">
                         <h3>📋 Registered Channels</h3>
-                        <button class="btn btn-primary btn-sm" onclick="openModal('modal-register-channel')">Register Channel</button>
+                        <button class="btn btn-primary btn-sm" onclick="openModal('modal-register-channel')">📝 Register Channel</button>
                     </div>
                     <div class="card-body">
                         <div id="channels-list">Loading...</div>
@@ -887,7 +887,7 @@ Type /help for available commands."></textarea>
     <!-- Additional modals (staff, config, etc.) would go here - keeping this concise -->
     <!-- The full version would include all modals from the original code -->
 
-    <script src="admin.js?v=1768179291"></script>
+    <script src="admin.js?v=1768258256"></script>
     <!-- Modal: Edit Configuration -->
     <div id="modal-edit-config" class="modal" style="display: none;">
         <div class="modal-dialog modal-xl">
@@ -1040,7 +1040,7 @@ Type /help for available commands."></textarea>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button class="btn btn-primary" id="btn-save-register-nick">Register Nickname</button>
+                    <button class="btn btn-primary" id="btn-save-register-nick">📝 Register Nickname</button>
                     <button class="btn btn-default" id="btn-cancel-register-nick">Cancel</button>
                 </div>
             </div>
@@ -1068,7 +1068,7 @@ Type /help for available commands."></textarea>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button class="btn btn-primary" id="btn-save-register-channel">Register Channel</button>
+                    <button class="btn btn-primary" id="btn-save-register-channel">📝 Register Channel</button>
                     <button class="btn btn-default" id="btn-cancel-register-channel">Cancel</button>
                 </div>
             </div>

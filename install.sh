@@ -198,12 +198,18 @@ copy_files() {
     cp "$SCRIPT_DIR/linking.py" "$INSTALL_DIR/"
 
     # Copy or create config
-    if [ -f "$SCRIPT_DIR/pyircx_config.json" ]; then
-        if [ ! -f "$CONFIG_DIR/pyircx_config.json" ]; then
+    if [ ! -f "$CONFIG_DIR/pyircx_config.json" ]; then
+        if [ -f "$SCRIPT_DIR/pyircx_config.json" ]; then
+            # Use provided config template
             cp "$SCRIPT_DIR/pyircx_config.json" "$CONFIG_DIR/"
+            echo "Copied config template"
         else
-            echo "Config already exists, not overwriting"
+            # Generate default config from pyircx.py
+            echo "Generating default config..."
+            python3 "$SCRIPT_DIR/generate_default_config.py" "$INSTALL_DIR/pyircx.py" "$CONFIG_DIR/pyircx_config.json"
         fi
+    else
+        echo "Config already exists, not overwriting"
     fi
 
     # Create symlink for config
