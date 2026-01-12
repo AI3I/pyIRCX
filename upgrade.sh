@@ -428,6 +428,10 @@ if [ $NEEDS_APACHE_SETUP -eq 1 ]; then
             # Ensure /opt/pyircx directory has group write permissions for SQLite
             chmod g+w /opt/pyircx
             echo -e "${GREEN}✓ Set group write permissions on /opt/pyircx${NC}"
+
+            # Ensure config file is group writable for web admin MOTD editor
+            chmod 664 /etc/pyircx/pyircx_config.json 2>/dev/null || true
+            echo -e "${GREEN}✓ Set group write permissions on config file${NC}"
         fi
 
         # Restart PHP-FPM and Apache

@@ -221,7 +221,7 @@ set_permissions() {
     chmod 775 "$INSTALL_DIR"  # Group needs write for SQLite journal files
     chmod 750 "$INSTALL_DIR/transcripts"  # Keep transcripts private
     chmod 664 "$INSTALL_DIR/pyircx.db" 2>/dev/null || true  # Database group writable
-    chmod 644 "$CONFIG_DIR/pyircx_config.json" 2>/dev/null || true  # Config readable
+    chmod 664 "$CONFIG_DIR/pyircx_config.json" 2>/dev/null || true  # Config group writable (for web admin)
     chmod 755 "$INSTALL_DIR/pyircx.py"
     chmod 755 "$INSTALL_DIR/api.py" 2>/dev/null || true
     chmod 755 "$INSTALL_DIR/linking.py" 2>/dev/null || true
