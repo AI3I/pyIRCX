@@ -54,6 +54,30 @@ echo ""
 # Check and add columns to users table
 echo "Updating 'users' table..."
 
+if column_exists "users" "created_at"; then
+    echo "  - Column 'created_at' already exists"
+else
+    echo "  - Adding column 'created_at'"
+    sqlite3 "$DB_PATH" "ALTER TABLE users ADD COLUMN created_at INTEGER;"
+    echo "    ✓ Added"
+fi
+
+if column_exists "users" "last_login"; then
+    echo "  - Column 'last_login' already exists"
+else
+    echo "  - Adding column 'last_login'"
+    sqlite3 "$DB_PATH" "ALTER TABLE users ADD COLUMN last_login INTEGER;"
+    echo "    ✓ Added"
+fi
+
+if column_exists "users" "registered_nick"; then
+    echo "  - Column 'registered_nick' already exists"
+else
+    echo "  - Adding column 'registered_nick'"
+    sqlite3 "$DB_PATH" "ALTER TABLE users ADD COLUMN registered_nick TEXT;"
+    echo "    ✓ Added"
+fi
+
 if column_exists "users" "email"; then
     echo "  - Column 'email' already exists"
 else

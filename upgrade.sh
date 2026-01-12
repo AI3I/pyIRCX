@@ -105,14 +105,20 @@ if [ -f "$INSTALL_DIR/pyircx.db" ]; then
         echo -e "${YELLOW}✗ sqlite3 not installed (needed for database migration)${NC}"
         NEEDS_DB_MIGRATION=1
     else
+        HAS_CREATED_AT=$(sqlite3 "$INSTALL_DIR/pyircx.db" "PRAGMA table_info(users);" 2>/dev/null | grep -c "|created_at|")
+        HAS_LAST_LOGIN=$(sqlite3 "$INSTALL_DIR/pyircx.db" "PRAGMA table_info(users);" 2>/dev/null | grep -c "|last_login|")
+        HAS_REGISTERED_NICK=$(sqlite3 "$INSTALL_DIR/pyircx.db" "PRAGMA table_info(users);" 2>/dev/null | grep -c "|registered_nick|")
         HAS_EMAIL_COL=$(sqlite3 "$INSTALL_DIR/pyircx.db" "PRAGMA table_info(users);" 2>/dev/null | grep -c "|email|")
         HAS_TIMEOUT_COL=$(sqlite3 "$INSTALL_DIR/pyircx.db" "PRAGMA table_info(server_access);" 2>/dev/null | grep -c "|timeout|")
 
         # Ensure we got valid integers (grep -c should never fail, but handle empty/error cases)
+        HAS_CREATED_AT=${HAS_CREATED_AT:-0}
+        HAS_LAST_LOGIN=${HAS_LAST_LOGIN:-0}
+        HAS_REGISTERED_NICK=${HAS_REGISTERED_NICK:-0}
         HAS_EMAIL_COL=${HAS_EMAIL_COL:-0}
         HAS_TIMEOUT_COL=${HAS_TIMEOUT_COL:-0}
 
-        if [ "$HAS_EMAIL_COL" -eq 0 ] || [ "$HAS_TIMEOUT_COL" -eq 0 ]; then
+        if [ "$HAS_CREATED_AT" -eq 0 ] || [ "$HAS_LAST_LOGIN" -eq 0 ] || [ "$HAS_REGISTERED_NICK" -eq 0 ] || [ "$HAS_EMAIL_COL" -eq 0 ] || [ "$HAS_TIMEOUT_COL" -eq 0 ]; then
             echo -e "${YELLOW}✗ Database needs migration to v1.1.0 schema${NC}"
             NEEDS_DB_MIGRATION=1
         else
