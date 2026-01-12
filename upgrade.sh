@@ -387,9 +387,11 @@ if command -v semanage &> /dev/null && command -v restorecon &> /dev/null; then
     # Set contexts for database and directory
     semanage fcontext -a -t httpd_sys_rw_content_t "/opt/pyircx/pyircx\.db" 2>/dev/null || true
     semanage fcontext -a -t httpd_sys_rw_content_t "/opt/pyircx(/.*)?" 2>/dev/null || true
+    semanage fcontext -a -t httpd_sys_rw_content_t "/etc/pyircx/pyircx_config\.json" 2>/dev/null || true
 
     # Apply contexts
     restorecon -Rv /opt/pyircx 2>/dev/null || true
+    restorecon -v /etc/pyircx/pyircx_config.json 2>/dev/null || true
     echo -e "${GREEN}✓ SELinux file contexts configured${NC}"
 fi
 
