@@ -2065,6 +2065,10 @@ class pyIRCXServer:
             'DENY': []    # timeout=0 means permanent, else Unix timestamp when entry expires
         }
 
+        # K-line (server-level bans): {ip_address: (expires_at, reason, set_by)}
+        # expires_at is Unix timestamp when ban expires, 0 for permanent
+        self.klines = {}
+
         # WATCH: maps nickname (lowercase) -> set of User objects watching that nick
         self.watchers = {}
 
@@ -2812,6 +2816,25 @@ class pyIRCXServer:
 
     async def handle_client(self, reader, writer):
         user = User(reader, writer)
+
+        # Check K-line (server-level ban)
+        if user.ip in self.klines:
+            expires_at, reason, set_by = self.klines[user.ip]
+            # Check if ban has expired
+            if expires_at > 0 and time.time() > expires_at:
+                # Ban expired, remove it
+                del self.klines[user.ip]
+            else:
+                # Ban is still active, refuse connection
+                logger.warning(f"K-lined connection refused: {user.ip} - {reason}")
+                try:
+                    writer.write(f"ERROR :You are banned from this server: {reason}\r\n".encode('utf-8'))
+                    await writer.drain()
+                except Exception:
+                    pass
+                writer.close()
+                await writer.wait_closed()
+                return
 
         if CONFIG.get('security', 'enable_connection_throttle', default=True):
             if not self.connection_throttle.check(user.ip):
@@ -8371,7 +8394,7 @@ class ServerManager:
                         channel_name = arg.strip()
                         # Use built-in case-insensitive channel lookup
                         channel, actual_channel_name = self.server.get_channel(channel_name)
-                        
+
                         if channel:
                             # Kick all users and destroy channel
                             members_to_kick = list(channel.members.values())
@@ -8385,6 +8408,42 @@ class ServerManager:
                             # Remove channel from server memory
                             del self.server.channels[actual_channel_name]
                             logger.info(f"Admin command: Killed channel {actual_channel_name} for reconfiguration")
+
+                    elif cmd == 'KILL_USER':
+                        # Format: KILL_USER:nickname:reason
+                        parts = arg.split(':', 1)
+                        if len(parts) >= 1:
+                            nickname = parts[0].strip()
+                            reason = parts[1] if len(parts) > 1 else "Killed by administrator"
+
+                            user = self.server.users.get(nickname)
+                            if user and not user.is_virtual:
+                                # Send KILL message to user
+                                user.send(f":{CONFIG.get('system', 'nick', default='System')} KILL {nickname} :{reason}")
+                                logger.info(f"Admin command: Killed user {nickname} - {reason}")
+                                # Disconnect the user
+                                await self.server.quit_user(user, reason=f"Killed: {reason}")
+
+                    elif cmd == 'BAN_USER':
+                        # Format: BAN_USER:nickname:duration:reason
+                        parts = arg.split(':', 2)
+                        if len(parts) >= 1:
+                            nickname = parts[0].strip()
+                            duration = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 3600
+                            reason = parts[2] if len(parts) > 2 else "Banned by administrator"
+
+                            user = self.server.users.get(nickname)
+                            if user and not user.is_virtual:
+                                ip = user.ip
+                                # Add K-line (ban)
+                                expires_at = time.time() + duration if duration > 0 else 0
+                                self.server.klines[ip] = (expires_at, reason, "WebAdmin")
+
+                                # Send KILL message to user
+                                user.send(f":{CONFIG.get('system', 'nick', default='System')} KILL {nickname} :Banned: {reason}")
+                                logger.info(f"Admin command: Banned user {nickname} ({ip}) for {duration}s - {reason}")
+                                # Disconnect the user
+                                await self.server.quit_user(user, reason=f"Banned: {reason}")
         except Exception as e:
             logger.error(f"Error processing admin commands: {e}")
 
