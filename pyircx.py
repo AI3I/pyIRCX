@@ -22,9 +22,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
 # Version info - updated with each release
-__version__ = "1.0.5"
+__version__ = "1.1.0"
 __version_label__ = "pyIRCX"
-__created__ = "Fri Jan  9 12:58:28 PM EST 2026"
+__created__ = "Sun Jan 11 09:21:32 PM EST 2026"
 
 import asyncio
 import aiosqlite
@@ -129,8 +129,8 @@ class ServerConfig:
             "staff_term": "staff and services"
         },
         "modes": {
-            "user": "agiorxz",  # Alphabetized: admin, guide, invisible, oper, registered, ircx, gagged
-            "channel": "adfhijkmnprstuwxy"  # Alphabetized: admin, auditorium, filter, hidden, invite, no-invitations, key, moderated, no-external, private, registered, secret, topic-lock, user-limit, no-whisper, ircx, transcript
+            "user": "agiosrxz",  # Alphabetized: admin, guide, invisible, oper, service, registered, ircx, gagged
+            "channel": "adfhijkmnprstuwxy"  # Alphabetized: admin, cloneable, filter, hidden, invite, no-invitations, key, moderated, no-external, private, registered, secret, topic-lock, user-limit, no-whisper, auditorium, transcript
         },
         "limits": {
             "max_users": 1000,
@@ -715,6 +715,35 @@ class User:
 
     def get_mode_str(self):
         return "".join([k for k, v in self.modes.items() if v])
+
+    # Privilege helper methods
+    def is_admin(self):
+        """Check if user is ADMIN (+a)"""
+        return self.has_mode('a')
+
+    def is_sysop(self):
+        """Check if user is SYSOP (+o)"""
+        return self.has_mode('o')
+
+    def is_guide(self):
+        """Check if user is GUIDE (+g)"""
+        return self.has_mode('g')
+
+    def is_service(self):
+        """Check if user is service (+s)"""
+        return self.has_mode('s')
+
+    def is_high_staff(self):
+        """Check if user is ADMIN or SYSOP"""
+        return self.has_mode('a') or self.has_mode('o')
+
+    def is_staff(self):
+        """Check if user is any staff (ADMIN/SYSOP/GUIDE)"""
+        return self.has_mode('a') or self.has_mode('o') or self.has_mode('g')
+
+    def is_privileged(self):
+        """Check if user is staff or service"""
+        return self.has_mode('a') or self.has_mode('o') or self.has_mode('g') or self.has_mode('s')
 
     def prefix(self):
         return f"{self.nickname}!{self.username}@{self.host}"
@@ -1691,6 +1720,9 @@ class Channel:
         for mode, value in data.get('modes', {}).items():
             if mode in channel.modes:
                 channel.modes[mode] = value
+        # Ensure +r mode matches registered flag
+        if channel.registered and 'r' in channel.modes:
+            channel.modes['r'] = True
         return channel
 
 
@@ -1791,6 +1823,107 @@ RESPONSES = {
     "817": "{target} {prop} :{value}",
     "818": "{target} :End of properties",
     "819": "{target} {prop} :{value}",
+    # IRCX Service Protection (820-829)
+    "820": "{target} :Service is protected",
+    "821": "{target} :Cannot kick services",
+    "822": "{target} :Cannot ban services",
+    "823": "{target} :Cannot kill services",
+    "824": "{target} :Cannot gag services",
+    "825": "{target} :Cannot add services to access deny list",
+    # IRCX Rate Limiting (830-839)
+    "830": ":Rate limited - please wait",
+    "831": ":WHO command rate limited",
+    "832": ":WHISPER rate limited (5 second cooldown)",
+    "833": ":LIST command rate limited",
+    "834": ":Too fast - flood protection triggered",
+    "835": ":Please wait {seconds} seconds before changing nickname",
+    # IRCX Channel Restrictions (840-849)
+    "840": "{channel} :Cannot send to channel",
+    "841": "{channel} :Cannot send to channel (+m - moderated)",
+    "842": "{channel} :No external messages allowed (+n)",
+    "843": "{channel} :Whispers not allowed (+w)",
+    "844": "{channel} :Invitations not allowed (+j)",
+    "845": "{channel} :Transcript mode not enabled (+y)",
+    "846": "{channel} :{prop} is read-only",
+    "847": "{target} :ServiceBot has reached max channels ({max})",
+    "848": ":Only ADMINs and SYSOPs can invite ServiceBots",
+    # IRCX Access Control (850-859)
+    "850": ":Invalid access level - valid: {levels}",
+    "851": "{mask} :Mask already in {level} list",
+    "852": "{mask} :Mask not found in {level} list",
+    "853": ":Cannot remove owner-added entry",
+    "854": "{target} :ACCESS {level} added - {mask}",
+    "855": "{target} :ACCESS {level} removed - {mask}",
+    "856": "{target} :Cleared {count} {level} entries",
+    "857": ":Only channel owners can clear access lists",
+    "858": ":Cannot delete your own staff account",
+    "859": ":Already linked to {server}",
+    # IRCX Command Usage (860-869)
+    "860": ":Usage: {usage}",
+    "861": ":Invalid path. Use: section.key (e.g., limits.max_users)",
+    "862": ":Invalid level. Use: {levels}",
+    "863": ":Invalid username: {error}",
+    "864": ":Invalid password",
+    "865": ":Invalid MFA code",
+    "866": ":Invalid message ID",
+    "867": ":Invalid channel name",
+    "868": ":Invalid nickname",
+    "869": ":Invalid parameter: {param}",
+    # IRCX Registration/Auth (870-879)
+    "870": ":Nickname {nick} is already registered",
+    "871": ":Nickname {nick} is not registered",
+    "872": ":You are already identified to a registered nickname",
+    "873": ":You must identify first to drop your nickname",
+    "874": ":Nickname {nick} has been registered (UUID: {uuid})",
+    "875": ":Nickname {nick} has been dropped",
+    "876": ":You are now identified as {nick}",
+    "877": ":Password accepted. MFA is enabled - please verify with: MFA VERIFY <code>",
+    "878": ":MFA enabled. Save this secret: {secret}. Scan QR or enter manually.",
+    "879": ":MFA has been disabled",
+    # IRCX Staff Management (880-889)
+    "880": ":Staff account {username} created with level {level}",
+    "881": ":Staff account {username} deleted",
+    "882": ":Staff account {username} changed to level {level}",
+    "883": ":Password changed for staff account {username}",
+    "884": ":Error listing staff accounts",
+    "885": ":Error creating staff account",
+    "886": ":Error deleting staff account",
+    "887": ":Error changing staff level",
+    "888": ":Error changing password",
+    "889": ":Staff account {username} not found",
+    # IRCX Config/Admin (890-899)
+    "890": ":{key} = {value}",
+    "891": ":{key} set to {value}",
+    "892": ":Configuration key not found: {key}",
+    "893": ":Error accessing configuration",
+    "894": ":Connected to {server}",
+    "895": ":Disconnected from {server}",
+    "896": ":Error connecting to {server}",
+    "897": ":Server {server} not found in links",
+    "898": ":Link operation in progress",
+    "899": ":Link timeout - operation aborted",
+    # IRCX Database/System (900-909)
+    "900": ":Registration failed - please try again later",
+    "901": ":Identification failed - please try again later",
+    "902": ":Drop failed - please try again later",
+    "903": ":Database error - please try again later",
+    "904": ":System error - please contact an administrator",
+    "905": ":Operation failed - please try again",
+    "906": ":Channel registration failed",
+    "907": ":Channel drop failed",
+    "908": ":Info lookup failed",
+    "909": ":Memo operation failed",
+    # IRCX Service Messages (910-919)
+    "910": ":Commands: {commands}",
+    "911": ":Unknown command: {cmd}. Try: {suggestions}",
+    "912": ":{service} service is temporarily unavailable",
+    "913": ":No memos waiting",
+    "914": ":You have {count} memo(s) waiting",
+    "915": ":Memo sent to {target}",
+    "916": ":Memo {id} deleted",
+    "917": ":All memos cleared",
+    "918": ":Channel {channel} is already registered",
+    "919": ":Channel {channel} is not registered",
     # WATCH numerics
     "600": "{nick} {user} {host} {signon} :logged on",
     "601": "{nick} {user} {host} {signon} :logged off",
@@ -1803,6 +1936,83 @@ RESPONSES = {
     "271": "{nick} {mask}",
     "272": ":End of Silence List",
     "STAFF_LOG": "[{action}] {staff} -> {target}: {details}",
+}
+
+# ==============================================================================
+# SERVER MESSAGES - NOTICE templates for informational messages
+# ==============================================================================
+SERVER_MESSAGES = {
+    # Gag/Ungag confirmations (sent to staff, not target - shadow ban)
+    "gag_channel": "{target} has been gagged in {channel}",
+    "ungag_channel": "{target} has been ungagged in {channel}",
+    "gag_global": "{target} has been globally gagged (+z)",
+    "ungag_global": "{target} has been globally ungagged (-z)",
+
+    # WHO/LIST restrictions
+    "who_requires_staff": "WHO * requires SYSOP or ADMIN privileges. Use a pattern like *nick* instead.",
+    "who_truncated": "WHO results truncated at {limit}",
+
+    # Message handling
+    "message_truncated": "Message truncated to {max} characters",
+    "system_no_messages": "System does not accept messages. Use /HELP for available services.",
+    "mfa_pending": "MFA verification pending. Use: PRIVMSG Registrar :MFA VERIFY <code>",
+    "access_denied": "Access denied{reason}",
+
+    # Transcript
+    "transcript_header": "=== Transcript for {channel} ({count} lines) ===",
+    "transcript_footer": "=== End of transcript ===",
+    "no_transcript": "No transcript available for {channel}",
+
+    # User killed
+    "user_killed": "{target} KILLED",
+
+    # Registrar service
+    "registrar_help": "Commands: REGISTER <password> [email], IDENTIFY <password>, DROP, INFO [nick], CHANNEL <cmd>, SET <option>, MFA <cmd>",
+    "registrar_tip": "TIP: You can also use direct commands: REGISTER, UNREGISTER, IDENTIFY, MFA",
+    "registrar_info_header": "Info for {nickname}:",
+    "registrar_info_uuid": "  UUID: {uuid}",
+    "registrar_info_registered": "  Registered: {time}",
+    "registrar_info_lastseen": "  Last seen: {time}",
+    "registrar_info_mfa": "  MFA enabled: {status}",
+    "registrar_channel_registered": "Channel {channel} is now registered to you",
+    "registrar_channel_dropped": "Channel {channel} has been unregistered",
+    "registrar_channel_info": "Channel {channel} - Owner: {owner}, Registered: {time}",
+    "registrar_email_updated": "Email address updated",
+    "registrar_password_updated": "Password updated",
+    "registrar_mfa_verify_prompt": "Enter 6-digit MFA code from your authenticator app",
+    "registrar_mfa_verify_success": "MFA verification successful!",
+
+    # Messenger service
+    "messenger_help": "Commands: SEND <nick> <message>, LIST, READ <id>, DELETE <id>, CLEAR, COUNT, PUSH <message> (ADMIN only)",
+    "messenger_sent": "Message sent to {target}",
+    "messenger_deleted": "Memo {id} deleted",
+    "messenger_cleared": "All your memos have been cleared",
+    "messenger_count": "You have {count} memo(s) waiting",
+    "messenger_no_memos": "No memos waiting",
+    "messenger_list_header": "Your memos:",
+    "messenger_list_item": "  [{id}] From {from} at {time}: {preview}",
+    "messenger_read_header": "Memo {id} from {from} at {time}:",
+    "messenger_read_body": "  {message}",
+    "messenger_user_offline": "{target} is offline - message queued",
+    "messenger_user_online": "{target} is online",
+    "messenger_push_sent": "Message pushed to {count} user(s)",
+
+    # NewsFlash service
+    "newsflash_help": "Commands: LIST, READ <id>, DELETE <id> (staff), PUSH <message> (ADMIN only)",
+    "newsflash_list_header": "Recent NewsFlash items:",
+    "newsflash_list_item": "  [{id}] {time}: {preview}",
+    "newsflash_read_header": "NewsFlash {id} from {time}:",
+    "newsflash_read_body": "  {message}",
+    "newsflash_deleted": "NewsFlash {id} deleted",
+    "newsflash_pushed": "NewsFlash sent to {count} user(s)",
+    "newsflash_no_items": "No NewsFlash items available",
+
+    # ServiceBot messages
+    "servicebot_warning": "Warning: {violation}",
+    "servicebot_action": "Action taken: {action}",
+
+    # IRCX PROP on-join/on-part (sent from channel entity, not server)
+    # These are sent as channel!channel@server PRIVMSG/NOTICE
 }
 
 # ==============================================================================
@@ -2069,9 +2279,7 @@ class pyIRCXServer:
             if user.nickname not in channel.gagged:
                 channel.gagged.add(user.nickname)
                 user.set_mode('z', True)
-                msg = f"{bot_prefix} MODE {channel_name} +z {user.nickname}"
-                channel.broadcast(msg)
-                user.send(f"{bot_prefix} NOTICE {user.nickname} :You have been gagged in {channel_name} for {violation_type}")
+                # Shadow ban - no notification to user or channel
                 logger.info(f"ServiceBot {bot.nickname}: Gagged {user.nickname} in {channel_name} for {violation_type}")
 
         elif action == "kick":
@@ -2117,7 +2325,7 @@ class pyIRCXServer:
             return
 
         # Don't check messages from staff or services
-        if user.has_mode('o') or user.has_mode('a') or user.has_mode('g') or user.has_mode('s'):
+        if user.is_privileged():
             return
 
         # Don't check virtual users
@@ -2347,7 +2555,7 @@ class pyIRCXServer:
         self.channels["#System"].account_uuid = str(uuid.uuid4())
 
         # Create System virtual user
-        sys_user = self._create_virtual_service('System', 'System', "Network Services", is_admin=True)
+        sys_user = self._create_virtual_service('System', 'System', "Network Services")
         self.channels["#System"].members[sys_user.nickname] = sys_user
         self.channels["#System"].owners.add(sys_user.nickname)
         logger.info("#System channel created")
@@ -2355,16 +2563,19 @@ class pyIRCXServer:
         # Create Registrar service - handles nick/channel registration
         registrar = self._create_virtual_service('Registrar', 'Registrar', "Registration Services")
         self.channels["#System"].members[registrar.nickname] = registrar
+        self.channels["#System"].owners.add(registrar.nickname)
         logger.info("Registrar service created")
 
         # Create Messenger service - handles mailbox and global messages
         messenger = self._create_virtual_service('Messenger', 'Messenger', "Message Services")
         self.channels["#System"].members[messenger.nickname] = messenger
+        self.channels["#System"].owners.add(messenger.nickname)
         logger.info("Messenger service created")
 
         # Create NewsFlash alias - part of Messenger for rotating/push messages
         newsflash = self._create_virtual_service('NewsFlash', 'NewsFlash', "News Broadcast Services")
         self.channels["#System"].members[newsflash.nickname] = newsflash
+        self.channels["#System"].owners.add(newsflash.nickname)
         logger.info("NewsFlash service created")
 
         # Create ServiceBots - configurable count
@@ -2425,6 +2636,21 @@ class pyIRCXServer:
                 logger.info(f"ACCESS rules loaded: {grant_count} GRANT, {deny_count} DENY")
         except Exception as e:
             logger.error(f"Load ACCESS error: {e}")
+
+    async def load_registered_channel(self, channel_name):
+        """Load a registered channel from database if it exists"""
+        try:
+            async with aiosqlite.connect(CONFIG.get('database', 'path')) as db:
+                async with db.execute("SELECT data FROM reg_chans WHERE LOWER(name) = LOWER(?)", (channel_name,)) as cursor:
+                    row = await cursor.fetchone()
+                    if row:
+                        data = json.loads(row[0])
+                        channel = Channel.from_dict(data)
+                        logger.info(f"Loaded registered channel: {channel.name}")
+                        return channel
+        except Exception as e:
+            logger.error(f"Error loading registered channel {channel_name}: {e}")
+        return None
 
     async def load_channels(self):
         try:
@@ -2509,8 +2735,17 @@ class pyIRCXServer:
             txt = template.format(**params)
             if code == "800":
                 return f":{self.servername} 800 {recipient.nickname if recipient.registered else '*'} {txt}"
-            no_colon = ["004", "005", "311", "312",
-                "315", "317", "319", "352", "353", "324", "366", "433"]
+            no_colon = [
+                "005", "219", "252", "253", "254", "256", "257", "258", "259", "265", "266", "272", "301", "303", "311", "312", "313", "314", "315", "317",
+                "318", "319", "320", "321", "322", "331", "332", "351", "352", "353", "366", "368", "369", "371", "374", "391", "401", "403", "404", "407",
+                "421", "432", "433", "441", "442", "443", "461", "468", "471", "473", "474", "475", "482", "600", "601", "602", "604", "605", "606", "607",
+                "696", "710", "711", "712", "713", "714", "716", "805", "811", "812", "817", "818", "819", "820", "821", "822", "823", "824", "825", "830",
+                "831", "832", "833", "834", "835", "840", "841", "842", "843", "844", "845", "846", "847", "848", "850", "851", "852", "853", "854", "855",
+                "856", "857", "858", "859", "860", "861", "862", "863", "864", "865", "866", "867", "868", "869", "870", "871", "872", "873", "874", "875",
+                "876", "877", "878", "879", "880", "881", "882", "883", "884", "885", "886", "887", "888", "889", "890", "891", "892", "893", "894", "895",
+                "896", "897", "898", "899", "900", "901", "902", "903", "904", "905", "906", "907", "908", "909", "910", "911", "912", "913", "914", "915",
+                "916", "917", "918", "919"
+            ]
             if code == "433":
                 return f":{self.servername} 433 {recipient.nickname if recipient.nickname != '*' else '*'} {txt}"
             sep = " " if code in no_colon else " :"
@@ -2518,6 +2753,34 @@ class pyIRCXServer:
         except Exception as e:
             logger.error(f"Reply error {code}: {e}")
             return f":{self.servername} 500 {recipient.nickname} :Format Error"
+
+    def send_notice(self, user, message_key, **kwargs):
+        """
+        Send a NOTICE using centralized messages from SERVER_MESSAGES or RESPONSES.
+
+        Args:
+            user: Recipient user object
+            message_key: Key in SERVER_MESSAGES dict, or numeric code in RESPONSES
+            **kwargs: Template variables for formatting
+
+        Usage:
+            self.send_notice(user, "registrar_help")
+            self.send_notice(user, "860", usage="CONFIG GET <section.key>")
+        """
+        # Try SERVER_MESSAGES first (text templates)
+        if message_key in SERVER_MESSAGES:
+            try:
+                message = SERVER_MESSAGES[message_key].format(**kwargs)
+                user.send(f":{self.servername} NOTICE {user.nickname} :{message}")
+            except KeyError as e:
+                logger.error(f"Missing template variable for {message_key}: {e}")
+                user.send(f":{self.servername} NOTICE {user.nickname} :Message format error")
+        # Try RESPONSES (numeric codes)
+        elif message_key in RESPONSES:
+            user.send(self.get_reply(message_key, user, **kwargs))
+        else:
+            logger.error(f"Unknown message key: {message_key}")
+            user.send(f":{self.servername} NOTICE {user.nickname} :Internal message error")
 
     def _strip_formatting(self, text):
         """Strip mIRC/IRC formatting codes from text (for +f channels)"""
@@ -2640,10 +2903,14 @@ class pyIRCXServer:
         user.last_activity = int(time.time())
         self.stats['commands_processed'] += 1
 
-        # Flood protection for all users (staff get higher limits but not bypass)
-        if user.registered:
+        # Flood protection - services and localhost admins are exempt
+        # Services (+s mode) and localhost ADMIN connections bypass flood protection
+        is_service = user.has_mode('s')
+        is_localhost_admin = user.ip in ['127.0.0.1', '::1', '::ffff:127.0.0.1'] and user.has_mode('a')
+        
+        if user.registered and not is_service and not is_localhost_admin:
             if CONFIG.get('security', 'enable_flood_protection', default=True):
-                is_staff = user.has_mode('o') or user.has_mode('a')
+                is_staff = user.is_high_staff()
                 # Staff get 3x the normal flood limit before being throttled
                 flood_ok = user.check_flood()
                 if not flood_ok:
@@ -2821,7 +3088,7 @@ class pyIRCXServer:
 
         # Nick change cooldown (only for registered users, not initial sign-on)
         # SYSOPs and ADMINs are exempt from cooldown
-        if user.registered and not (user.has_mode('o') or user.has_mode('a')):
+        if user.registered and not user.is_high_staff():
             cooldown = CONFIG.get('limits', 'nick_change_cooldown', default=60)
             if cooldown > 0:
                 elapsed = time.time() - user.last_nick_change
@@ -2993,26 +3260,52 @@ class pyIRCXServer:
 
         # Fall back to PASS-based authentication
         elif user.provided_pass:
-            try:
-                row = await self.db_pool.execute_one(
-                    "SELECT password_hash, level FROM users WHERE username=?",
-                    (user.username,)
-                )
-                if row:
-                    # Use non-blocking bcrypt check
-                    if await check_password_async(user.provided_pass, row[0]):
-                        auth, level = True, row[1]
-                        self.failed_auth_tracker.record_success(user.ip)
-                    else:
-                        self.failed_auth_tracker.record_failure(user.ip)
-            except Exception as e:
-                if self.debug_mode:
-                    logger.error(f"Auth error: {e}")
+            # Try localhost admin token first (for Cockpit API)
+            if user.ip in ['127.0.0.1', '::1', '::ffff:127.0.0.1']:
+                try:
+                    with open('/etc/pyircx/cockpit_admin_token', 'r') as f:
+                        admin_token = f.read().strip()
+                    if user.provided_pass == admin_token:
+                        auth, level = True, "ADMIN"
+                        logger.info(f"Cockpit admin token accepted from localhost for {user.username}")
+                except:
+                    pass  # Token file doesn't exist or can't be read
+            
+            # If admin token didn't match, try normal password authentication
+            if not auth:
+                try:
+                    row = await self.db_pool.execute_one(
+                        "SELECT password_hash, level, email, realname, force_realname FROM users WHERE username=?",
+                        (user.username,)
+                    )
+                    if row:
+                        # Use non-blocking bcrypt check
+                        if await check_password_async(user.provided_pass, row[0]):
+                            auth, level = True, row[1]
+                            user.staff_email = row[2]
+                            user.staff_realname = row[3]
+                            user.force_staff_realname = bool(row[4])
+                            self.failed_auth_tracker.record_success(user.ip)
+                        else:
+                            self.failed_auth_tracker.record_failure(user.ip)
+                except Exception as e:
+                    if self.debug_mode:
+                        logger.error(f"Auth error: {e}")
 
         if auth and level in ["ADMIN", "SYSOP", "GUIDE"]:
             user.host = self.servername
             user.authenticated = True
             user.staff_level = level
+            # Apply forced realname if set
+            if hasattr(user, 'force_staff_realname') and user.force_staff_realname and hasattr(user, 'staff_realname') and user.staff_realname:
+                user.realname = user.staff_realname
+            # ADMIN gets +a (admin) mode, SYSOP gets +o (oper), GUIDE gets +g (guide)
+            if level == "ADMIN":
+                user.set_mode('a', True)
+            elif level == "SYSOP":
+                user.set_mode('o', True)
+            elif level == "GUIDE":
+                user.set_mode('g', True)
         else:
             # Non-authenticated users get tilde prefix on username
             if not user.username.startswith('~'):
@@ -3037,7 +3330,7 @@ class pyIRCXServer:
         user.send(self.get_reply("005", user))
 
         # Staff count includes staff users AND services/bots
-        ops = sum(1 for u in self.users.values() if u.has_mode('o') or u.has_mode('a') or u.has_mode('g') or u.is_virtual)
+        ops = sum(1 for u in self.users.values() if u.is_staff() or u.is_virtual)
         # User count excludes services/bots
         real_users = sum(1 for u in self.users.values() if not u.is_virtual)
         # Only show invisible count to staff users
@@ -3137,8 +3430,17 @@ class pyIRCXServer:
             self.stats['messages_sent'] += broadcast_count
             return
 
-        if target in self.users:
-            recipient = self.users[target]
+        # Case-insensitive user lookup for private messages
+        recipient = self.users.get(target)
+        if not recipient:
+            # Try case-insensitive search
+            target_lower = target.lower()
+            for nick, usr in self.users.items():
+                if nick.lower() == target_lower:
+                    recipient = usr
+                    break
+
+        if recipient:
             # Check if sender is silenced by recipient
             if self.is_silenced(user, recipient):
                 return  # Silently drop the message
@@ -3156,7 +3458,7 @@ class pyIRCXServer:
             # Check +m (moderated) - only voiced/host/owner can send
             if channel.modes.get('m', False) and channel.has_member(user.nickname):
                 # Staff can always speak, as can voiced/host/owner
-                is_staff = user.has_mode('o') or user.has_mode('a') or user.has_mode('g')
+                is_staff = user.is_staff()
                 is_privileged = (user.nickname in channel.owners or
                                 user.nickname in channel.hosts or
                                 user.nickname in channel.voices)
@@ -3219,8 +3521,8 @@ class pyIRCXServer:
 
     async def handle_who(self, user, params):
         target = params[0] if params else "*"
-        is_staff = user.has_mode('o') or user.has_mode('a') or user.has_mode('g')
-        is_high_staff = user.has_mode('o') or user.has_mode('a')  # SYSOP or ADMIN
+        is_staff = user.is_staff()
+        is_high_staff = user.is_high_staff()  # SYSOP or ADMIN
 
         # WHO * (all users) restricted to SYSOP/ADMIN only
         if target == "*":
@@ -3233,9 +3535,10 @@ class pyIRCXServer:
                 user.send(f":{self.servername} NOTICE {user.nickname} :WHO rate limited")
                 user.send(self.get_reply("315", user, target=target))
                 return
-            # Return all visible users
+            # Return all visible users (staff can see ServiceBots)
             for member in self.users.values():
-                if member.is_virtual:
+                # Skip virtual users unless requester is staff (ADMIN/SYSOP/GUIDE)
+                if member.is_virtual and not is_staff:
                     continue
                 if member.has_mode('i') and not is_staff and user != member:
                     continue
@@ -3245,14 +3548,18 @@ class pyIRCXServer:
                 if member.has_mode('x') or member.is_ircx:
                     flags += "x"
                 if user.is_ircx:
-                    if member.has_mode('a'):
+                    if member.has_mode('s'):
+                        flags += "s"
+                    elif member.has_mode('a'):
                         flags += "a"
                     elif member.has_mode('o'):
                         flags += "o"
                     elif member.has_mode('g'):
                         flags += "g"
                 else:
-                    if member.has_mode('o') or member.has_mode('a'):
+                    if member.has_mode('s'):
+                        flags += "*"
+                    elif member.is_high_staff():
                         flags += "*"
                 # Staff see IP address, others see hostname
                 display_host = member.ip if is_staff else member.host
@@ -3268,7 +3575,8 @@ class pyIRCXServer:
             match_count = 0
             max_results = 50  # Limit results for non-staff
             for member in self.users.values():
-                if member.is_virtual:
+                # Skip virtual users unless requester is staff (ADMIN/SYSOP/GUIDE)
+                if member.is_virtual and not is_staff:
                     continue
                 if not fnmatch.fnmatch(member.nickname.lower(), pattern.lower()):
                     continue
@@ -3284,14 +3592,18 @@ class pyIRCXServer:
                 if member.has_mode('x') or member.is_ircx:
                     flags += "x"
                 if user.is_ircx:
-                    if member.has_mode('a'):
+                    if member.has_mode('s'):
+                        flags += "s"
+                    elif member.has_mode('a'):
                         flags += "a"
                     elif member.has_mode('o'):
                         flags += "o"
                     elif member.has_mode('g'):
                         flags += "g"
                 else:
-                    if member.has_mode('o') or member.has_mode('a'):
+                    if member.has_mode('s'):
+                        flags += "*"
+                    elif member.is_high_staff():
                         flags += "*"
                 # Staff see IP address, others see hostname
                 display_host = member.ip if is_staff else member.host
@@ -3319,16 +3631,20 @@ class pyIRCXServer:
 
                 # Staff/operator flags depend on IRCX mode
                 if user.is_ircx:
-                    # IRCX mode - show specific staff letters
-                    if member.has_mode('a'):
+                    # IRCX mode - show specific staff/service letters
+                    if member.has_mode('s'):
+                        flags += "s"
+                    elif member.has_mode('a'):
                         flags += "a"
                     elif member.has_mode('o'):
                         flags += "o"
                     elif member.has_mode('g'):
                         flags += "g"
                 else:
-                    # Non-IRCX mode - show * for any IRC operator
-                    if member.has_mode('o') or member.has_mode('a'):
+                    # Non-IRCX mode - show * for any IRC operator/service
+                    if member.has_mode('s'):
+                        flags += "*"
+                    elif member.is_high_staff():
                         flags += "*"
 
                 # Channel rank flags (., @, +)
@@ -3351,7 +3667,16 @@ class pyIRCXServer:
         if not params:
             return
         for target_nick in params[0].split(','):
+            # Case-insensitive user lookup
             target = self.users.get(target_nick)
+            if not target:
+                # Try case-insensitive search
+                target_lower = target_nick.lower()
+                for nick, usr in self.users.items():
+                    if nick.lower() == target_lower:
+                        target = usr
+                        target_nick = nick  # Use actual nickname for display
+                        break
 
             # Reserved service names that don't exist redirect to System
             if not target and is_reserved_service(target_nick):
@@ -3375,7 +3700,10 @@ class pyIRCXServer:
                     "319", user, target=target.nickname, channels=chan_list))
             user.send(self.get_reply("312", user, target=target.nickname))
 
-            if target.has_mode('a'):
+            # Services get priority in display
+            if target.is_service():
+                role = "is an IRC service"
+            elif target.has_mode('a'):
                 role = "is an IRC administrator"
             elif target.has_mode('o'):
                 role = "is an IRC operator"
@@ -3395,7 +3723,7 @@ class pyIRCXServer:
             user.send(self.get_reply("317", user, target=target.nickname,
                       idle=idle, signon=target.signon_time))
 
-            if user.has_mode('o') or user.has_mode('a') or user.has_mode('g'):
+            if user.is_staff():
                 user.send(self.get_reply(
                     "320", user, target=target.nickname, ip=target.ip))
 
@@ -3419,7 +3747,7 @@ class pyIRCXServer:
             user.send(f":{self.servername} NOTICE {user.nickname} :LIST rate limited")
             return
 
-        is_staff = user.has_mode('o') or user.has_mode('a') or user.has_mode('g')
+        is_staff = user.is_staff()
 
         if is_listx:
             user.send(self.get_reply("811", user))
@@ -3447,7 +3775,7 @@ class pyIRCXServer:
             user.send(self.get_reply("323", user))
 
     async def handle_join(self, user, channel_name, key=None):
-        is_staff = user.has_mode('o') or user.has_mode('a') or user.has_mode('g')
+        is_staff = user.is_staff()
 
         # Validate channel name
         valid, error = validate_channel_name(channel_name)
@@ -3475,7 +3803,11 @@ class pyIRCXServer:
         if not channel:
             # New channel - use provided name as canonical
             chan_name = channel_name
-            channel = Channel(chan_name)
+            # Try to load from database first if registered
+            channel = await self.load_registered_channel(chan_name)
+            if not channel:
+                # Not registered - create new dynamic channel
+                channel = Channel(chan_name)
             self.channels[chan_name] = channel
 
         used_owner_key = key and channel.owner_key and key == channel.owner_key
@@ -3519,9 +3851,10 @@ class pyIRCXServer:
         # ADMINs, SYSOPs, and services/bots always get +q, owner key grants +q
         # First user gets +q ONLY for unregistered (dynamic) channels
         # ACCESS OWNER/HOST/VOICE entries also grant modes
-        is_high_staff = user.has_mode('o') or user.has_mode('a')
+        is_high_staff = user.is_high_staff()
+        is_service = user.has_mode('s')
         is_first_in_dynamic = len(channel.members) == 1 and not channel.registered
-        grant_owner = is_high_staff or user.is_virtual or is_first_in_dynamic or used_owner_key or 'OWNER' in access_grants
+        grant_owner = is_high_staff or is_service or is_first_in_dynamic or used_owner_key or 'OWNER' in access_grants
         grant_host = (used_host_key or 'HOST' in access_grants) and not grant_owner
         grant_voice = 'VOICE' in access_grants and not grant_owner and not grant_host
 
@@ -3537,11 +3870,41 @@ class pyIRCXServer:
         if channel.topic:
             user.send(self.get_reply(
                 "332", user, channel=chan_name, topic=channel.topic))
+            # Send topic metadata (who set it and when) for proper client display
+            if channel.topic_set_by:
+                user.send(self.get_reply("333", user,
+                    channel=chan_name,
+                    nick=channel.topic_set_by,
+                    timestamp=channel.topic_set_at
+                ))
         else:
             user.send(self.get_reply("331", user, channel=chan_name))
         names = " ".join([channel.get_prefix(nick) + nick for nick in channel.members])
         user.send(self.get_reply("353", user, channel=chan_name, names=names))
         user.send(self.get_reply("366", user, channel=chan_name))
+        
+        # Send channel modes (324 numeric)
+        modes = "".join([k for k, v in channel.modes.items() if v])
+        # Add +r if channel is registered
+        if channel.registered and 'r' not in modes:
+            modes += 'r'
+        # Sort modes for consistent display
+        modes = ''.join(sorted(modes))
+        mode_params = []
+        if channel.modes.get('l') and channel.user_limit:
+            mode_params.append(str(channel.user_limit))
+        # Only show key to channel hosts/owners or staff
+        can_see_key = (user.nickname in channel.owners or
+                      user.nickname in channel.hosts or
+                      user.is_high_staff())
+        if channel.modes.get('k') and channel.key:
+            if can_see_key:
+                mode_params.append(channel.key)
+            else:
+                mode_params.append("*")  # Hide actual key
+        param_str = " " + " ".join(mode_params) if mode_params else ""
+        user.send(f":{self.servername} 324 {user.nickname} {chan_name} +{modes}{param_str}")
+        
         msg = f":{user.prefix()} JOIN {chan_name}"
         channel.broadcast(msg, exclude=user)
 
@@ -3684,7 +4047,7 @@ class pyIRCXServer:
 
         # Check permissions - must be channel owner/host or staff
         is_chanop = user.nickname in channel.owners or user.nickname in channel.hosts
-        is_staff = user.has_mode('o') or user.has_mode('a')
+        is_staff = user.is_high_staff()
         if not (is_chanop or is_staff):
             user.send(self.get_reply("482", user, target=channel_name))
             return
@@ -3885,7 +4248,17 @@ class pyIRCXServer:
         target_nick = params[0]
         channel_name = params[1]
 
+        # Case-insensitive nickname lookup
         target = self.users.get(target_nick)
+        if not target:
+            # Try case-insensitive search
+            target_lower = target_nick.lower()
+            for nick, usr in self.users.items():
+                if nick.lower() == target_lower:
+                    target = usr
+                    target_nick = nick  # Use the actual nickname for subsequent checks
+                    break
+
         if not target:
             user.send(self.get_reply("401", user, target=target_nick))
             return
@@ -3902,7 +4275,7 @@ class pyIRCXServer:
 
         # Channel mode +j: no invitations allowed (staff and services can bypass)
         if channel.modes.get('j', False):
-            is_staff = user.has_mode('o') or user.has_mode('a') or user.has_mode('g')
+            is_staff = user.is_staff()
             is_service = user.nickname in self.servicebots
             if not is_staff and not is_service:
                 user.send(f":{self.servername} NOTICE {user.nickname} :Invitations are not allowed in {channel_name} (+j)")
@@ -3921,8 +4294,8 @@ class pyIRCXServer:
 
         # ServiceBot invitation - ADMIN/SYSOP only, not GUIDE
         if target_nick in self.servicebots:
-            if not (user.has_mode('a') or (user.has_mode('o') and not user.has_mode('g'))):
-                user.send(f":{self.servername} NOTICE {user.nickname} :Only ADMINs and SYSOPs can invite ServiceBots")
+            if not (user.is_admin() or user.is_sysop()):
+                user.send(self.get_reply("848", user))
                 return
             bot = self.servicebots[target_nick]
             max_chans = getattr(bot, 'max_channels', 10)
@@ -3932,9 +4305,12 @@ class pyIRCXServer:
             # ServiceBot joins the channel automatically
             channel.members[target_nick] = bot
             bot.channels.add(channel_name)
+            # Services always get +q (owner)
+            channel.owners.add(target_nick)
             channel.broadcast(f":{bot.prefix()} JOIN {channel_name}")
+            channel.broadcast(f":{self.servername} MODE {channel_name} +q {target_nick}")
             user.send(self.get_reply("341", user, target=target_nick, channel=channel_name))
-            logger.info(f"ServiceBot {target_nick} joined {channel_name} via INVITE from {user.nickname}")
+            logger.info(f"ServiceBot {target_nick} joined {channel_name} via INVITE from {user.nickname} (granted +q)")
             return
 
         target.invited_to.add(channel_name)
@@ -3978,7 +4354,7 @@ class pyIRCXServer:
 
         if is_server_access:
             # Server access requires staff
-            if not (user.has_mode('o') or user.has_mode('a')):
+            if not user.is_high_staff():
                 user.send(self.get_reply("481", user))
                 return
             valid_levels = ['GRANT', 'DENY']
@@ -3990,7 +4366,7 @@ class pyIRCXServer:
                 return
             # Require channel owner/host or staff
             if not (user.nickname in channel.owners or user.nickname in channel.hosts or
-                    user.has_mode('o') or user.has_mode('a')):
+                    user.is_high_staff()):
                 user.send(self.get_reply("482", user, target=chan_name))
                 return
             valid_levels = ['OWNER', 'HOST', 'VOICE', 'GRANT', 'DENY']
@@ -4030,7 +4406,7 @@ class pyIRCXServer:
 
             level = params[2].upper()
             if level not in valid_levels:
-                user.send(f":{self.servername} NOTICE {user.nickname} :Invalid access level. Valid: {', '.join(valid_levels)}")
+                self.send_notice(user, "850", levels=', '.join(valid_levels))
                 return
 
             mask = params[3]
@@ -4065,6 +4441,16 @@ class pyIRCXServer:
                     user.send(f":{self.servername} NOTICE {user.nickname} :Mask {mask} already in {level} list")
                     return
 
+            # Cannot add services to DENY lists
+            if level == 'DENY':
+                import fnmatch
+                for nick, u in self.users.items():
+                    if u.is_service():
+                        user_mask = f"{nick}!{u.username}@{u.host}"
+                        if fnmatch.fnmatch(user_mask.lower(), mask.lower()) or fnmatch.fnmatch(nick.lower(), mask.lower()):
+                            user.send(self.get_reply("825", user, target=mask))
+                            return
+
             # Add the entry: (mask, set_by, set_at, timeout, reason)
             timestamp = int(time.time())
             access_data[level].append((mask, user.nickname, timestamp, timeout, reason))
@@ -4092,7 +4478,7 @@ class pyIRCXServer:
 
             level = params[2].upper()
             if level not in valid_levels:
-                user.send(f":{self.servername} NOTICE {user.nickname} :Invalid access level. Valid: {', '.join(valid_levels)}")
+                self.send_notice(user, "850", levels=', '.join(valid_levels))
                 return
 
             mask = params[3]
@@ -4110,8 +4496,8 @@ class pyIRCXServer:
                 if m.lower() == mask.lower():
                     # Hosts can't remove owner-added entries (unless they're staff)
                     if not is_server_access and user.nickname in channel.hosts and user.nickname not in channel.owners:
-                        if set_by in channel.owners and not (user.has_mode('o') or user.has_mode('a')):
-                            user.send(f":{self.servername} NOTICE {user.nickname} :Cannot remove owner-added entry")
+                        if set_by in channel.owners and not user.is_high_staff():
+                            user.send(self.get_reply("853", user))
                             return
                     access_data[level].pop(i)
                     found = True
@@ -4144,8 +4530,8 @@ class pyIRCXServer:
                 target_name = "server"
             else:
                 # Only owners can CLEAR (not hosts)
-                if user.nickname not in channel.owners and not (user.has_mode('o') or user.has_mode('a')):
-                    user.send(f":{self.servername} NOTICE {user.nickname} :Only channel owners can clear access lists")
+                if user.nickname not in channel.owners and not user.is_high_staff():
+                    user.send(self.get_reply("857", user))
                     return
                 access_data = channel.access_list
                 target_name = chan_name
@@ -4203,7 +4589,7 @@ class pyIRCXServer:
             return
 
         flag = params[0].lower() if params[0] not in ('?', '*') else params[0]
-        is_staff = user.has_mode('o') or user.has_mode('a') or user.has_mode('g')
+        is_staff = user.is_staff()
         is_admin = user.has_mode('a')
 
         # STATS ? - Help menu
@@ -4407,7 +4793,7 @@ class pyIRCXServer:
             # Services/bots (users with +s mode)
             user.send(f":{self.servername} NOTICE {user.nickname} :--- Services/Bots (+s) ---")
             for u in self.users.values():
-                if u.has_mode('s') and not u.is_virtual:
+                if u.is_service() and not u.is_virtual:
                     user.send(f":{self.servername} NOTICE {user.nickname} :{u.nickname}!{u.username}@{u.host}")
             user.send(f":{self.servername} NOTICE {user.nickname} :--- End ---")
 
@@ -4555,12 +4941,12 @@ class pyIRCXServer:
         elif subcmd == "GET":
             # Get specific value - SYSOP+ can view
             if len(params) < 2:
-                user.send(f":{self.servername} NOTICE {user.nickname} :Usage: CONFIG GET <section.key>")
+                self.send_notice(user, "860", usage="CONFIG GET <section.key>")
                 return
 
             path = params[1].split('.')
             if len(path) < 2:
-                user.send(f":{self.servername} NOTICE {user.nickname} :Invalid path. Use: section.key (e.g., limits.max_users)")
+                user.send(self.get_reply("861", user))
                 return
 
             value = CONFIG.get(*path)
@@ -4576,12 +4962,12 @@ class pyIRCXServer:
                 return
 
             if len(params) < 3:
-                user.send(f":{self.servername} NOTICE {user.nickname} :Usage: CONFIG SET <section.key> <value>")
+                self.send_notice(user, "860", usage="CONFIG SET <section.key> <value>")
                 return
 
             path = params[1].split('.')
             if len(path) < 2:
-                user.send(f":{self.servername} NOTICE {user.nickname} :Invalid path. Use: section.key (e.g., limits.max_users)")
+                user.send(self.get_reply("861", user))
                 return
 
             # Parse value - try JSON first, then string
@@ -4632,12 +5018,12 @@ class pyIRCXServer:
         Syntax: CONNECT <servername>
         Requires ADMIN or SYSOP privileges.
         """
-        if not (user.has_mode('a') or user.has_mode('o')):
+        if not user.is_high_staff():
             user.send(self.get_reply("481", user))
             return
 
         if not params:
-            user.send(f":{self.servername} NOTICE {user.nickname} :Usage: CONNECT <servername>")
+            self.send_notice(user, "860", usage="CONNECT <servername>")
             return
 
         if not hasattr(self, 'link_manager') or not self.link_manager:
@@ -4660,7 +5046,7 @@ class pyIRCXServer:
 
         # Check if already connected
         if target_server in self.link_manager.linked_servers:
-            user.send(f":{self.servername} NOTICE {user.nickname} :Already linked to {target_server}")
+            user.send(self.get_reply("859", user, server=target_server))
             return
 
         # Attempt connection
@@ -4679,12 +5065,12 @@ class pyIRCXServer:
         Syntax: SQUIT <servername> :<reason>
         Requires ADMIN or SYSOP privileges.
         """
-        if not (user.has_mode('a') or user.has_mode('o')):
+        if not user.is_high_staff():
             user.send(self.get_reply("481", user))
             return
 
         if not params:
-            user.send(f":{self.servername} NOTICE {user.nickname} :Usage: SQUIT <servername> :<reason>")
+            self.send_notice(user, "860", usage="SQUIT <servername> :<reason>")
             return
 
         if not hasattr(self, 'link_manager') or not self.link_manager:
@@ -4787,7 +5173,7 @@ class pyIRCXServer:
                 user.send(f":{self.servername} NOTICE {user.nickname} :--- End ({len(rows)} accounts) ---")
             except Exception as e:
                 logger.error(f"STAFF LIST error: {e}")
-                user.send(f":{self.servername} NOTICE {user.nickname} :Error listing staff accounts")
+                user.send(self.get_reply("884", user))
 
         elif subcmd == "ADD":
             # Add staff account - ADMIN only
@@ -4796,7 +5182,7 @@ class pyIRCXServer:
                 return
 
             if len(params) < 4:
-                user.send(f":{self.servername} NOTICE {user.nickname} :Usage: STAFF ADD <username> <password> <level>")
+                self.send_notice(user, "860", usage="STAFF ADD <username> <password> <level>")
                 user.send(f":{self.servername} NOTICE {user.nickname} :Levels: ADMIN, SYSOP, GUIDE")
                 return
 
@@ -4805,7 +5191,7 @@ class pyIRCXServer:
             level = params[3].upper()
 
             if level not in ['ADMIN', 'SYSOP', 'GUIDE']:
-                user.send(f":{self.servername} NOTICE {user.nickname} :Invalid level. Use: ADMIN, SYSOP, or GUIDE")
+                self.send_notice(user, "862", levels="ADMIN, SYSOP, or GUIDE")
                 return
 
             if len(password) < 6:
@@ -4815,7 +5201,7 @@ class pyIRCXServer:
             # Validate username
             valid, error = validate_username(username)
             if not valid:
-                user.send(f":{self.servername} NOTICE {user.nickname} :Invalid username: {error}")
+                self.send_notice(user, "863", error=error)
                 return
 
             try:
@@ -4838,7 +5224,7 @@ class pyIRCXServer:
 
             except Exception as e:
                 logger.error(f"STAFF ADD error: {e}")
-                user.send(f":{self.servername} NOTICE {user.nickname} :Error creating staff account")
+                user.send(self.get_reply("885", user))
 
         elif subcmd == "DEL":
             # Remove staff account - ADMIN only
@@ -4847,14 +5233,14 @@ class pyIRCXServer:
                 return
 
             if len(params) < 2:
-                user.send(f":{self.servername} NOTICE {user.nickname} :Usage: STAFF DEL <username>")
+                self.send_notice(user, "860", usage="STAFF DEL <username>")
                 return
 
             username = params[1]
 
             # Prevent self-deletion
             if username.lower() == user.username.lower().lstrip('~'):
-                user.send(f":{self.servername} NOTICE {user.nickname} :Cannot delete your own staff account")
+                user.send(self.get_reply("858", user))
                 return
 
             try:
@@ -4876,7 +5262,7 @@ class pyIRCXServer:
 
             except Exception as e:
                 logger.error(f"STAFF DEL error: {e}")
-                user.send(f":{self.servername} NOTICE {user.nickname} :Error deleting staff account")
+                user.send(self.get_reply("886", user))
 
         elif subcmd == "SET":
             # Change staff level - ADMIN only
@@ -4885,7 +5271,7 @@ class pyIRCXServer:
                 return
 
             if len(params) < 3:
-                user.send(f":{self.servername} NOTICE {user.nickname} :Usage: STAFF SET <username> <level>")
+                self.send_notice(user, "860", usage="STAFF SET <username> <level>")
                 user.send(f":{self.servername} NOTICE {user.nickname} :Levels: ADMIN, SYSOP, GUIDE")
                 return
 
@@ -4893,7 +5279,7 @@ class pyIRCXServer:
             new_level = params[2].upper()
 
             if new_level not in ['ADMIN', 'SYSOP', 'GUIDE']:
-                user.send(f":{self.servername} NOTICE {user.nickname} :Invalid level. Use: ADMIN, SYSOP, or GUIDE")
+                self.send_notice(user, "862", levels="ADMIN, SYSOP, or GUIDE")
                 return
 
             try:
@@ -4918,12 +5304,12 @@ class pyIRCXServer:
 
             except Exception as e:
                 logger.error(f"STAFF SET error: {e}")
-                user.send(f":{self.servername} NOTICE {user.nickname} :Error changing staff level")
+                user.send(self.get_reply("887", user))
 
         elif subcmd == "PASS":
             # Change staff password - ADMIN or self
             if len(params) < 3:
-                user.send(f":{self.servername} NOTICE {user.nickname} :Usage: STAFF PASS <username> <newpassword>")
+                self.send_notice(user, "860", usage="STAFF PASS <username> <newpassword>")
                 return
 
             username = params[1]
@@ -4960,7 +5346,7 @@ class pyIRCXServer:
 
             except Exception as e:
                 logger.error(f"STAFF PASS error: {e}")
-                user.send(f":{self.servername} NOTICE {user.nickname} :Error changing password")
+                user.send(self.get_reply("888", user))
 
         else:
             user.send(f":{self.servername} NOTICE {user.nickname} :Unknown subcommand: {subcmd}")
@@ -5013,12 +5399,12 @@ class pyIRCXServer:
         """Handle LUSERS command - display user statistics"""
         total_users = sum(1 for u in self.users.values() if not u.is_virtual)
         # Staff count includes staff users AND services/bots
-        ops = sum(1 for u in self.users.values() if u.has_mode('o') or u.has_mode('a') or u.has_mode('g') or u.is_virtual)
+        ops = sum(1 for u in self.users.values() if u.is_staff() or u.is_virtual)
         unknown = 0  # Connections not yet registered
         channels = len(self.channels)
 
         # Only show invisible count to staff
-        is_staff = user.has_mode('o') or user.has_mode('a') or user.has_mode('g')
+        is_staff = user.is_staff()
         if is_staff:
             invisible = sum(1 for u in self.users.values() if u.has_mode('i') and not u.is_virtual)
         else:
@@ -5068,7 +5454,7 @@ class pyIRCXServer:
             if target and not target.is_virtual:
                 # Build userhost reply: nick*=+user@host
                 # * = oper, + = here, - = away
-                oper_flag = "*" if target.has_mode('o') or target.has_mode('a') else ""
+                oper_flag = "*" if target.is_high_staff() else ""
                 away_flag = "-" if target.away_msg else "+"
                 userhost_info.append(f"{target.nickname}{oper_flag}={away_flag}{target.username}@{target.host}")
 
@@ -5118,7 +5504,7 @@ class pyIRCXServer:
           REGISTER <#channel> [<password>]           - Register channel
         """
         if not params:
-            user.send(f":{self.servername} NOTICE {user.nickname} :Usage: REGISTER <account> {{*|<email>}} <password>")
+            self.send_notice(user, "860", usage="REGISTER <account> {*|<email>} <password>")
             user.send(f":{self.servername} NOTICE {user.nickname} :   or: REGISTER <#channel> [<password>]")
             return
 
@@ -5134,7 +5520,7 @@ class pyIRCXServer:
         else:
             # Nickname registration
             if len(params) < 3:
-                user.send(f":{self.servername} NOTICE {user.nickname} :Usage: REGISTER <account> {{*|<email>}} <password>")
+                self.send_notice(user, "860", usage="REGISTER <account> {*|<email>} <password>")
                 return
             account = params[0]
             email_or_star = params[1]
@@ -5148,7 +5534,7 @@ class pyIRCXServer:
         Syntax: UNREGISTER <account|#channel>
         """
         if not params:
-            user.send(f":{self.servername} NOTICE {user.nickname} :Usage: UNREGISTER <account|#channel>")
+            self.send_notice(user, "860", usage="UNREGISTER <account|#channel>")
             return
 
         target = params[0]
@@ -5164,7 +5550,7 @@ class pyIRCXServer:
         Syntax: IDENTIFY [<account>] <password>
         """
         if not params:
-            user.send(f":{self.servername} NOTICE {user.nickname} :Usage: IDENTIFY [<account>] <password>")
+            self.send_notice(user, "860", usage="IDENTIFY [<account>] <password>")
             return
 
         if len(params) == 1:
@@ -5187,7 +5573,7 @@ class pyIRCXServer:
           MFA DISABLE <code>   - Disable MFA (requires valid code)
         """
         if not params:
-            user.send(f":{self.servername} NOTICE {user.nickname} :Usage: MFA ENABLE|VERIFY|DISABLE [<code>]")
+            self.send_notice(user, "860", usage="MFA ENABLE|VERIFY|DISABLE [<code>]")
             return
 
         subcmd = params[0].upper()
@@ -5196,14 +5582,14 @@ class pyIRCXServer:
             await self._mfa_enable(user)
         elif subcmd == "VERIFY":
             if len(params) < 2:
-                user.send(f":{self.servername} NOTICE {user.nickname} :Usage: MFA VERIFY <6-digit code>")
+                self.send_notice(user, "860", usage="MFA VERIFY <6-digit code>")
                 return
             await self._mfa_verify(user, params[1])
         elif subcmd == "DISABLE":
             code = params[1] if len(params) > 1 else None
             await self._mfa_disable(user, code)
         else:
-            user.send(f":{self.servername} NOTICE {user.nickname} :Usage: MFA ENABLE|VERIFY|DISABLE [<code>]")
+            self.send_notice(user, "860", usage="MFA ENABLE|VERIFY|DISABLE [<code>]")
 
     async def _register_nick(self, user, account, password, email):
         """Register a nickname/account"""
@@ -5266,13 +5652,34 @@ class pyIRCXServer:
                         user.send(f":{self.servername} NOTICE {user.nickname} :Channel {channel_name} is already registered")
                         return
 
-                async with db.execute("SELECT uuid FROM registered_nicks WHERE nickname = ?",
-                                     (user.nickname,)) as cursor:
-                    owner_row = await cursor.fetchone()
-                    if not owner_row:
-                        user.send(f":{self.servername} NOTICE {user.nickname} :Your nickname must be registered first")
-                        return
-                    owner_uuid = owner_row[0]
+                # For staff users, use their username; for regular users, use their nickname
+                if user.authenticated and user.staff_level in ["ADMIN", "SYSOP", "GUIDE"]:
+                    # Staff user - look up or create registered_nicks entry for their username
+                    account_name = user.username.lstrip('~')
+                    async with db.execute("SELECT uuid FROM registered_nicks WHERE nickname = ?",
+                                         (account_name,)) as cursor:
+                        owner_row = await cursor.fetchone()
+                        if not owner_row:
+                            # Auto-create a registered_nicks entry for this staff account
+                            staff_uuid = str(uuid.uuid4())
+                            now = int(time.time())
+                            # Use a dummy password hash since staff authenticate via users table
+                            await db.execute("""INSERT INTO registered_nicks
+                                (uuid, nickname, password_hash, registered_at, last_seen, registered_by)
+                                VALUES (?, ?, ?, ?, ?, ?)""",
+                                (staff_uuid, account_name, "", now, now, f"SYSTEM (staff account)"))
+                            owner_uuid = staff_uuid
+                        else:
+                            owner_uuid = owner_row[0]
+                else:
+                    # Regular user - check their nickname is registered
+                    async with db.execute("SELECT uuid FROM registered_nicks WHERE nickname = ?",
+                                         (user.nickname,)) as cursor:
+                        owner_row = await cursor.fetchone()
+                        if not owner_row:
+                            user.send(f":{self.servername} NOTICE {user.nickname} :Your nickname must be registered first")
+                            return
+                        owner_uuid = owner_row[0]
 
                 chan_uuid = str(uuid.uuid4())
                 now = int(time.time())
@@ -5333,13 +5740,22 @@ class pyIRCXServer:
 
         try:
             async with aiosqlite.connect(CONFIG.get('database', 'path')) as db:
-                # Verify ownership
-                async with db.execute("SELECT uuid FROM registered_nicks WHERE nickname = ?",
-                                     (user.nickname,)) as cursor:
-                    nick_row = await cursor.fetchone()
-                    if not nick_row:
-                        user.send(f":{self.servername} NOTICE {user.nickname} :Your nickname is not registered")
-                        return
+                # Verify ownership - for staff, use username; for regular users, use nickname
+                if user.authenticated and user.staff_level in ["ADMIN", "SYSOP", "GUIDE"]:
+                    account_name = user.username.lstrip('~')
+                    async with db.execute("SELECT uuid FROM registered_nicks WHERE nickname = ?",
+                                         (account_name,)) as cursor:
+                        nick_row = await cursor.fetchone()
+                        if not nick_row:
+                            user.send(f":{self.servername} NOTICE {user.nickname} :Your staff account is not registered")
+                            return
+                else:
+                    async with db.execute("SELECT uuid FROM registered_nicks WHERE nickname = ?",
+                                         (user.nickname,)) as cursor:
+                        nick_row = await cursor.fetchone()
+                        if not nick_row:
+                            user.send(f":{self.servername} NOTICE {user.nickname} :Your nickname is not registered")
+                            return
 
                 async with db.execute("SELECT owner_uuid FROM registered_channels WHERE channel_name = ?",
                                      (channel_name,)) as cursor:
@@ -5398,7 +5814,7 @@ class pyIRCXServer:
                         await self.deliver_pending_memos(user)
                     else:
                         self.failed_auth_tracker.record_failure(user.ip)
-                        user.send(f":{self.servername} NOTICE {user.nickname} :Invalid password")
+                        user.send(self.get_reply("864", user))
 
         except Exception as e:
             logger.error(f"IDENTIFY error: {e}")
@@ -5471,7 +5887,7 @@ class pyIRCXServer:
                             user.send(f":{self.servername} NOTICE {user.nickname} :MFA verified. You are now identified as {nickname}")
                             logger.info(f"MFA: {nickname} completed identification")
                         else:
-                            user.send(f":{self.servername} NOTICE {user.nickname} :Invalid MFA code")
+                            user.send(self.get_reply("865", user))
                     return
 
                 # Case 2: Completing MFA setup
@@ -5537,7 +5953,7 @@ class pyIRCXServer:
 
                     totp = pyotp.TOTP(mfa_secret)
                     if not totp.verify(code, valid_window=1):
-                        user.send(f":{self.servername} NOTICE {user.nickname} :Invalid MFA code")
+                        user.send(self.get_reply("865", user))
                         return
 
                     await db.execute("UPDATE registered_nicks SET mfa_enabled = 0, mfa_secret = NULL WHERE nickname = ?",
@@ -5707,7 +6123,7 @@ class pyIRCXServer:
         STAFF PASS <username> <newpassword> instead.
         """
         if len(params) < 2:
-            user.send(f":{self.servername} NOTICE {user.nickname} :Usage: CHGPASS <oldpassword> <newpassword>")
+            self.send_notice(user, "860", usage="CHGPASS <oldpassword> <newpassword>")
             return
 
         if not user.has_mode('r'):
@@ -5733,7 +6149,7 @@ class pyIRCXServer:
 
                     # Use non-blocking bcrypt check
                     if not await check_password_async(old_pass, row[0]):
-                        user.send(f":{self.servername} NOTICE {user.nickname} :Invalid current password")
+                        user.send(self.get_reply("864", user))
                         return
 
                     new_hash = await hash_password_async(new_pass)
@@ -5757,7 +6173,7 @@ class pyIRCXServer:
           MEMO DEL <id|ALL>           - Delete memo(s)
         """
         if not params:
-            user.send(f":{self.servername} NOTICE {user.nickname} :Usage: MEMO SEND|LIST|READ|DEL ...")
+            self.send_notice(user, "860", usage="MEMO SEND|LIST|READ|DEL ...")
             return
 
         subcmd = params[0].upper()
@@ -5785,7 +6201,7 @@ class pyIRCXServer:
             await self._memo_del(user, target)
 
         else:
-            user.send(f":{self.servername} NOTICE {user.nickname} :Usage: MEMO SEND|LIST|READ|DEL ...")
+            self.send_notice(user, "860", usage="MEMO SEND|LIST|READ|DEL ...")
 
     async def _memo_send(self, user, target_nick, message):
         """Send a memo to a user"""
@@ -6266,10 +6682,8 @@ class pyIRCXServer:
         """
         parts = text.strip().split(None, 2)
         if not parts:
-            self._service_reply("Registrar", user, "Commands: REGISTER <password> [email], IDENTIFY <password>, "
-                               "DROP, INFO [nick], CHANNEL REGISTER|DROP <#channel>, "
-                               "SET PASSWORD|EMAIL <value>, MFA ENABLE|VERIFY|DISABLE")
-            self._service_reply("Registrar", user, "TIP: You can also use direct commands: REGISTER, UNREGISTER, IDENTIFY, MFA")
+            self._service_reply("Registrar", user, SERVER_MESSAGES["registrar_help"])
+            self._service_reply("Registrar", user, SERVER_MESSAGES["registrar_tip"])
             return
 
         cmd = parts[0].upper()
@@ -6277,7 +6691,7 @@ class pyIRCXServer:
         if cmd == "REGISTER":
             # REGISTER <password> [email] -> REGISTER <nick> {*|email} <password>
             if len(parts) < 2:
-                self._service_reply("Registrar", user, "Usage: REGISTER <password> [email]")
+                self.send_notice(user, "860", usage="REGISTER <password> [email]")
                 return
             password = parts[1]
             email = parts[2] if len(parts) > 2 else None
@@ -6285,7 +6699,7 @@ class pyIRCXServer:
 
         elif cmd == "IDENTIFY":
             if len(parts) < 2:
-                self._service_reply("Registrar", user, "Usage: IDENTIFY <password>")
+                self.send_notice(user, "860", usage="IDENTIFY <password>")
                 return
             await self._identify_nick(user, user.nickname, parts[1])
 
@@ -6298,7 +6712,7 @@ class pyIRCXServer:
 
         elif cmd == "CHANNEL":
             if len(parts) < 3:
-                self._service_reply("Registrar", user, "Usage: CHANNEL REGISTER|DROP <#channel>")
+                self.send_notice(user, "860", usage="CHANNEL REGISTER|DROP <#channel>")
                 return
             subcmd = parts[1].upper()
             channel_name = parts[2]
@@ -6309,11 +6723,11 @@ class pyIRCXServer:
             elif subcmd == "INFO":
                 await self._registrar_channel_info(user, channel_name)
             else:
-                self._service_reply("Registrar", user, "Usage: CHANNEL REGISTER|DROP|INFO <#channel>")
+                self.send_notice(user, "860", usage="CHANNEL REGISTER|DROP|INFO <#channel>")
 
         elif cmd == "SET":
             if len(parts) < 3:
-                self._service_reply("Registrar", user, "Usage: SET PASSWORD|EMAIL <value>")
+                self.send_notice(user, "860", usage="SET PASSWORD|EMAIL <value>")
                 return
             setting = parts[1].upper()
             value = parts[2]
@@ -6321,7 +6735,7 @@ class pyIRCXServer:
 
         elif cmd == "MFA":
             if len(parts) < 2:
-                self._service_reply("Registrar", user, "Usage: MFA ENABLE|VERIFY|DISABLE [code]")
+                self.send_notice(user, "860", usage="MFA ENABLE|VERIFY|DISABLE [code]")
                 return
             subcmd = parts[1].upper()
             if subcmd == "ENABLE":
@@ -6331,11 +6745,11 @@ class pyIRCXServer:
                 await self._mfa_disable(user, code)
             elif subcmd == "VERIFY":
                 if len(parts) < 3:
-                    self._service_reply("Registrar", user, "Usage: MFA VERIFY <6-digit code>")
+                    self.send_notice(user, "860", usage="MFA VERIFY <6-digit code>")
                     return
                 await self._mfa_verify(user, parts[2])
             else:
-                self._service_reply("Registrar", user, "Usage: MFA ENABLE|VERIFY|DISABLE [code]")
+                self.send_notice(user, "860", usage="MFA ENABLE|VERIFY|DISABLE [code]")
 
         else:
             self._service_reply("Registrar", user, f"Unknown command: {cmd}. Try: REGISTER, IDENTIFY, DROP, INFO, CHANNEL, SET, MFA")
@@ -6343,7 +6757,7 @@ class pyIRCXServer:
     async def _registrar_register_nick(self, user, password, email):
         """Register a nickname"""
         if user.has_mode('r'):
-            self._service_reply("Registrar", user, "You are already identified to a registered nickname")
+            user.send(self.get_reply("872", user))
             return
 
         try:
@@ -6352,7 +6766,7 @@ class pyIRCXServer:
                 async with db.execute("SELECT uuid FROM registered_nicks WHERE nickname = ?",
                                      (user.nickname,)) as cursor:
                     if await cursor.fetchone():
-                        self._service_reply("Registrar", user, f"Nickname {user.nickname} is already registered")
+                        user.send(self.get_reply("870", user, nick=user.nickname))
                         return
 
                 # Register the nickname
@@ -6368,12 +6782,12 @@ class pyIRCXServer:
 
                 user.set_mode('r', True)
                 user.send(f":{user.nickname} MODE {user.nickname} :+r")
-                self._service_reply("Registrar", user, f"Nickname {user.nickname} has been registered (UUID: {nick_uuid})")
+                user.send(self.get_reply("874", user, nick=user.nickname, uuid=nick_uuid))
                 logger.info(f"Registrar: {user.nickname} registered by {user.prefix()}")
 
         except Exception as e:
             logger.error(f"Registrar register error: {e}")
-            self._service_reply("Registrar", user, "Registration failed - please try again later")
+            user.send(self.get_reply("900", user))
 
     async def _registrar_identify(self, user, password):
         """Identify with a registered nickname"""
@@ -6383,7 +6797,7 @@ class pyIRCXServer:
                                      (user.nickname,)) as cursor:
                     row = await cursor.fetchone()
                     if not row:
-                        self._service_reply("Registrar", user, f"Nickname {user.nickname} is not registered")
+                        user.send(self.get_reply("871", user, nick=user.nickname))
                         return
 
                     nick_uuid, password_hash, mfa_enabled, mfa_secret = row
@@ -6394,7 +6808,7 @@ class pyIRCXServer:
                         if mfa_enabled and mfa_secret:
                             # Set pending MFA state - user must complete MFA verification
                             user.pending_mfa = nick_uuid
-                            self._service_reply("Registrar", user, "Password accepted. MFA is enabled - please verify with: MFA VERIFY <6-digit code>")
+                            user.send(self.get_reply("877", user))
                             return
 
                         # No MFA required - complete identification
@@ -6403,20 +6817,20 @@ class pyIRCXServer:
                         await db.execute("UPDATE registered_nicks SET last_seen = ? WHERE uuid = ?",
                                         (int(time.time()), nick_uuid))
                         await db.commit()
-                        self._service_reply("Registrar", user, f"You are now identified as {user.nickname}")
+                        user.send(self.get_reply("876", user, nick=user.nickname))
                         logger.info(f"Registrar: {user.nickname} identified")
                     else:
                         self.failed_auth_tracker.record_failure(user.ip)
-                        self._service_reply("Registrar", user, "Invalid password")
+                        user.send(self.get_reply("864", user))
 
         except Exception as e:
             logger.error(f"Registrar identify error: {e}")
-            self._service_reply("Registrar", user, "Identification failed - please try again later")
+            user.send(self.get_reply("901", user))
 
     async def _registrar_drop_nick(self, user):
         """Drop (unregister) a nickname"""
         if not user.has_mode('r'):
-            self._service_reply("Registrar", user, "You must identify first to drop your nickname")
+            user.send(self.get_reply("873", user))
             return
 
         try:
@@ -6426,12 +6840,12 @@ class pyIRCXServer:
 
                 user.set_mode('r', False)
                 user.send(f":{user.nickname} MODE {user.nickname} :-r")
-                self._service_reply("Registrar", user, f"Nickname {user.nickname} has been dropped")
+                user.send(self.get_reply("875", user, nick=user.nickname))
                 logger.info(f"Registrar: {user.nickname} dropped")
 
         except Exception as e:
             logger.error(f"Registrar drop error: {e}")
-            self._service_reply("Registrar", user, "Drop failed - please try again later")
+            user.send(self.get_reply("902", user))
 
     async def _registrar_info(self, user, target_nick):
         """Get info about a registered nickname"""
@@ -6442,7 +6856,7 @@ class pyIRCXServer:
                                      (target_nick,)) as cursor:
                     row = await cursor.fetchone()
                     if not row:
-                        self._service_reply("Registrar", user, f"Nickname {target_nick} is not registered")
+                        user.send(self.get_reply("871", user, nick=target_nick))
                         return
 
                     nick_uuid, nickname, reg_at, last_seen, mfa = row
@@ -6480,14 +6894,31 @@ class pyIRCXServer:
                         self._service_reply("Registrar", user, f"Channel {channel_name} is already registered")
                         return
 
-                # Get owner's UUID
-                async with db.execute("SELECT uuid FROM registered_nicks WHERE nickname = ?",
-                                     (user.nickname,)) as cursor:
-                    owner_row = await cursor.fetchone()
-                    if not owner_row:
-                        self._service_reply("Registrar", user, "Your nickname must be registered first")
-                        return
-                    owner_uuid = owner_row[0]
+                # Get owner's UUID - for staff, use username; for regular users, use nickname
+                if user.authenticated and user.staff_level in ["ADMIN", "SYSOP", "GUIDE"]:
+                    account_name = user.username.lstrip('~')
+                    async with db.execute("SELECT uuid FROM registered_nicks WHERE nickname = ?",
+                                         (account_name,)) as cursor:
+                        owner_row = await cursor.fetchone()
+                        if not owner_row:
+                            # Auto-create a registered_nicks entry for this staff account
+                            staff_uuid = str(uuid.uuid4())
+                            now_temp = int(time.time())
+                            await db.execute("""INSERT INTO registered_nicks
+                                (uuid, nickname, password_hash, registered_at, last_seen, registered_by)
+                                VALUES (?, ?, ?, ?, ?, ?)""",
+                                (staff_uuid, account_name, "", now_temp, now_temp, f"SYSTEM (staff account)"))
+                            owner_uuid = staff_uuid
+                        else:
+                            owner_uuid = owner_row[0]
+                else:
+                    async with db.execute("SELECT uuid FROM registered_nicks WHERE nickname = ?",
+                                         (user.nickname,)) as cursor:
+                        owner_row = await cursor.fetchone()
+                        if not owner_row:
+                            self._service_reply("Registrar", user, "Your nickname must be registered first")
+                            return
+                        owner_uuid = owner_row[0]
 
                 # Register the channel
                 chan_uuid = str(uuid.uuid4())
@@ -6516,14 +6947,24 @@ class pyIRCXServer:
 
         try:
             async with aiosqlite.connect(CONFIG.get('database', 'path')) as db:
-                # Get owner's UUID
-                async with db.execute("SELECT uuid FROM registered_nicks WHERE nickname = ?",
-                                     (user.nickname,)) as cursor:
-                    owner_row = await cursor.fetchone()
-                    if not owner_row:
-                        self._service_reply("Registrar", user, "Your nickname is not registered")
-                        return
-                    owner_uuid = owner_row[0]
+                # Get owner's UUID - for staff, use username; for regular users, use nickname
+                if user.authenticated and user.staff_level in ["ADMIN", "SYSOP", "GUIDE"]:
+                    account_name = user.username.lstrip('~')
+                    async with db.execute("SELECT uuid FROM registered_nicks WHERE nickname = ?",
+                                         (account_name,)) as cursor:
+                        owner_row = await cursor.fetchone()
+                        if not owner_row:
+                            self._service_reply("Registrar", user, "Your staff account is not registered")
+                            return
+                        owner_uuid = owner_row[0]
+                else:
+                    async with db.execute("SELECT uuid FROM registered_nicks WHERE nickname = ?",
+                                         (user.nickname,)) as cursor:
+                        owner_row = await cursor.fetchone()
+                        if not owner_row:
+                            self._service_reply("Registrar", user, "Your nickname is not registered")
+                            return
+                        owner_uuid = owner_row[0]
 
                 # Check ownership
                 async with db.execute("SELECT owner_uuid FROM registered_channels WHERE channel_name = ?",
@@ -6801,7 +7242,7 @@ class pyIRCXServer:
         elif cmd == "COUNT":
             await self._messenger_count(user)
 
-        elif cmd == "PUSH" and user.has_mode('a'):
+        elif cmd == "PUSH" and user.is_admin():
             # ADMIN only - push to all logged in users
             if len(parts) < 2:
                 self._service_reply("Messenger", user, "Usage: PUSH <message>")
@@ -6950,7 +7391,7 @@ class pyIRCXServer:
             return
 
         cmd = parts[0].upper()
-        is_staff = user.has_mode('o') or user.has_mode('a') or user.has_mode('g')
+        is_staff = user.is_staff()
 
         if cmd == "LIST":
             await self._newsflash_list(user)
@@ -6971,7 +7412,7 @@ class pyIRCXServer:
             except ValueError:
                 self._service_reply("NewsFlash", user, "Invalid message ID")
 
-        elif cmd == "PUSH" and user.has_mode('a'):
+        elif cmd == "PUSH" and user.is_admin():
             if len(parts) < 2:
                 self._service_reply("NewsFlash", user, "Usage: PUSH <message>")
                 return
@@ -7090,7 +7531,7 @@ class pyIRCXServer:
 
 
     async def handle_kill(self, staff, params):
-        if not (staff.has_mode('o') or staff.has_mode('a')):
+        if not staff.is_high_staff():
             staff.send(self.get_reply("481", staff))
             return
         if not params:
@@ -7114,6 +7555,10 @@ class pyIRCXServer:
         target = self.users.get(target_nick)
         if not target:
             staff.send(self.get_reply("401", staff, target=target_nick))
+            return
+        # Cannot kill services
+        if target.is_service():
+            staff.send(self.get_reply("823", staff, target=target_nick))
             return
         target.send(f":{CONFIG.get('system', 'nick')} KILL {target_nick} :{reason}")
         staff.send(f":{target_nick} KILLED")
@@ -7184,6 +7629,10 @@ class pyIRCXServer:
             user.send(self.get_reply("441", user, target=target_nick, channel=chan_name))
             return
         target = channel.members[target_nick]
+        # Cannot kick services
+        if target.is_service():
+            user.send(self.get_reply("821", user, target=target_nick))
+            return
         msg = f":{user.prefix()} KICK {chan_name} {target_nick} :{reason}"
         channel.broadcast(msg)
         # Log to transcript if +y mode is enabled (before removing member)
@@ -7194,7 +7643,7 @@ class pyIRCXServer:
         channel.voices.discard(target_nick)
         channel.gagged.discard(target_nick)
         target.channels.discard(chan_name)
-        if user.has_mode('o') or user.has_mode('a'):
+        if user.is_high_staff():
             await self.log_staff(user.nickname, "KICK", f"{target_nick} from {chan_name}", reason)
 
     async def handle_mode(self, user, params):
@@ -7205,6 +7654,33 @@ class pyIRCXServer:
             if len(params) == 1:
                 modes = user.get_mode_str()
                 user.send(self.get_reply("221", user, modes=modes))
+            else:
+                # User mode setting
+                mode_str = params[1]
+                adding = True
+                for char in mode_str:
+                    if char == '+':
+                        adding = True
+                    elif char == '-':
+                        adding = False
+                    elif char in 'aogsr':
+                        # Cannot set or unset +a/+o/+g/+s/+r (server-controlled)
+                        user.send(f":{self.servername} NOTICE {user.nickname} :Cannot manually set or unset mode +{char}")
+                    elif char == 'x':
+                        # +x can only be set (already set via IRCX command), cannot be unset
+                        if not adding:
+                            user.send(f":{self.servername} NOTICE {user.nickname} :Cannot unset +x mode")
+                    elif char == 'z':
+                        # +z cannot be set or unset manually (staff-controlled via GAG/UNGAG)
+                        user.send(f":{self.servername} NOTICE {user.nickname} :Cannot manually set or unset +z mode (staff-controlled)")
+                    elif char == 'i':
+                        # +i can be toggled by user
+                        user.set_mode('i', adding)
+                        sign = '+' if adding else '-'
+                        user.send(f":{user.nickname} MODE {user.nickname} :{sign}i")
+                    else:
+                        # Unknown mode
+                        user.send(f":{self.servername} 501 {user.nickname} :Unknown MODE flag")
         elif is_channel(target):
             channel, chan_name = self.get_channel(target)
             if not channel:
@@ -7212,13 +7688,18 @@ class pyIRCXServer:
                 return
             if len(params) == 1:
                 modes = "".join([k for k, v in channel.modes.items() if v])
+                # Add +r if channel is registered
+                if channel.registered and 'r' not in modes:
+                    modes += 'r'
+                # Sort modes for consistent display
+                modes = ''.join(sorted(modes))
                 mode_params = []
                 if channel.modes.get('l') and channel.user_limit:
                     mode_params.append(str(channel.user_limit))
                 # Only show key to channel hosts/owners or staff
                 can_see_key = (user.nickname in channel.owners or
                               user.nickname in channel.hosts or
-                              user.has_mode('o') or user.has_mode('a'))
+                              user.is_high_staff())
                 if channel.modes.get('k') and channel.key:
                     if can_see_key:
                         mode_params.append(channel.key)
@@ -7278,14 +7759,28 @@ class pyIRCXServer:
                     ban_mask = mode_params[param_idx]
                     param_idx += 1
                     if adding:
-                        if ban_mask not in channel.ban_list:
+                        # Check if ban would affect any service
+                        import fnmatch
+                        would_ban_service = False
+                        for nick, member in channel.members.items():
+                            if member.is_service():
+                                user_mask = f"{nick}!{member.username}@{member.host}"
+                                if fnmatch.fnmatch(user_mask.lower(), ban_mask.lower()) or fnmatch.fnmatch(nick.lower(), ban_mask.lower()):
+                                    would_ban_service = True
+                                    break
+                        if would_ban_service:
+                            user.send(self.get_reply("822", user, target=ban_mask))
+                        elif ban_mask not in channel.ban_list:
                             channel.ban_list.append(ban_mask)
+                            sign = '+' if adding else '-'
+                            msg = f":{user.prefix()} MODE {channel.name} {sign}b {ban_mask}"
+                            channel.broadcast(msg)
                     else:
                         if ban_mask in channel.ban_list:
                             channel.ban_list.remove(ban_mask)
-                    sign = '+' if adding else '-'
-                    msg = f":{user.prefix()} MODE {channel.name} {sign}b {ban_mask}"
-                    channel.broadcast(msg)
+                            sign = '+' if adding else '-'
+                            msg = f":{user.prefix()} MODE {channel.name} {sign}b {ban_mask}"
+                            channel.broadcast(msg)
                 else:
                     for ban_mask in channel.ban_list:
                         user.send(f":{self.servername} 367 {user.nickname} {channel.name} {ban_mask}")
@@ -7385,35 +7880,56 @@ class pyIRCXServer:
                 return
             # Require channel host/owner or staff
             if not (user.nickname in channel.owners or user.nickname in channel.hosts or
-                    user.has_mode('o') or user.has_mode('a')):
+                    user.is_high_staff()):
                 user.send(self.get_reply("482", user, target=chan_name))
                 return
             if target_nick not in channel.members:
                 user.send(self.get_reply("441", user, target=target_nick, channel=chan_name))
                 return
+            # Cannot gag services
+            target_member = channel.members[target_nick]
+            if target_member.is_service():
+                user.send(self.get_reply("824", user, target=target_nick))
+                return
             if is_gag:
                 channel.gagged.add(target_nick)
-                user.send(f":{self.servername} NOTICE {user.nickname} :{target_nick} has been gagged in {chan_name}")
+                # Send notification to #System channel (shadow ban - target doesn't know)
+                if "#System" in self.channels:
+                    msg = f":{self.servername} NOTICE #System :[GAG] {user.nickname} gagged {target_nick} in {chan_name}"
+                    self.channels["#System"].broadcast(msg)
             else:
                 channel.gagged.discard(target_nick)
-                user.send(f":{self.servername} NOTICE {user.nickname} :{target_nick} has been ungagged in {chan_name}")
+                # Send notification to #System channel
+                if "#System" in self.channels:
+                    msg = f":{self.servername} NOTICE #System :[UNGAG] {user.nickname} ungagged {target_nick} in {chan_name}"
+                    self.channels["#System"].broadcast(msg)
         else:
             # Global gag: GAG nick
             target_nick = params[0]
             # Require staff for global gag
-            if not (user.has_mode('o') or user.has_mode('a') or user.has_mode('g')):
+            if not (user.is_staff()):
                 user.send(self.get_reply("481", user))
                 return
             target_user = self.users.get(target_nick)
             if not target_user:
                 user.send(self.get_reply("401", user, target=target_nick))
                 return
+            # Cannot gag services
+            if target_user.is_service():
+                user.send(self.get_reply("824", user, target=target_nick))
+                return
             if is_gag:
                 target_user.set_mode('z', True)
-                user.send(f":{self.servername} NOTICE {user.nickname} :{target_nick} has been globally gagged (+z)")
+                # Send notification to #System channel (shadow ban - target doesn't know)
+                if "#System" in self.channels:
+                    msg = f":{self.servername} NOTICE #System :[GAG] {user.nickname} globally gagged {target_nick} (+z)"
+                    self.channels["#System"].broadcast(msg)
             else:
                 target_user.set_mode('z', False)
-                user.send(f":{self.servername} NOTICE {user.nickname} :{target_nick} has been globally ungagged (-z)")
+                # Send notification to #System channel
+                if "#System" in self.channels:
+                    msg = f":{self.servername} NOTICE #System :[UNGAG] {user.nickname} globally ungagged {target_nick} (-z)"
+                    self.channels["#System"].broadcast(msg)
 
     async def quit_user(self, user):
         nick = user.nickname
@@ -7638,6 +8154,10 @@ class ServerManager:
         status_dump_task = asyncio.create_task(self._status_dump_loop())
         server_tasks.append(status_dump_task)
 
+        # Add admin command queue check task
+        admin_cmd_task = asyncio.create_task(self._admin_command_loop())
+        server_tasks.append(admin_cmd_task)
+
         # Wait for shutdown signal or server error
         shutdown_task = asyncio.create_task(self.shutdown_event.wait())
 
@@ -7695,6 +8215,8 @@ class ServerManager:
                     # Collect runtime statistics
                     status_data = {
                         'timestamp': time.time(),
+                        'boot_time': self.server.boot_time,
+                        'peak_users': self.server.max_users_seen,
                         'connected_users': [],
                         'active_channels': [],
                         'linked_servers': []
@@ -7814,6 +8336,57 @@ class ServerManager:
         elif sig == signal.SIGHUP:
             logger.info("Received SIGHUP, reloading configuration...")
             self.reload_config()
+
+    async def _admin_command_loop(self):
+        """Periodically check for admin commands from Cockpit API."""
+        while True:
+            await asyncio.sleep(2)  # Check every 2 seconds
+            await self.check_admin_commands()
+
+    async def check_admin_commands(self):
+        """Check for admin commands from Cockpit API."""
+        cmd_file = '/opt/pyircx/admin_commands.queue'
+        try:
+            if os.path.exists(cmd_file):
+                with open(cmd_file, 'r') as f:
+                    commands = f.readlines()
+                
+                # Clear the file immediately
+                with open(cmd_file, 'w') as f:
+                    f.write('')
+                
+                # Process each command
+                for line in commands:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    
+                    parts = line.split(':', 1)
+                    if len(parts) != 2:
+                        continue
+                    
+                    cmd, arg = parts
+                    
+                    if cmd == 'KILL_CHANNEL':
+                        channel_name = arg.strip()
+                        # Use built-in case-insensitive channel lookup
+                        channel, actual_channel_name = self.server.get_channel(channel_name)
+                        
+                        if channel:
+                            # Kick all users and destroy channel
+                            members_to_kick = list(channel.members.values())
+                            for member in members_to_kick:
+                                if not member.is_virtual:
+                                    # Send PART to user and remove from channel
+                                    member.send(f":{member.prefix()} PART {actual_channel_name} :Channel reconfiguration")
+                                    # Remove channel from user's channel list
+                                    if actual_channel_name in member.channels:
+                                        member.channels.remove(actual_channel_name)
+                            # Remove channel from server memory
+                            del self.server.channels[actual_channel_name]
+                            logger.info(f"Admin command: Killed channel {actual_channel_name} for reconfiguration")
+        except Exception as e:
+            logger.error(f"Error processing admin commands: {e}")
 
     def reload_config(self):
         """Reload configuration file and SSL certificates."""

@@ -51,6 +51,7 @@ echo ""
 echo "=== Checking Required Files ==="
 REQUIRED_FILES=(
     "$INSTALL_DIR/pyircx.py"
+    "$INSTALL_DIR/api.py"
     "$INSTALL_DIR/linking.py"
     "$CONFIG_DIR/pyircx_config.json"
     "/etc/systemd/system/pyircx.service"
@@ -150,21 +151,71 @@ else
 fi
 echo ""
 
-# Check 6: Cockpit module
-echo "=== Checking Cockpit Module ==="
-if [ -d /usr/share/cockpit/pyircx ]; then
-    echo -e "${GREEN}✓${NC} Cockpit module installed (system-wide)"
-    if [ -x /usr/share/cockpit/pyircx/api.py ]; then
-        echo -e "${GREEN}✓${NC} Cockpit API is executable"
+# Check 6: Web Admin Panel
+echo "=== Checking Web Admin Panel ==="
+WEB_ADMIN_DIR="/var/www/html/pyircx-admin"
+if [ -d "$WEB_ADMIN_DIR" ]; then
+    echo -e "${GREEN}✓${NC} Web Admin directory exists"
+
+    # Check required files
+    REQUIRED_WEB_FILES=("index.php" "login.php" "api.php" "admin.js" "style.css")
+    WEB_ISSUES=0
+    for file in "${REQUIRED_WEB_FILES[@]}"; do
+        if [ -f "$WEB_ADMIN_DIR/$file" ]; then
+            echo -e "${GREEN}✓${NC} $file"
+        else
+            echo -e "${RED}✗${NC} $file missing"
+            ((WEB_ISSUES++))
+        fi
+    done
+
+    # Check ownership
+    OWNER=$(stat -c '%U' "$WEB_ADMIN_DIR" 2>/dev/null || echo "unknown")
+    if [ "$OWNER" == "apache" ]; then
+        echo -e "${GREEN}✓${NC} Web admin owned by apache"
     else
-        echo -e "${YELLOW}⚠${NC} Cockpit API is not executable ${YELLOW}(FIXABLE)${NC}"
+        echo -e "${YELLOW}⚠${NC} Web admin owned by $OWNER (should be apache) ${YELLOW}(FIXABLE)${NC}"
+        ((WEB_ISSUES++))
+    fi
+
+    # Check apache in systemd-journal group
+    if groups apache 2>/dev/null | grep -q systemd-journal; then
+        echo -e "${GREEN}✓${NC} apache user in systemd-journal group"
+    else
+        echo -e "${YELLOW}⚠${NC} apache not in systemd-journal group ${YELLOW}(FIXABLE)${NC}"
+        ((WEB_ISSUES++))
+    fi
+
+    # Check polkit rules
+    if [ -f /etc/polkit-1/rules.d/10-pyircx-admin.rules ]; then
+        echo -e "${GREEN}✓${NC} Polkit rules installed"
+    else
+        echo -e "${YELLOW}⚠${NC} Polkit rules missing ${YELLOW}(FIXABLE)${NC}"
+        ((WEB_ISSUES++))
+    fi
+
+    # Check SELinux policies (if SELinux is enabled)
+    if command -v getenforce &>/dev/null && [ "$(getenforce)" != "Disabled" ]; then
+        if semodule -l 2>/dev/null | grep -q pyircx-httpd-systemd; then
+            echo -e "${GREEN}✓${NC} SELinux httpd-systemd policy installed"
+        else
+            echo -e "${YELLOW}⚠${NC} SELinux httpd-systemd policy missing ${YELLOW}(FIXABLE)${NC}"
+            ((WEB_ISSUES++))
+        fi
+
+        if semodule -l 2>/dev/null | grep -q pyircx-httpd-journal; then
+            echo -e "${GREEN}✓${NC} SELinux httpd-journal policy installed"
+        else
+            echo -e "${YELLOW}⚠${NC} SELinux httpd-journal policy missing ${YELLOW}(FIXABLE)${NC}"
+            ((WEB_ISSUES++))
+        fi
+    fi
+
+    if [ $WEB_ISSUES -gt 0 ]; then
         ((ISSUES_FOUND++))
     fi
-elif [ -d ~/.local/share/cockpit/pyircx ]; then
-    echo -e "${YELLOW}⚠${NC} Cockpit module in old user location ${YELLOW}(Should be system-wide)${NC}"
-    ((ISSUES_FOUND++))
 else
-    echo -e "${BLUE}ℹ${NC} Cockpit module not installed ${BLUE}(Optional)${NC}"
+    echo -e "${BLUE}ℹ${NC} Web Admin Panel not installed ${BLUE}(Optional)${NC}"
 fi
 echo ""
 
@@ -274,10 +325,35 @@ else
 fi
 echo ""
 
+# Check 10: API file permissions
+echo "=== Checking API File ==="
+if [ -f "$INSTALL_DIR/api.py" ]; then
+    echo -e "${GREEN}✓${NC} API file exists"
 
-# Check 10: SSL/Certbot (optional)
+    # Check executable
+    if [ -x "$INSTALL_DIR/api.py" ]; then
+        echo -e "${GREEN}✓${NC} API is executable"
+    else
+        echo -e "${YELLOW}⚠${NC} API is not executable ${YELLOW}(FIXABLE)${NC}"
+        ((ISSUES_FOUND++))
+    fi
+
+    # Check ownership
+    OWNER=$(stat -c '%U' "$INSTALL_DIR/api.py")
+    if [ "$OWNER" == "$SERVICE_USER" ]; then
+        echo -e "${GREEN}✓${NC} API owned by $SERVICE_USER"
+    else
+        echo -e "${YELLOW}⚠${NC} API owned by $OWNER (should be $SERVICE_USER) ${YELLOW}(FIXABLE)${NC}"
+        ((ISSUES_FOUND++))
+    fi
+else
+    echo -e "${YELLOW}⚠${NC} API file missing"
+    ((ISSUES_FOUND++))
+fi
 echo ""
-echo -e "${BLUE}Check 10: SSL Configuration${NC}"
+
+# Check 11: SSL/Certbot (optional)
+echo "=== SSL Configuration ==="
 
 # Check if SSL is enabled in config
 if grep -q '"enabled": true' "$CONFIG_DIR/pyircx_config.json" 2>/dev/null | head -1 | grep -q ssl; then
@@ -345,12 +421,13 @@ if [[ ! $REPLY =~ ^[Nn]$ ]]; then
         echo -e "${YELLOW}Fixing permissions...${NC}"
         chown -R "$SERVICE_USER:$SERVICE_GROUP" "$INSTALL_DIR" 2>/dev/null || true
         chown -R "$SERVICE_USER:$SERVICE_GROUP" "$CONFIG_DIR" 2>/dev/null || true
-        chmod 755 "$INSTALL_DIR" 2>/dev/null || true  # Allow Cockpit access
+        chmod 755 "$INSTALL_DIR" 2>/dev/null || true
         chmod 750 "$INSTALL_DIR/transcripts" 2>/dev/null || true  # Keep transcripts private
         chmod 644 "$INSTALL_DIR/pyircx.db" 2>/dev/null || true  # Database readable
         chmod 755 "$INSTALL_DIR/pyircx.py" 2>/dev/null || true
+        chmod 755 "$INSTALL_DIR/api.py" 2>/dev/null || true
         chmod 755 "$INSTALL_DIR/linking.py" 2>/dev/null || true
-        chmod 644 "$CONFIG_DIR/pyircx_config.json" 2>/dev/null || true  # Config readable for Cockpit
+        chmod 644 "$CONFIG_DIR/pyircx_config.json" 2>/dev/null || true
         echo -e "${GREEN}✓ Permissions fixed${NC}"
         ((FIXES_APPLIED++))
     fi
@@ -364,12 +441,42 @@ if [[ ! $REPLY =~ ^[Nn]$ ]]; then
         ((FIXES_APPLIED++))
     fi
 
-    # Fix Cockpit permissions
-    if [ -f /usr/share/cockpit/pyircx/api.py ] && [ ! -x /usr/share/cockpit/pyircx/api.py ]; then
-        echo -e "${YELLOW}Fixing Cockpit API permissions...${NC}"
-        chmod +x /usr/share/cockpit/pyircx/api.py
-        echo -e "${GREEN}✓ Cockpit API permissions fixed${NC}"
-        ((FIXES_APPLIED++))
+    # Fix API permissions
+    if [ -f "$INSTALL_DIR/api.py" ]; then
+        if [ ! -x "$INSTALL_DIR/api.py" ]; then
+            echo -e "${YELLOW}Fixing API permissions...${NC}"
+            chmod 755 "$INSTALL_DIR/api.py"
+            echo -e "${GREEN}✓ API permissions fixed${NC}"
+            ((FIXES_APPLIED++))
+        fi
+
+        # Fix API ownership
+        OWNER=$(stat -c '%U' "$INSTALL_DIR/api.py")
+        if [ "$OWNER" != "$SERVICE_USER" ]; then
+            echo -e "${YELLOW}Fixing API ownership...${NC}"
+            chown "$SERVICE_USER:$SERVICE_GROUP" "$INSTALL_DIR/api.py"
+            echo -e "${GREEN}✓ API ownership fixed${NC}"
+            ((FIXES_APPLIED++))
+        fi
+    fi
+
+    # Fix web admin ownership if installed
+    if [ -d "$WEB_ADMIN_DIR" ]; then
+        OWNER=$(stat -c '%U' "$WEB_ADMIN_DIR" 2>/dev/null || echo "unknown")
+        if [ "$OWNER" != "apache" ]; then
+            echo -e "${YELLOW}Fixing web admin ownership...${NC}"
+            chown -R apache:apache "$WEB_ADMIN_DIR"
+            echo -e "${GREEN}✓ Web admin ownership fixed${NC}"
+            ((FIXES_APPLIED++))
+        fi
+
+        # Add apache to systemd-journal group
+        if ! groups apache 2>/dev/null | grep -q systemd-journal; then
+            echo -e "${YELLOW}Adding apache to systemd-journal group...${NC}"
+            usermod -a -G systemd-journal apache
+            echo -e "${GREEN}✓ apache added to systemd-journal group${NC}"
+            ((FIXES_APPLIED++))
+        fi
     fi
 
     # Enable service if not enabled

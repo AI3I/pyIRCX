@@ -5,6 +5,97 @@ All notable changes to pyIRCX will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-01-11
+
+### Added
+- **Web Administration Panel**: Standalone PHP-based admin interface (replaces Cockpit)
+  - Session-based authentication using IRC staff accounts
+  - Service control (start/stop/restart) via polkit
+  - Real-time log viewer with journalctl integration
+  - User management (list, search, pagination)
+  - Channel management (list, search, pagination)
+  - Staff management (create/edit/delete staff accounts)
+  - Mailbox message system
+  - Access control management with expiration
+  - Database viewer
+  - Responsive design with improved navigation
+- **Staff Profile Support**: Enhanced staff account system
+  - Email address field for staff accounts
+  - Real name field with force_realname option
+  - Profile updates via admin panel
+- **Access Control Expiration**: Timeout field for temporary channel access
+- **Mailbox Message Sending**: Send messages to user mailboxes via admin panel
+- **SELinux Policies**: Production-ready security policies
+  - `pyircx-httpd-systemd.te` - Allow Apache to control pyircx service via D-Bus
+  - `pyircx-httpd-journal-v3.te` - Allow Apache to read systemd journal logs
+- **Polkit Authorization**: Passwordless service management for web admin
+  - `10-pyircx-admin.rules` - Grant apache user permission to manage pyircx.service
+- **Database Migration Script**: `migrate_1.0_to_1.1.sh` for upgrading v1.0.x to v1.1.0
+  - Adds email, realname, force_realname columns to users table
+  - Adds timeout column to server_access table
+  - Safe column existence checking
+- **Comprehensive Test Suites**:
+  - `test_access_control.py` - Complete access control system tests (449 lines)
+  - `test_servicebot.py` - ServiceBot functionality tests (204 lines)
+- **API Enhancements**: Moved to `/opt/pyircx/api.py` with new commands
+  - `test-staff-login` - Staff authentication for web admin
+  - `send-mailbox-message` - Send messages to user mailboxes
+  - `update-staff-profile` - Update staff email/realname
+  - `list-nicks-paginated` / `search-nicks` - Paginated user lists
+  - `list-channels-paginated` / `search-channels` - Paginated channel lists
+  - Enhanced `get_logs()` with journalctl integration
+
+### Changed
+- **Version**: Bumped to 1.1.0
+- **Timestamp**: Updated to "Sun Jan 11 09:21:32 PM EST 2026"
+- **API Location**: Moved from `/usr/share/cockpit/pyircx/api.py` to `/opt/pyircx/api.py`
+- **Installation Script**: Complete rewrite for web admin installation
+  - Installs Apache and PHP with OS-specific packages
+  - Automatic SELinux policy compilation and installation
+  - Automatic polkit rules installation
+  - Configures apache user for systemd-journal group membership
+  - Removed Cockpit installation option
+- **Upgrade Script**: Intelligent v1.0.5 → v1.1.0 migration
+  - Detects what needs upgrading (API, web admin, database, SELinux, polkit)
+  - Automatic database schema migration
+  - Cockpit to Web Admin migration
+  - SELinux policy installation with detection
+  - Polkit rules installation
+  - Complete backup before changes
+- **Repair Script**: Updated for web admin validation
+  - Checks web admin files and permissions
+  - Verifies SELinux policies (if enabled)
+  - Verifies polkit rules
+  - Checks apache group membership
+  - Fixes API file ownership and permissions
+
+### Fixed
+- **User Mode +s (Invisibility)**: Fixed to properly hide invisible users from WHO/NAMES
+- **JOIN/MODE Logic**: Fixed channel mode behavior and JOIN command handling
+- **WHO Command**: Fixed response format and numeric compliance
+- **IRC Numeric Formats**: Fixed colon placement in numerous numerics for RFC compliance
+  - Fixed 366 NAMES reply format (no extra colon before channel)
+  - Corrected numerous other numeric response formats
+
+### Removed
+- **Cockpit Module Dependency**: Replaced with standalone Web Administration Panel
+  - No longer requires Cockpit installation
+  - Removed `/usr/share/cockpit/pyircx/` directory
+  - Removed Cockpit admin token system
+  - Removed Cockpit-specific files from repository
+
+### Security
+- **SELinux Support**: Production-ready policies for web admin on RHEL/Fedora/CentOS
+- **Polkit Authorization**: More secure than sudo for service control
+- **Session-based Authentication**: Web admin uses PHP sessions with bcrypt passwords
+- **Apache User Isolation**: Web admin runs as unprivileged apache user
+
+### Migration Notes
+- **From v1.0.5 to v1.1.0**: Run `./upgrade.sh` or `migrate_1.0_to_1.1.sh` (as root)
+- **Cockpit Users**: Web admin replaces Cockpit - no configuration migration needed
+- **Database Changes**: Automatic schema updates via migration script
+- **Web Admin Access**: Login with existing IRC staff accounts (administrators only)
+
 ## [1.0.5] - 2026-01-09
 
 ### Added

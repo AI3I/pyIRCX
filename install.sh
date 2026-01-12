@@ -194,6 +194,7 @@ copy_files() {
 
     # Copy main script and modules
     cp "$SCRIPT_DIR/pyircx.py" "$INSTALL_DIR/"
+    cp "$SCRIPT_DIR/api.py" "$INSTALL_DIR/" 2>/dev/null || true
     cp "$SCRIPT_DIR/linking.py" "$INSTALL_DIR/"
 
     # Copy or create config
@@ -217,90 +218,151 @@ set_permissions() {
 
     chown -R "$SERVICE_USER:$SERVICE_GROUP" "$INSTALL_DIR"
     chown -R "$SERVICE_USER:$SERVICE_GROUP" "$CONFIG_DIR"
-    chmod 755 "$INSTALL_DIR"  # Changed from 750 - allow read access for Cockpit
+    chmod 755 "$INSTALL_DIR"
     chmod 750 "$INSTALL_DIR/transcripts"  # Keep transcripts private
     chmod 644 "$INSTALL_DIR/pyircx.db" 2>/dev/null || true  # Database readable
-    chmod 644 "$CONFIG_DIR/pyircx_config.json" 2>/dev/null || true  # Config readable for Cockpit
+    chmod 644 "$CONFIG_DIR/pyircx_config.json" 2>/dev/null || true  # Config readable
     chmod 755 "$INSTALL_DIR/pyircx.py"
+    chmod 755 "$INSTALL_DIR/api.py" 2>/dev/null || true
     chmod 755 "$INSTALL_DIR/linking.py" 2>/dev/null || true
 
     echo -e "${GREEN}Permissions set${NC}"
 }
 
-# Install Cockpit module
-install_cockpit() {
-    echo -e "${YELLOW}Installing Cockpit web admin panel...${NC}"
+# Install Web Admin Panel
+install_web_admin() {
+    echo -e "${YELLOW}Installing Web Administration Panel...${NC}"
 
     local os=$(detect_os)
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    WEB_ADMIN_DIR="/var/www/html/pyircx-admin"
 
-    # Install Cockpit package
+    # Install Apache and PHP based on OS
     case "$os" in
         fedora|rhel|centos|rocky|almalinux|oracle|scientific)
-            dnf install -y cockpit || yum install -y cockpit
+            echo -e "${YELLOW}Installing Apache and PHP...${NC}"
+            dnf install -y httpd php php-fpm php-json php-mbstring || yum install -y httpd php php-fpm php-json php-mbstring
+            systemctl enable --now httpd
+            systemctl enable --now php-fpm
             ;;
         debian|ubuntu|linuxmint|pop|elementary|zorin|kali|parrot|raspbian)
+            echo -e "${YELLOW}Installing Apache and PHP...${NC}"
             apt-get update
-            apt-get install -y cockpit
+            apt-get install -y apache2 php php-fpm php-json php-mbstring
+            a2enmod rewrite
+            systemctl enable --now apache2
             ;;
         arch|manjaro|endeavouros|garuda)
-            pacman -S --noconfirm cockpit
-            ;;
-        opensuse*|sles|tumbleweed)
-            zypper install -y cockpit
-            ;;
-        gentoo|funtoo)
-            echo -e "${YELLOW}Gentoo detected. Installing Cockpit from overlay...${NC}"
-            emerge --ask=n app-admin/cockpit || echo -e "${YELLOW}Cockpit may require manual installation from overlay${NC}"
-            ;;
-        void)
-            xbps-install -Sy cockpit
-            ;;
-        alpine)
-            echo -e "${YELLOW}Alpine Linux: Cockpit may not be available in standard repos${NC}"
-            echo "Consider using a lightweight alternative or building from source"
-            return 1
+            echo -e "${YELLOW}Installing Apache and PHP...${NC}"
+            pacman -S --noconfirm apache php php-fpm
+            systemctl enable --now httpd
+            systemctl enable --now php-fpm
             ;;
         *)
-            echo -e "${YELLOW}Unknown OS. Attempting generic installation...${NC}"
-            if command -v apt-get &> /dev/null; then
-                apt-get update && apt-get install -y cockpit
-            elif command -v dnf &> /dev/null; then
-                dnf install -y cockpit
-            elif command -v yum &> /dev/null; then
-                yum install -y cockpit
-            elif command -v pacman &> /dev/null; then
-                pacman -S --noconfirm cockpit
-            elif command -v zypper &> /dev/null; then
-                zypper install -y cockpit
-            else
-                echo -e "${RED}Could not install Cockpit automatically.${NC}"
-                echo "Please install Cockpit manually: https://cockpit-project.org/running.html"
-                return 1
-            fi
+            echo -e "${YELLOW}Please install Apache and PHP manually for your OS${NC}"
+            return 1
             ;;
     esac
 
-    # Copy Cockpit module to system directory
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    mkdir -p /usr/share/cockpit
-    cp -r "$SCRIPT_DIR/cockpit/pyircx" /usr/share/cockpit/
-    chmod +x /usr/share/cockpit/pyircx/api.py
+    # Create web admin directory
+    mkdir -p "$WEB_ADMIN_DIR"
 
-    # Enable and start Cockpit
-    systemctl enable --now cockpit.socket
-
-    # Restart Cockpit to load new module (if already running)
-    if systemctl is-active --quiet cockpit.socket; then
-        echo -e "${YELLOW}Restarting Cockpit to load pyIRCX module...${NC}"
-        systemctl restart cockpit.socket
+    # Copy web admin files
+    if [ -d "$SCRIPT_DIR/web-admin" ]; then
+        cp "$SCRIPT_DIR/web-admin"/*.php "$WEB_ADMIN_DIR/" 2>/dev/null || true
+        cp "$SCRIPT_DIR/web-admin"/*.js "$WEB_ADMIN_DIR/" 2>/dev/null || true
+        cp "$SCRIPT_DIR/web-admin"/*.css "$WEB_ADMIN_DIR/" 2>/dev/null || true
+        cp "$SCRIPT_DIR/web-admin"/.htaccess "$WEB_ADMIN_DIR/" 2>/dev/null || true
+    else
+        echo -e "${RED}Web admin files not found${NC}"
+        return 1
     fi
 
-    echo -e "${GREEN}Cockpit installed successfully!${NC}"
+    # Set ownership to apache user
+    chown -R apache:apache "$WEB_ADMIN_DIR"
+    chmod 755 "$WEB_ADMIN_DIR"
+    chmod 644 "$WEB_ADMIN_DIR"/*.php 2>/dev/null || true
+    chmod 644 "$WEB_ADMIN_DIR"/*.js 2>/dev/null || true
+    chmod 644 "$WEB_ADMIN_DIR"/*.css 2>/dev/null || true
+    chmod 644 "$WEB_ADMIN_DIR"/.htaccess 2>/dev/null || true
+
+    # Add apache user to systemd-journal group for log access
+    usermod -a -G systemd-journal apache 2>/dev/null || true
+
+    # Configure SELinux if enabled
+    if command -v getenforce &>/dev/null && [ "$(getenforce)" != "Disabled" ]; then
+        echo -e "${YELLOW}SELinux detected, installing policies...${NC}"
+        install_selinux
+    fi
+
+    # Install polkit rules
+    install_polkit
+
+    echo -e "${GREEN}Web Admin Panel installed successfully!${NC}"
     echo ""
-    echo "Access Cockpit at: https://localhost:9090"
-    echo "Look for 'pyIRCX Server' in the left menu"
+    echo "Access at: http://localhost/pyircx-admin/"
+    echo "Login with your IRC staff account (administrators only)"
     echo ""
 }
+
+# Install SELinux policies
+install_selinux() {
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+    if [ ! -d "$SCRIPT_DIR/selinux" ]; then
+        echo -e "${YELLOW}SELinux policy files not found, skipping${NC}"
+        return 0
+    fi
+
+    echo -e "${YELLOW}Installing SELinux policies...${NC}"
+
+    cd "$SCRIPT_DIR/selinux"
+
+    # Compile and install httpd-systemd policy
+    if [ -f pyircx-httpd-systemd.te ]; then
+        checkmodule -M -m -o pyircx-httpd-systemd.mod pyircx-httpd-systemd.te
+        semodule_package -o pyircx-httpd-systemd.pp -m pyircx-httpd-systemd.mod
+        semodule -i pyircx-httpd-systemd.pp
+        echo -e "${GREEN}✓ httpd-systemd policy installed${NC}"
+    fi
+
+    # Compile and install httpd-journal policy
+    if [ -f pyircx-httpd-journal-v3.te ]; then
+        checkmodule -M -m -o pyircx-httpd-journal-v3.mod pyircx-httpd-journal-v3.te
+        semodule_package -o pyircx-httpd-journal-v3.pp -m pyircx-httpd-journal-v3.mod
+        semodule -i pyircx-httpd-journal-v3.pp
+        echo -e "${GREEN}✓ httpd-journal policy installed${NC}"
+    fi
+
+    cd - > /dev/null
+
+    echo -e "${GREEN}SELinux policies installed${NC}"
+}
+
+# Install Polkit rules
+install_polkit() {
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+    if [ ! -d "$SCRIPT_DIR/polkit" ]; then
+        echo -e "${YELLOW}Polkit rules not found, skipping${NC}"
+        return 0
+    fi
+
+    echo -e "${YELLOW}Installing Polkit authorization rules...${NC}"
+
+    # Copy polkit rules
+    if [ -f "$SCRIPT_DIR/polkit/10-pyircx-admin.rules" ]; then
+        cp "$SCRIPT_DIR/polkit/10-pyircx-admin.rules" /etc/polkit-1/rules.d/
+        chown root:root /etc/polkit-1/rules.d/10-pyircx-admin.rules
+        chmod 644 /etc/polkit-1/rules.d/10-pyircx-admin.rules
+
+        # Reload polkit
+        systemctl reload polkit 2>/dev/null || true
+
+        echo -e "${GREEN}Polkit rules installed${NC}"
+    fi
+}
+
 
 # Install systemd service
 install_systemd() {
@@ -503,13 +565,16 @@ main() {
     fi
     echo ""
     echo "========================================"
-    echo -e "${YELLOW}Optional: Web Admin Panel (Cockpit)${NC}"
+    echo -e "${YELLOW}Optional: Web Administration Panel${NC}"
     echo "========================================"
     echo ""
-    read -p "Install Cockpit web admin panel? [y/N] " -n 1 -r
+    echo "The Web Admin Panel provides a browser-based interface for"
+    echo "managing the IRC server. Requires Apache and PHP."
+    echo ""
+    read -p "Install Web Administration Panel? [y/N] " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        install_cockpit
+        install_web_admin
     fi
 
     echo ""

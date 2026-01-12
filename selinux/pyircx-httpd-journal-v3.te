@@ -1,0 +1,16 @@
+
+module pyircx-httpd-journal-v3 1.0;
+
+require {
+	type var_log_t;
+	type httpd_t;
+	class file { map open read };
+}
+
+#============= httpd_t ==============
+
+#!!!! This avc is allowed in the current policy
+allow httpd_t var_log_t:file { open read };
+
+#!!!! This avc can be allowed using the boolean 'domain_can_mmap_files'
+allow httpd_t var_log_t:file map;

@@ -1,0 +1,11 @@
+DirectoryIndex index.php index.html
+RewriteEngine On
+
+# Redirect index.html to index.php
+RewriteCond %{THE_REQUEST} /index\.html [NC]
+RewriteRule ^index\.html$ index.php [L,R=301]
+
+# Require authentication for all pages except login
+<FilesMatch "^(?!login\.php$|logout\.php$).*\.php$">
+    # Handled by PHP session
+</FilesMatch>

@@ -212,7 +212,7 @@ Three-tier staff hierarchy matching the original MECS design:
 - **Systemd integration** for production deployments
 - **Hot-reloadable configuration**
 - **Comprehensive logging** with configurable verbosity
-- **Web admin panel** via Cockpit integration (optional)
+- **Web Administration Panel** with PHP/Apache (optional)
 
 ---
 
@@ -535,26 +535,59 @@ RUN pip install aiosqlite bcrypt pyotp
 CMD ["python3", "pyircx.py"]
 ```
 
-### Web Admin Panel (Cockpit)
+### Web Administration Panel
 
-Optional web-based administration:
+Optional browser-based administration interface (v1.1.0+):
 
 ```bash
-# Install Cockpit
-sudo dnf install cockpit
+# Install during setup (recommended)
+sudo ./install.sh
+# Choose "yes" when prompted for Web Administration Panel
 
-# Copy pyIRCX module
-sudo cp -r cockpit/pyircx ~/.local/share/cockpit/
+# Or install manually
+sudo dnf install httpd php php-fpm  # Fedora/RHEL
+# sudo apt install apache2 php        # Debian/Ubuntu
 
-# Access at https://yourserver:9090
+# Install web admin files
+sudo cp -r web-admin/ /var/www/html/pyircx-admin/
+sudo chown -R apache:apache /var/www/html/pyircx-admin/
+
+# Install SELinux policies (Fedora/RHEL/CentOS)
+cd selinux/
+sudo checkmodule -M -m -o pyircx-httpd-systemd.mod pyircx-httpd-systemd.te
+sudo semodule_package -o pyircx-httpd-systemd.pp -m pyircx-httpd-systemd.mod
+sudo semodule -i pyircx-httpd-systemd.pp
+# Repeat for pyircx-httpd-journal-v3.te
+
+# Install polkit rules (for service control)
+sudo cp polkit/10-pyircx-admin.rules /etc/polkit-1/rules.d/
+sudo chmod 644 /etc/polkit-1/rules.d/10-pyircx-admin.rules
+
+# Add apache to systemd-journal group (for log viewing)
+sudo usermod -a -G systemd-journal apache
+
+# Access at http://yourserver/pyircx-admin/
 ```
 
 The web admin provides:
-- Real-time server monitoring
-- User/channel management
-- Configuration editing
-- Log viewing
-- Staff account management
+- **Service Control** — Start/stop/restart pyircx service (via polkit)
+- **Real-time Log Viewer** — View server logs from journalctl
+- **User Management** — List, search, and paginate registered users
+- **Channel Management** — Monitor active channels and modes
+- **Staff Administration** — Create/edit/delete ADMIN/SYSOP/GUIDE accounts
+- **Access Control** — Manage channel access rules with expiration
+- **Mailbox System** — Send messages to user mailboxes
+- **Database Viewer** — Inspect database tables
+- **Session Authentication** — Login with IRC staff accounts (administrators only)
+
+**Security Features:**
+- Session-based authentication (PHP sessions + bcrypt)
+- Polkit authorization for service control (no sudo required)
+- SELinux policies for production deployments
+- Apache user isolation (unprivileged)
+- Audit logging via polkit and systemd
+
+See `web-admin/README.md` and `web-admin/INSTALL.md` for detailed setup instructions.
 
 ---
 
