@@ -379,6 +379,20 @@ if [ $NEEDS_SELINUX -eq 1 ] && command -v semodule &> /dev/null; then
     fi
 fi
 
+# Configure SELinux file contexts for /opt/pyircx (allow Apache write access)
+if command -v semanage &> /dev/null && command -v restorecon &> /dev/null; then
+    echo ""
+    echo -e "${BLUE}Configuring SELinux file contexts...${NC}"
+
+    # Set contexts for database and directory
+    semanage fcontext -a -t httpd_sys_rw_content_t "/opt/pyircx/pyircx\.db" 2>/dev/null || true
+    semanage fcontext -a -t httpd_sys_rw_content_t "/opt/pyircx(/.*)?" 2>/dev/null || true
+
+    # Apply contexts
+    restorecon -Rv /opt/pyircx 2>/dev/null || true
+    echo -e "${GREEN}✓ SELinux file contexts configured${NC}"
+fi
+
 # Install Polkit Rules
 if [ $NEEDS_POLKIT -eq 1 ]; then
     echo ""
@@ -406,10 +420,25 @@ if [ $NEEDS_APACHE_SETUP -eq 1 ]; then
         usermod -a -G systemd-journal apache
         echo -e "${GREEN}✓ Added apache to systemd-journal group${NC}"
 
-        # Restart PHP-FPM
+        # Add apache to pyircx group for database write access
+        if getent group pyircx &>/dev/null; then
+            usermod -a -G pyircx apache
+            echo -e "${GREEN}✓ Added apache to pyircx group${NC}"
+
+            # Ensure /opt/pyircx directory has group write permissions for SQLite
+            chmod g+w /opt/pyircx
+            echo -e "${GREEN}✓ Set group write permissions on /opt/pyircx${NC}"
+        fi
+
+        # Restart PHP-FPM and Apache
         if systemctl is-active --quiet php-fpm 2>/dev/null; then
             systemctl restart php-fpm
             echo -e "${GREEN}✓ Restarted PHP-FPM${NC}"
+        fi
+
+        if systemctl is-active --quiet httpd 2>/dev/null; then
+            systemctl restart httpd
+            echo -e "${GREEN}✓ Restarted Apache${NC}"
         fi
     fi
 fi

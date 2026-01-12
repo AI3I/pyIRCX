@@ -218,9 +218,9 @@ set_permissions() {
 
     chown -R "$SERVICE_USER:$SERVICE_GROUP" "$INSTALL_DIR"
     chown -R "$SERVICE_USER:$SERVICE_GROUP" "$CONFIG_DIR"
-    chmod 755 "$INSTALL_DIR"
+    chmod 775 "$INSTALL_DIR"  # Group needs write for SQLite journal files
     chmod 750 "$INSTALL_DIR/transcripts"  # Keep transcripts private
-    chmod 644 "$INSTALL_DIR/pyircx.db" 2>/dev/null || true  # Database readable
+    chmod 664 "$INSTALL_DIR/pyircx.db" 2>/dev/null || true  # Database group writable
     chmod 644 "$CONFIG_DIR/pyircx_config.json" 2>/dev/null || true  # Config readable
     chmod 755 "$INSTALL_DIR/pyircx.py"
     chmod 755 "$INSTALL_DIR/api.py" 2>/dev/null || true
@@ -335,6 +335,19 @@ install_selinux() {
     fi
 
     cd - > /dev/null
+
+    # Configure file contexts for /opt/pyircx (allow Apache write access)
+    if command -v semanage &> /dev/null && command -v restorecon &> /dev/null; then
+        echo -e "${YELLOW}Configuring SELinux file contexts...${NC}"
+
+        # Set contexts for database and directory
+        semanage fcontext -a -t httpd_sys_rw_content_t "/opt/pyircx/pyircx\.db" 2>/dev/null || true
+        semanage fcontext -a -t httpd_sys_rw_content_t "/opt/pyircx(/.*)?" 2>/dev/null || true
+
+        # Apply contexts
+        restorecon -Rv /opt/pyircx 2>/dev/null || true
+        echo -e "${GREEN}✓ SELinux file contexts configured${NC}"
+    fi
 
     echo -e "${GREEN}SELinux policies installed${NC}"
 }
