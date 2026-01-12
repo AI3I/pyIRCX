@@ -534,15 +534,15 @@ Type /help for available commands."></textarea>
                                 <input type="number" class="form-control" id="cfg-security-cap-timeout">
                             </div>
                             <div class="form-group">
-                                <label>Maximum Auth Attempts</label>
+                                <label>Maximum Authenticated Attempts</label>
                                 <input type="number" class="form-control" id="cfg-security-auth-attempts">
                             </div>
                             <div class="form-group">
-                                <label>Auth Lockout Duration (seconds)</label>
+                                <label>Authenticated Lockout Duration (seconds)</label>
                                 <input type="number" class="form-control" id="cfg-security-auth-lockout">
                             </div>
                             <div class="form-group">
-                                <label>Auth Lockout Window (seconds)</label>
+                                <label>Authenticated Lockout Window (seconds)</label>
                                 <input type="number" class="form-control" id="cfg-security-auth-window">
                             </div>
 
