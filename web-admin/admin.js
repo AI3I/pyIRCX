@@ -190,12 +190,16 @@ console.log("=== admin.js LOADING ===");
                 $('#connected-users').innerHTML = '<div class="empty-state"><div class="empty-state-icon">👤</div><div class="empty-state-text">No Users Connected</div><div class="empty-state-subtext">Waiting for users to join</div></div>';
             } else {
                 let html = '<table class="table table-striped table-bordered table-condensed">';
-                html += '<thead><tr><th>Nick</th><th>Host</th><th>Connected</th><th>Channels</th></tr></thead><tbody>';
+                html += '<thead><tr><th>Nick</th><th>Host</th><th>Connected</th><th>Channels</th><th>Actions</th></tr></thead><tbody>';
                 users.forEach(u => {
                     const chans = u.channels ? u.channels.join(', ') : 'None';
                     html += `<tr><td><strong>${escapeHtml(u.nickname)}</strong></td>`;
                     html += `<td>${escapeHtml(u.username)}@${escapeHtml(u.hostname)}</td>`;
-                    html += `<td>${timeAgo(u.connected_at)}</td><td>${escapeHtml(chans)}</td></tr>`;
+                    html += `<td>${timeAgo(u.connected_at)}</td><td>${escapeHtml(chans)}</td>`;
+                    html += `<td>`;
+                    html += `<button class="btn btn-sm btn-warning" onclick="killUser('${escapeHtml(u.nickname)}')" title="Disconnect user">⚡ KILL</button> `;
+                    html += `<button class="btn btn-sm btn-danger" onclick="banUser('${escapeHtml(u.nickname)}')" title="Ban user">🚫 BAN</button>`;
+                    html += `</td></tr>`;
                 });
                 html += '</tbody></table>';
                 $('#connected-users').innerHTML = html;
@@ -212,11 +216,15 @@ console.log("=== admin.js LOADING ===");
                 $('#active-channels').innerHTML = '<div class="empty-state"><div class="empty-state-icon">💬</div><div class="empty-state-text">No Active Channels</div><div class="empty-state-subtext">Create a channel to get started</div></div>';
             } else {
                 let html = '<table class="table table-striped table-bordered table-condensed">';
-                html += '<thead><tr><th>Channel</th><th>Modes</th><th>Topic</th><th>Members</th></tr></thead><tbody>';
+                html += '<thead><tr><th>Channel</th><th>Type</th><th>Modes</th><th>Topic</th><th>Members</th></tr></thead><tbody>';
                 chans.forEach(c => {
                     const topic = c.topic || '(No topic)';
                     const modes = c.modes ? `+${c.modes}` : '';
+                    const channelType = c.registered ?
+                        '<span class="label label-success">Registered</span>' :
+                        '<span class="label label-default">Dynamic</span>';
                     html += `<tr><td><strong>${escapeHtml(c.name)}</strong></td>`;
+                    html += `<td>${channelType}</td>`;
                     html += `<td><code style="font-size: 11px;">${escapeHtml(modes)}</code></td>`;
                     html += `<td>${escapeHtml(topic)}</td><td>${c.member_count}</td></tr>`;
                 });
@@ -1687,6 +1695,47 @@ console.log("=== admin.js LOADING ===");
         }
         if ($('#log-level-filter')) $('#log-level-filter').addEventListener('change', loadLogs);
     });
+
+    // User management functions
+    window.killUser = function(nickname) {
+        if (!confirm(`Are you sure you want to KILL (disconnect) ${nickname}?\n\nThis will immediately disconnect the user from the server.`)) {
+            return;
+        }
+
+        const reason = prompt('Enter reason for KILL (optional):', 'Killed by administrator');
+        if (reason === null) return; // User cancelled
+
+        callAPI('kill-user', [nickname, reason || 'Killed by administrator']).then(res => {
+            if (res.error) {
+                showToast('Error', res.error, 'error');
+            } else {
+                showToast('Success', res.message, 'success');
+                setTimeout(() => loadRealtimeStatus(), 1000);
+            }
+        });
+    };
+
+    window.banUser = function(nickname) {
+        if (!confirm(`Are you sure you want to BAN ${nickname}?\n\nThis will disconnect the user and temporarily ban their IP address.`)) {
+            return;
+        }
+
+        const duration = prompt('Enter ban duration in seconds (default: 3600 = 1 hour):', '3600');
+        if (duration === null) return; // User cancelled
+
+        const durationSec = parseInt(duration) || 3600;
+        const reason = prompt('Enter ban reason (optional):', 'Banned by administrator');
+        if (reason === null) return; // User cancelled
+
+        callAPI('ban-user', [nickname, durationSec.toString(), reason || 'Banned by administrator']).then(res => {
+            if (res.error) {
+                showToast('Error', res.error, 'error');
+            } else {
+                showToast('Success', res.message, 'success');
+                setTimeout(() => loadRealtimeStatus(), 1000);
+            }
+        });
+    };
 
     window.openModal = openModal;
     window.loadRecentRegs = loadRecentRegs;

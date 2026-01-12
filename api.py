@@ -269,7 +269,52 @@ def send_irc_kill_channel(channel_name):
             f.write(f"KILL_CHANNEL:{channel_name}\n")
         
         return {"success": True, "message": f"Channel {channel_name} will be reset"}
-    
+
+    except Exception as e:
+        return {"error": f"Failed to write admin command: {str(e)}"}
+
+def send_irc_kill_user(nickname, reason="Killed by administrator"):
+    """Kill a user connection by writing to pyircx admin command queue
+
+    Args:
+        nickname: Nickname to kill
+        reason: Kill reason (optional)
+
+    Returns:
+        dict with success/error status
+    """
+    try:
+        cmd_file = '/opt/pyircx/admin_commands.queue'
+
+        # Append command to queue file
+        with open(cmd_file, 'a') as f:
+            f.write(f"KILL_USER:{nickname}:{reason}\n")
+
+        return {"success": True, "message": f"User {nickname} will be disconnected"}
+
+    except Exception as e:
+        return {"error": f"Failed to write admin command: {str(e)}"}
+
+def send_irc_ban_user(nickname, reason="Banned by administrator", duration=3600):
+    """Ban a user (K-Line) by writing to pyircx admin command queue
+
+    Args:
+        nickname: Nickname to ban
+        reason: Ban reason (optional)
+        duration: Ban duration in seconds (default: 1 hour)
+
+    Returns:
+        dict with success/error status
+    """
+    try:
+        cmd_file = '/opt/pyircx/admin_commands.queue'
+
+        # Append command to queue file - format: BAN_USER:nickname:duration:reason
+        with open(cmd_file, 'a') as f:
+            f.write(f"BAN_USER:{nickname}:{duration}:{reason}\n")
+
+        return {"success": True, "message": f"User {nickname} will be banned for {duration} seconds"}
+
     except Exception as e:
         return {"error": f"Failed to write admin command: {str(e)}"}
 
@@ -2215,6 +2260,21 @@ def main():
         result = get_staff_list()
     elif command == "services" or command == "list-services":
         result = get_services_list()
+    elif command == "kill-user":
+        if len(sys.argv) < 3:
+            result = {"error": "Usage: kill-user <nickname> [reason]"}
+        else:
+            nickname = sys.argv[2]
+            reason = sys.argv[3] if len(sys.argv) > 3 else "Killed by administrator"
+            result = send_irc_kill_user(nickname, reason)
+    elif command == "ban-user":
+        if len(sys.argv) < 3:
+            result = {"error": "Usage: ban-user <nickname> [duration] [reason]"}
+        else:
+            nickname = sys.argv[2]
+            duration = int(sys.argv[3]) if len(sys.argv) > 3 else 3600
+            reason = sys.argv[4] if len(sys.argv) > 4 else "Banned by administrator"
+            result = send_irc_ban_user(nickname, reason, duration)
 
     else:
         result = {"error": f"Unknown command: {command}"}

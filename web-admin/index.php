@@ -604,6 +604,7 @@ Type /help for available commands."></textarea>
                                 <label>Filter Action</label>
                                 <select class="form-control" id="cfg-profanity-action">
                                     <option value="warn">Warn</option>
+                                    <option value="gag">Gag (Shadow Ban)</option>
                                     <option value="kick">Kick</option>
                                     <option value="ban">Ban</option>
                                 </select>
@@ -611,22 +612,104 @@ Type /help for available commands."></textarea>
                             <div class="form-group">
                                 <label><input type="checkbox" id="cfg-profanity-case"> Case Sensitive</label>
                             </div>
+                            <div class="form-group">
+                                <label>Warning Message</label>
+                                <input type="text" class="form-control" id="cfg-profanity-warn-msg" placeholder="Please watch your language.">
+                                <small>Message sent to users when warned for profanity.</small>
+                            </div>
+                            <div class="form-group">
+                                <label>Profanity Word List (comma-separated)</label>
+                                <textarea class="form-control" id="cfg-profanity-words" rows="3" placeholder="badword1, badword2, badword3"></textarea>
+                                <small>List of words to filter. Leave empty to disable.</small>
+                            </div>
 
                             <h4 style="margin-top: 20px;">Malicious Detection</h4>
                             <div class="form-group">
                                 <label><input type="checkbox" id="cfg-malicious-enabled"> Enable Malicious Detection</label>
                             </div>
+
+                            <h5 style="margin-top: 15px; color: #666;">Flood Detection</h5>
                             <div class="form-group">
-                                <label>Flood Threshold</label>
+                                <label>Flood Threshold (messages)</label>
                                 <input type="number" class="form-control" id="cfg-malicious-flood-threshold">
+                                <small>Number of messages before considered flooding.</small>
                             </div>
                             <div class="form-group">
-                                <label>CAPS Threshold (%)</label>
-                                <input type="number" step="0.01" class="form-control" id="cfg-malicious-caps">
+                                <label>Flood Window (seconds)</label>
+                                <input type="number" class="form-control" id="cfg-malicious-flood-window">
+                                <small>Time window to check for flood.</small>
                             </div>
                             <div class="form-group">
-                                <label>URL Spam Threshold</label>
-                                <input type="number" class="form-control" id="cfg-malicious-url">
+                                <label>Flood Action</label>
+                                <select class="form-control" id="cfg-malicious-flood-action">
+                                    <option value="warn">Warn</option>
+                                    <option value="gag">Gag (Shadow Ban)</option>
+                                    <option value="kick">Kick</option>
+                                    <option value="ban">Ban</option>
+                                </select>
+                            </div>
+
+                            <h5 style="margin-top: 15px; color: #666;">Repeat Spam Detection</h5>
+                            <div class="form-group">
+                                <label>Repeat Threshold (messages)</label>
+                                <input type="number" class="form-control" id="cfg-malicious-repeat-threshold">
+                                <small>Number of repeated messages before action.</small>
+                            </div>
+                            <div class="form-group">
+                                <label>Repeat Window (seconds)</label>
+                                <input type="number" class="form-control" id="cfg-malicious-repeat-window">
+                                <small>Time window to check for repeated messages.</small>
+                            </div>
+                            <div class="form-group">
+                                <label>Repeat Action</label>
+                                <select class="form-control" id="cfg-malicious-repeat-action">
+                                    <option value="warn">Warn</option>
+                                    <option value="gag">Gag (Shadow Ban)</option>
+                                    <option value="kick">Kick</option>
+                                    <option value="ban">Ban</option>
+                                </select>
+                            </div>
+
+                            <h5 style="margin-top: 15px; color: #666;">Excessive CAPS Detection</h5>
+                            <div class="form-group">
+                                <label>CAPS Minimum Length</label>
+                                <input type="number" class="form-control" id="cfg-malicious-caps-min-length">
+                                <small>Minimum message length to check for caps.</small>
+                            </div>
+                            <div class="form-group">
+                                <label>CAPS Threshold (0.0-1.0)</label>
+                                <input type="number" step="0.01" class="form-control" id="cfg-malicious-caps-threshold">
+                                <small>Percentage of caps in message (e.g., 0.7 = 70%).</small>
+                            </div>
+                            <div class="form-group">
+                                <label>CAPS Action</label>
+                                <select class="form-control" id="cfg-malicious-caps-action">
+                                    <option value="warn">Warn</option>
+                                    <option value="gag">Gag (Shadow Ban)</option>
+                                    <option value="kick">Kick</option>
+                                    <option value="ban">Ban</option>
+                                </select>
+                            </div>
+
+                            <h5 style="margin-top: 15px; color: #666;">URL Spam Detection</h5>
+                            <div class="form-group">
+                                <label>URL Spam Threshold (URLs)</label>
+                                <input type="number" class="form-control" id="cfg-malicious-url-threshold">
+                                <small>Number of URLs before considered spam.</small>
+                            </div>
+                            <div class="form-group">
+                                <label>URL Spam Window (seconds)</label>
+                                <input type="number" class="form-control" id="cfg-malicious-url-window">
+                                <small>Time window to check for URL spam.</small>
+                            </div>
+                            <div class="form-group">
+                                <label>URL Spam Action</label>
+                                <select class="form-control" id="cfg-malicious-url-action">
+                                    <option value="warn">Warn</option>
+                                    <option value="gag">Gag (Shadow Ban)</option>
+                                    <option value="kick">Kick</option>
+                                    <option value="ban">Ban</option>
+                                </select>
                             </div>
                         </div>
 
