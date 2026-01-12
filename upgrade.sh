@@ -100,14 +100,24 @@ fi
 
 # Check database schema for v1.1.0 columns
 if [ -f "$INSTALL_DIR/pyircx.db" ]; then
-    HAS_EMAIL_COL=$(sqlite3 "$INSTALL_DIR/pyircx.db" "PRAGMA table_info(users);" 2>/dev/null | grep -c "|email|" || echo "0")
-    HAS_TIMEOUT_COL=$(sqlite3 "$INSTALL_DIR/pyircx.db" "PRAGMA table_info(server_access);" 2>/dev/null | grep -c "|timeout|" || echo "0")
-
-    if [ "$HAS_EMAIL_COL" -eq 0 ] || [ "$HAS_TIMEOUT_COL" -eq 0 ]; then
-        echo -e "${YELLOW}✗ Database needs migration to v1.1.0 schema${NC}"
+    # Ensure sqlite3 is available
+    if ! command -v sqlite3 &>/dev/null; then
+        echo -e "${YELLOW}✗ sqlite3 not installed (needed for database migration)${NC}"
         NEEDS_DB_MIGRATION=1
     else
-        echo -e "${GREEN}✓ Database schema up to date${NC}"
+        HAS_EMAIL_COL=$(sqlite3 "$INSTALL_DIR/pyircx.db" "PRAGMA table_info(users);" 2>/dev/null | grep -c "|email|")
+        HAS_TIMEOUT_COL=$(sqlite3 "$INSTALL_DIR/pyircx.db" "PRAGMA table_info(server_access);" 2>/dev/null | grep -c "|timeout|")
+
+        # Ensure we got valid integers (grep -c should never fail, but handle empty/error cases)
+        HAS_EMAIL_COL=${HAS_EMAIL_COL:-0}
+        HAS_TIMEOUT_COL=${HAS_TIMEOUT_COL:-0}
+
+        if [ "$HAS_EMAIL_COL" -eq 0 ] || [ "$HAS_TIMEOUT_COL" -eq 0 ]; then
+            echo -e "${YELLOW}✗ Database needs migration to v1.1.0 schema${NC}"
+            NEEDS_DB_MIGRATION=1
+        else
+            echo -e "${GREEN}✓ Database schema up to date${NC}"
+        fi
     fi
 fi
 
@@ -268,6 +278,28 @@ fi
 if [ $NEEDS_DB_MIGRATION -eq 1 ]; then
     echo ""
     echo -e "${BLUE}Running database migration...${NC}"
+
+    # Install sqlite if not present
+    if ! command -v sqlite3 &>/dev/null; then
+        echo -e "${YELLOW}Installing sqlite for database migration...${NC}"
+        if command -v dnf &> /dev/null; then
+            dnf install -y sqlite >/dev/null 2>&1
+        elif command -v apt-get &> /dev/null; then
+            apt-get install -y sqlite3 >/dev/null 2>&1
+        elif command -v yum &> /dev/null; then
+            yum install -y sqlite >/dev/null 2>&1
+        elif command -v pacman &> /dev/null; then
+            pacman -S --noconfirm sqlite >/dev/null 2>&1
+        fi
+
+        if command -v sqlite3 &>/dev/null; then
+            echo -e "${GREEN}✓ sqlite installed${NC}"
+        else
+            echo -e "${RED}✗ Failed to install sqlite${NC}"
+            echo -e "${YELLOW}⚠ Please install sqlite manually and re-run upgrade${NC}"
+        fi
+    fi
+
     if [ -f "$SCRIPT_DIR/migrate_1.0_to_1.1.sh" ]; then
         bash "$SCRIPT_DIR/migrate_1.0_to_1.1.sh"
         echo -e "${GREEN}✓ Database migrated to v1.1.0 schema${NC}"
