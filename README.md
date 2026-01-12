@@ -25,6 +25,27 @@ If you remember the days of **Microsoft Comic Chat**, chat rooms with real nicks
 
 ## Recent Updates
 
+### Version 1.1.0 (January 2026)
+**Web Administration Panel & IRC Protocol Fixes**
+
+- **Web Admin Panel** — Standalone PHP-based admin interface replacing Cockpit
+  - Session-based authentication with IRC staff accounts
+  - Service control via polkit (passwordless start/stop/restart)
+  - Real-time log viewer with journalctl integration
+  - User and channel management with search and pagination
+  - Staff profile management (email, real name)
+  - Access control with expiration support
+  - Mailbox message system
+- **SELinux Policies** — Production-ready security policies for RHEL/Fedora/CentOS
+- **Polkit Authorization** — Secure service management without sudo
+- **Database Migration** — Automatic schema upgrade from v1.0.x
+- **IRC Protocol Fixes** — Fixed user mode +s invisibility, JOIN/MODE logic, WHO command
+- **Numeric Compliance** — Fixed colon placement in numerous IRC numerics for RFC compliance
+- **Staff Profiles** — Email and real name fields for staff accounts
+- **Access Expiration** — Timeout field for temporary channel access rules
+- **Enhanced API** — New commands for staff login, mailbox messages, pagination, and search
+- **Comprehensive Tests** — Added test suites for access control and ServiceBot
+
 ### Version 1.0.5 (January 2026)
 **WebChat Browser Client & WEBIRC Support**
 
@@ -49,13 +70,14 @@ If you remember the days of **Microsoft Comic Chat**, chat rooms with real nicks
 - **Documentation Updates** — All references and badges updated to reflect GPLv3
 
 ### Version 1.0.3 (January 2026)
-**Cockpit Enhancements & Security Fixes**
+**Cockpit Module & Security Fixes**
 
-- **Staff Management** — Full CRUD interface for managing ADMIN/SYSOP/GUIDE accounts
+- **Staff Management** — Full CRUD interface for managing ADMIN/SYSOP/GUIDE accounts (via Cockpit)
 - **Enhanced Statistics** — Detailed server stats with staff breakdowns and access rule counts
 - **Channel Modes Display** — Active channels now show modes (+nt, +mnst, etc.)
 - **Mode Security Fix** — Prevented manual setting of +r (registered) mode on channels
 - **UI Improvements** — Reorganized dashboard with better information hierarchy
+- **Note:** Cockpit module replaced with Web Administration Panel in v1.1.0
 
 ### Version 1.0.0 (January 2026)
 **Server-to-Server Linking**
