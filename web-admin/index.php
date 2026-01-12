@@ -43,6 +43,10 @@ $admin_user = htmlspecialchars($_SESSION["admin_user"]);
                     <span class="nav-icon">💬</span>
                     <span class="nav-label">Channels</span>
                 </a>
+                <a href="#services" class="nav-item" data-page="services">
+                    <span class="nav-icon">🤖</span>
+                    <span class="nav-label">Services</span>
+                </a>
                 <a href="#staff" class="nav-item" data-page="staff">
                     <span class="nav-icon">👮</span>
                     <span class="nav-label">Staff</span>
@@ -204,6 +208,34 @@ $admin_user = htmlspecialchars($_SESSION["admin_user"]);
                     <div class="card-body">
                         <div id="channels-list">Loading...</div>
                         <div id="channels-pagination" class="pagination-controls"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Services Page -->
+            <div class="page" id="page-services">
+                <div class="page-header">
+                    <h2>Network Services</h2>
+                    <p>Core services and ServiceBots</p>
+                </div>
+
+                <!-- Core Services -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>⚙️ Core Services</h3>
+                    </div>
+                    <div class="card-body">
+                        <div id="core-services-list">Loading...</div>
+                    </div>
+                </div>
+
+                <!-- ServiceBots -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>🤖 ServiceBots</h3>
+                    </div>
+                    <div class="card-body">
+                        <div id="servicebots-list">Loading...</div>
                     </div>
                 </div>
             </div>

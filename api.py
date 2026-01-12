@@ -153,6 +153,101 @@ def get_realtime_status():
     except Exception as e:
         return {"error": str(e)}
 
+def get_services_list():
+    """Get list of network services and ServiceBots with their status"""
+    try:
+        config = load_config()
+
+        # Define core services (always present when server is running)
+        core_services = [
+            {
+                "nickname": "System",
+                "type": "Core Service",
+                "description": "Network Services",
+                "is_servicebot": False,
+                "channels": ["#System"]
+            },
+            {
+                "nickname": "Registrar",
+                "type": "Core Service",
+                "description": "Registration Services (nickname and channel registration)",
+                "is_servicebot": False,
+                "channels": ["#System"]
+            },
+            {
+                "nickname": "Messenger",
+                "type": "Core Service",
+                "description": "Message Services (mailbox and private messaging)",
+                "is_servicebot": False,
+                "channels": ["#System"]
+            },
+            {
+                "nickname": "NewsFlash",
+                "type": "Core Service",
+                "description": "News Broadcast Services (rotating and push messages)",
+                "is_servicebot": False,
+                "channels": ["#System"]
+            }
+        ]
+
+        # Get ServiceBot configuration
+        servicebot_count = config.get('services', {}).get('servicebot_count', 10)
+        servicebot_max_channels = config.get('services', {}).get('servicebot_max_channels', 10)
+
+        # Create ServiceBot entries
+        servicebots = []
+        for i in range(1, servicebot_count + 1):
+            bot_name = f"ServiceBot{i:02d}"
+            servicebots.append({
+                "nickname": bot_name,
+                "type": "ServiceBot",
+                "description": f"Service Bot #{i} (channel monitoring and moderation)",
+                "is_servicebot": True,
+                "max_channels": servicebot_max_channels,
+                "channels": []  # Will be populated from status if available
+            })
+
+        # Try to get real-time channel information from status file
+        if os.path.exists(DEFAULT_STATUS):
+            try:
+                with open(DEFAULT_STATUS, 'r') as f:
+                    status = json.load(f)
+
+                # Update service channel lists based on active channels
+                all_services = core_services + servicebots
+                for channel_data in status.get('active_channels', []):
+                    channel_name = channel_data.get('name')
+                    members = channel_data.get('members', [])
+
+                    # Check if any services are in this channel
+                    for service in all_services:
+                        # Note: status file only shows real users, not virtual ones
+                        # So we can't get actual service presence, only maintain the default lists
+                        pass
+
+                # Add timestamp for freshness
+                return {
+                    "services": all_services,
+                    "servicebot_count": servicebot_count,
+                    "servicebot_enabled": config.get('servicebot', {}).get('enabled', True),
+                    "timestamp": status.get('timestamp', 0),
+                    "server_running": True
+                }
+            except Exception:
+                # If status file can't be read, still return service list
+                pass
+
+        # Return services list even if status file not available
+        return {
+            "services": core_services + servicebots,
+            "servicebot_count": servicebot_count,
+            "servicebot_enabled": config.get('servicebot', {}).get('enabled', True),
+            "server_running": False
+        }
+
+    except Exception as e:
+        return {"error": str(e)}
+
 # ============================================================================
 # IRC SERVER COMMUNICATION
 # ============================================================================
@@ -2118,6 +2213,8 @@ def main():
         result = get_registered_channels(limit)
     elif command == "staff":
         result = get_staff_list()
+    elif command == "services" or command == "list-services":
+        result = get_services_list()
 
     else:
         result = {"error": f"Unknown command: {command}"}

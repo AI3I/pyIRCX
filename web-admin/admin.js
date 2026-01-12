@@ -617,6 +617,75 @@ console.log("=== admin.js LOADING ===");
         });
     }
 
+    function loadServices() {
+        callAPI('services').then(data => {
+            if (data.error) {
+                $('#core-services-list').innerHTML = `<div class="alert alert-danger">${escapeHtml(data.error)}</div>`;
+                $('#servicebots-list').innerHTML = '';
+                return;
+            }
+
+            const services = data.services || [];
+            const coreServices = services.filter(s => !s.is_servicebot);
+            const serviceBots = services.filter(s => s.is_servicebot);
+
+            // Display core services
+            if (coreServices.length === 0) {
+                $('#core-services-list').innerHTML = '<p class="text-muted">No core services available.</p>';
+            } else {
+                let html = '<table class="table table-striped table-bordered">';
+                html += '<thead><tr><th>Service Name</th><th>Type</th><th>Description</th><th>Channels</th></tr></thead><tbody>';
+                coreServices.forEach(service => {
+                    html += `<tr>`;
+                    html += `<td><strong>${escapeHtml(service.nickname)}</strong></td>`;
+                    html += `<td><span class="label label-primary">${escapeHtml(service.type)}</span></td>`;
+                    html += `<td>${escapeHtml(service.description)}</td>`;
+                    html += `<td>${service.channels && service.channels.length > 0 ? escapeHtml(service.channels.join(', ')) : '<em class="text-muted">None</em>'}</td>`;
+                    html += `</tr>`;
+                });
+                html += '</tbody></table>';
+                $('#core-services-list').innerHTML = html;
+            }
+
+            // Display ServiceBots
+            if (serviceBots.length === 0) {
+                $('#servicebots-list').innerHTML = '<p class="text-muted">No ServiceBots configured.</p>';
+            } else {
+                let statusHtml = '';
+                if (data.servicebot_enabled === false) {
+                    statusHtml = '<div class="alert alert-warning">⚠️ ServiceBots are currently disabled in the configuration.</div>';
+                }
+
+                let html = statusHtml;
+                html += `<p><strong>Total ServiceBots:</strong> ${serviceBots.length} | <strong>Max Channels Per Bot:</strong> ${serviceBots[0].max_channels || 'N/A'}</p>`;
+                html += '<table class="table table-striped table-bordered">';
+                html += '<thead><tr><th>Bot Name</th><th>Status</th><th>Active Channels</th><th>Capacity</th></tr></thead><tbody>';
+                serviceBots.forEach(bot => {
+                    const activeChannels = bot.channels ? bot.channels.length : 0;
+                    const maxChannels = bot.max_channels || 10;
+                    const capacity = ((activeChannels / maxChannels) * 100).toFixed(0);
+                    const capacityClass = capacity > 80 ? 'danger' : capacity > 50 ? 'warning' : 'success';
+
+                    html += `<tr>`;
+                    html += `<td><strong>${escapeHtml(bot.nickname)}</strong></td>`;
+                    html += `<td><span class="label label-${data.server_running ? 'success' : 'default'}">`;
+                    html += data.server_running ? 'Online' : 'Offline';
+                    html += `</span></td>`;
+                    html += `<td>${activeChannels > 0 ? escapeHtml(bot.channels.join(', ')) : '<em class="text-muted">None</em>'}</td>`;
+                    html += `<td>`;
+                    html += `<span class="label label-${capacityClass}">${activeChannels}/${maxChannels} (${capacity}%)</span>`;
+                    html += `</td>`;
+                    html += `</tr>`;
+                });
+                html += '</tbody></table>';
+                $('#servicebots-list').innerHTML = html;
+            }
+        }).catch(err => {
+            $('#core-services-list').innerHTML = `<div class="alert alert-danger">Error loading services: ${escapeHtml(err.message)}</div>`;
+            $('#servicebots-list').innerHTML = '';
+        });
+    }
+
 
     function loadChannels(page = 1) {
         channelsCurrentPage = page;
@@ -1371,6 +1440,7 @@ console.log("=== admin.js LOADING ===");
             case 'dashboard': loadServiceStatus(); loadRealtimeStatus(); loadStats(); break;
             case 'users': loadRecentRegs(); loadRealtimeStatus(); break;
             case 'channels': loadChannels(); loadRealtimeStatus(); break;
+            case 'services': loadServices(); break;
             case 'staff': loadStaff(); break;
             case 'access': loadAccessList(); break;
             case 'newsflash': loadNewsflash(); loadNewsflashSettings(); break;
