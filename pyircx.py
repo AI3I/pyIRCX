@@ -8444,6 +8444,61 @@ class ServerManager:
                                 logger.info(f"Admin command: Banned user {nickname} ({ip}) for {duration}s - {reason}")
                                 # Disconnect the user
                                 await self.server.quit_user(user, reason=f"Banned: {reason}")
+
+                    elif cmd == 'LOCK_CHANNEL':
+                        # Format: LOCK_CHANNEL:channel:owner
+                        parts = arg.split(':', 1)
+                        if len(parts) >= 1:
+                            channel_name = parts[0].strip()
+                            owner = parts[1].strip() if len(parts) > 1 else "System"
+
+                            # First, register the channel in the database
+                            try:
+                                db = self.server.db_pool.get_connection()
+                                cursor = db.cursor()
+
+                                # Check if channel already registered
+                                cursor.execute("SELECT channel_name FROM registered_channels WHERE channel_name = ?", (channel_name,))
+                                existing = cursor.fetchone()
+
+                                if not existing:
+                                    # Register the channel
+                                    import uuid
+                                    account_uuid = str(uuid.uuid4())
+                                    cursor.execute("""
+                                        INSERT INTO registered_channels
+                                        (channel_name, owner, account_uuid, registered_at, modes)
+                                        VALUES (?, ?, ?, ?, ?)
+                                    """, (channel_name, owner, account_uuid, int(time.time()), "ra"))
+                                    db.commit()
+                                    logger.info(f"Admin command: Registered channel {channel_name} to {owner}")
+                                else:
+                                    # Update existing channel to set +ra modes
+                                    cursor.execute("""
+                                        UPDATE registered_channels
+                                        SET modes = 'ra', owner = ?
+                                        WHERE channel_name = ?
+                                    """, (owner, channel_name))
+                                    db.commit()
+                                    logger.info(f"Admin command: Updated channel {channel_name} owner to {owner} with +ra modes")
+
+                                self.server.db_pool.return_connection(db)
+
+                                # Kill the channel to force reload with new settings
+                                channel, actual_channel_name = self.server.get_channel(channel_name)
+                                if channel:
+                                    members_to_kick = list(channel.members.values())
+                                    for member in members_to_kick:
+                                        if not member.is_virtual:
+                                            member.send(f":{member.prefix()} PART {actual_channel_name} :Channel locked by administrator")
+                                            if actual_channel_name in member.channels:
+                                                member.channels.remove(actual_channel_name)
+                                    del self.server.channels[actual_channel_name]
+                                    logger.info(f"Admin command: Locked channel {actual_channel_name} (registered +ra to {owner})")
+
+                            except Exception as e:
+                                logger.error(f"Error locking channel {channel_name}: {e}")
+
         except Exception as e:
             logger.error(f"Error processing admin commands: {e}")
 

@@ -216,7 +216,7 @@ console.log("=== admin.js LOADING ===");
                 $('#active-channels').innerHTML = '<div class="empty-state"><div class="empty-state-icon">💬</div><div class="empty-state-text">No Active Channels</div><div class="empty-state-subtext">Create a channel to get started</div></div>';
             } else {
                 let html = '<table class="table table-striped table-bordered table-condensed">';
-                html += '<thead><tr><th>Channel</th><th>Type</th><th>Modes</th><th>Topic</th><th>Members</th></tr></thead><tbody>';
+                html += '<thead><tr><th>Channel</th><th>Type</th><th>Modes</th><th>Topic</th><th>Members</th><th>Actions</th></tr></thead><tbody>';
                 chans.forEach(c => {
                     const topic = c.topic || '(No topic)';
                     const modes = c.modes ? `+${c.modes}` : '';
@@ -226,7 +226,13 @@ console.log("=== admin.js LOADING ===");
                     html += `<tr><td><strong>${escapeHtml(c.name)}</strong></td>`;
                     html += `<td>${channelType}</td>`;
                     html += `<td><code style="font-size: 11px;">${escapeHtml(modes)}</code></td>`;
-                    html += `<td>${escapeHtml(topic)}</td><td>${c.member_count}</td></tr>`;
+                    html += `<td>${escapeHtml(topic)}</td><td>${c.member_count}</td>`;
+                    html += `<td>`;
+                    html += `<button class="btn btn-sm btn-warning" onclick="killChannel('${escapeHtml(c.name)}')" title="Reset channel (kicks all users)">⚡ KILL</button> `;
+                    if (!c.registered) {
+                        html += `<button class="btn btn-sm btn-danger" onclick="lockChannel('${escapeHtml(c.name)}')" title="Seize control (register + auth-only)">🔒 LOCK</button>`;
+                    }
+                    html += `</td></tr>`;
                 });
                 html += '</tbody></table>';
                 $('#active-channels').innerHTML = html;
@@ -1728,6 +1734,40 @@ console.log("=== admin.js LOADING ===");
         if (reason === null) return; // User cancelled
 
         callAPI('ban-user', [nickname, durationSec.toString(), reason || 'Banned by administrator']).then(res => {
+            if (res.error) {
+                showToast('Error', res.error, 'error');
+            } else {
+                showToast('Success', res.message, 'success');
+                setTimeout(() => loadRealtimeStatus(), 1000);
+            }
+        });
+    };
+
+    // Channel management functions
+    window.killChannel = function(channelName) {
+        if (!confirm(`Are you sure you want to KILL ${channelName}?\n\nThis will kick all users and destroy the channel. If it's registered, it will be reloaded from the database when someone rejoins.`)) {
+            return;
+        }
+
+        callAPI('kill-channel', [channelName]).then(res => {
+            if (res.error) {
+                showToast('Error', res.error, 'error');
+            } else {
+                showToast('Success', res.message, 'success');
+                setTimeout(() => loadRealtimeStatus(), 1000);
+            }
+        });
+    };
+
+    window.lockChannel = function(channelName) {
+        if (!confirm(`Are you sure you want to LOCK ${channelName}?\n\nThis will:\n• Register the channel (+r)\n• Set auth-only mode (+a)\n• Seize administrative control\n\nOnly authenticated users will be able to join.`)) {
+            return;
+        }
+
+        const owner = prompt('Enter owner for the channel (staff username or registered nickname):', 'System');
+        if (owner === null) return; // User cancelled
+
+        callAPI('lock-channel', [channelName, owner || 'System']).then(res => {
             if (res.error) {
                 showToast('Error', res.error, 'error');
             } else {

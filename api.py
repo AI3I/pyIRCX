@@ -318,6 +318,28 @@ def send_irc_ban_user(nickname, reason="Banned by administrator", duration=3600)
     except Exception as e:
         return {"error": f"Failed to write admin command: {str(e)}"}
 
+def send_irc_lock_channel(channel_name, owner="System"):
+    """Lock a channel (register + set auth-only) by writing to pyircx admin command queue
+
+    Args:
+        channel_name: Channel to lock (e.g. '#channel')
+        owner: Owner for the channel (staff username or registered nickname)
+
+    Returns:
+        dict with success/error status
+    """
+    try:
+        cmd_file = '/opt/pyircx/admin_commands.queue'
+
+        # Append command to queue file - format: LOCK_CHANNEL:channel:owner
+        with open(cmd_file, 'a') as f:
+            f.write(f"LOCK_CHANNEL:{channel_name}:{owner}\n")
+
+        return {"success": True, "message": f"Channel {channel_name} will be locked and registered to {owner}"}
+
+    except Exception as e:
+        return {"error": f"Failed to write admin command: {str(e)}"}
+
 def apply_channel_modes_live(channel_name, modes):
     """Apply channel modes by killing channel to force reload from database
 
@@ -2275,6 +2297,19 @@ def main():
             duration = int(sys.argv[3]) if len(sys.argv) > 3 else 3600
             reason = sys.argv[4] if len(sys.argv) > 4 else "Banned by administrator"
             result = send_irc_ban_user(nickname, reason, duration)
+    elif command == "kill-channel":
+        if len(sys.argv) < 3:
+            result = {"error": "Usage: kill-channel <channel>"}
+        else:
+            channel = sys.argv[2]
+            result = send_irc_kill_channel(channel)
+    elif command == "lock-channel":
+        if len(sys.argv) < 3:
+            result = {"error": "Usage: lock-channel <channel> [owner]"}
+        else:
+            channel = sys.argv[2]
+            owner = sys.argv[3] if len(sys.argv) > 3 else "System"
+            result = send_irc_lock_channel(channel, owner)
 
     else:
         result = {"error": f"Unknown command: {command}"}
