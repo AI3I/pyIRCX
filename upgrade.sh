@@ -310,13 +310,8 @@ if [ $NEEDS_DB_MIGRATION -eq 1 ]; then
         fi
     fi
 
-    if [ -f "$SCRIPT_DIR/migrate_1.0_to_1.1.sh" ]; then
-        bash "$SCRIPT_DIR/migrate_1.0_to_1.1.sh"
-        echo -e "${GREEN}✓ Database migrated to v1.1.0 schema${NC}"
-    else
-        echo -e "${RED}✗ Migration script not found: migrate_1.0_to_1.1.sh${NC}"
-        echo -e "${YELLOW}⚠ You may need to run migration manually${NC}"
-    fi
+    echo -e "${BLUE}Database migrations handled automatically by pyircx.py on startup${NC}"
+    echo -e "${GREEN}✓ Database schema will be updated on first run${NC}"
 fi
 
 # Install Web Admin Panel
