@@ -21,11 +21,6 @@
     "nick": "System",
     "ident": "System"
   },
-  "modes": {
-    "user": "agiorxz",
-    "channel": "adefiklmnprstuwxy",
-    "channel_defaults": "nt"
-  },
   "transcript": {
     "enabled": true,
     "directory": "transcripts",
