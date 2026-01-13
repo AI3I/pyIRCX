@@ -4,7 +4,7 @@
 
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.0.5-brightgreen.svg)](#)
+[![Version](https://img.shields.io/badge/version-1.1.2-brightgreen.svg)](#)
 [![Tests](https://img.shields.io/badge/tests-54%20passing-brightgreen.svg)](#testing)
 
 ---
@@ -24,6 +24,32 @@ If you remember the days of **Microsoft Comic Chat**, chat rooms with real nicks
 ---
 
 ## Recent Updates
+
+### Version 1.1.2 (January 2026)
+**Channel Operations & Database Architecture Improvements**
+
+- **Channel Unlock Fix** — Services can now set/unset MODE +z (locked mode) for web admin
+- **Database Migration** — Migrated from `reg_chans` to `registered_channels` with JSON properties column
+  - Channels are now dynamic by default (created on-demand, lost when empty)
+  - Registered channels persist full state (owners, hosts, voices, ACCESS, topic, keys, modes)
+  - All channel properties stored as JSON for flexibility
+- **API Updates** — Migrated api.py to use new database schema (8 functions updated)
+- **Configuration Cleanup** — Removed static modes section from config template (now hardcoded)
+- **Mode Consistency Fixes** — User modes now consistently `agiorsxz`, channel modes fully documented
+- **STATS s Fix** — Now correctly shows virtual services (System, Registrar, etc.)
+- **Channel +r Consistency** — Synchronized channel.registered flag with channel.modes['r']
+- **UNREGISTER Improvements** — Now properly removes +r mode and broadcasts change
+- **MODE -r Support** — High staff can use MODE -r to unregister channels directly
+- **Database Permissions** — Apache user added to pyircx group for web admin write access
+- **Removed** — DEFAULT configuration block, legacy channel persistence, migrate_1.0_to_1.1.sh script
+
+### Version 1.1.1 (January 2026)
+**Bug Fixes & UI Standardization**
+
+- **Kill/Lock Buttons** — Added KILL and LOCK buttons for channel management in web admin
+- **User Management** — Added KILL_USER and BAN_USER admin command handlers
+- **Security Settings** — Changed 'Auth' labels to 'Authenticated' for clarity
+- **ServiceBot Configuration** — Added configuration and user management features
 
 ### Version 1.1.0 (January 2026)
 **Web Administration Panel & IRC Protocol Fixes**
