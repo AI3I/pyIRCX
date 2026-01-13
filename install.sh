@@ -406,6 +406,13 @@ install_systemd() {
     # Enable and start pyircx service
     systemctl enable pyircx
     systemctl start pyircx
+    sleep 2
+
+    # Fix database permissions after service creates it
+    if systemctl is-active --quiet pyircx; then
+        chmod 664 "$INSTALL_DIR/pyircx.db" 2>/dev/null || true
+        chmod 775 "$INSTALL_DIR" 2>/dev/null || true
+    fi
 
     echo -e "${GREEN}Systemd service installed and started${NC}"
     echo ""

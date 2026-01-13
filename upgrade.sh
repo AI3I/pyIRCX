@@ -508,7 +508,7 @@ echo ""
 echo -e "${BLUE}Fixing permissions...${NC}"
 chown -R "$SERVICE_USER:$SERVICE_GROUP" "$INSTALL_DIR"
 chown -R "$SERVICE_USER:$SERVICE_GROUP" "$CONFIG_DIR"
-chmod 755 "$INSTALL_DIR"
+chmod 775 "$INSTALL_DIR"
 chmod 750 "$INSTALL_DIR/transcripts" 2>/dev/null || true
 chmod 664 "$INSTALL_DIR/pyircx.db" 2>/dev/null || true
 chmod 755 "$INSTALL_DIR/pyircx.py"
@@ -526,6 +526,10 @@ if [ $SERVICE_WAS_RUNNING -eq 1 ]; then
 
     if systemctl is-active --quiet pyircx; then
         echo -e "${GREEN}✓ Service restarted successfully${NC}"
+        # Fix database permissions after service creates/accesses it
+        sleep 1
+        chmod 664 "$INSTALL_DIR/pyircx.db" 2>/dev/null || true
+        chmod 775 "$INSTALL_DIR" 2>/dev/null || true
     else
         echo -e "${RED}✗ Service failed to start${NC}"
         echo "Check logs: journalctl -u pyircx -n 50"
