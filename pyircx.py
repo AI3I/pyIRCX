@@ -109,128 +109,9 @@ logger = setup_logging()
 
 
 class ServerConfig:
-    DEFAULT = {
-        "server": {
-            "name": "irc.local",
-            "network": "IRCX Network",
-            "staff_login_message": "Welcome to the staff team."
-        },
-        "network": {
-            "listen_addr": "0.0.0.0",
-            "listen_ports": [6667, 7000],
-            "resolve_hostnames": True  # Resolve IP to hostname
-        },
-        "database": {
-            "path": "pyircx.db"
-        },
-        "system": {
-            "nick": "System",
-            "ident": "System",
-        },
-        "limits": {
-            "max_users": 1000,
-            "msg_length": 512,
-            "nick_change_cooldown": 60,
-            "max_nick_length": 30,
-            "max_user_length": 30,
-            "max_channel_length": 50
-        },
-        "services": {
-            "servicebot_count": 10,
-            "servicebot_max_channels": 10
-        },
-        "security": {
-            "flood_messages": 5,
-            "flood_window": 2.0,
-            "connection_throttle": 3,
-            "throttle_window": 10.0,
-            "enable_flood_protection": True,
-            "enable_connection_throttle": True,
-            "dnsbl": {
-                "enabled": False,  # Enable DNSBL checking
-                "action": "reject",  # reject, mark, warn
-                "timeout": 3.0,  # DNS query timeout in seconds
-                "lists": [
-                    # Popular DNS blacklists - enable as needed
-                    "dnsbl.dronebl.org",
-                    "rbl.efnetrbl.org",
-                    "bl.spamcop.net",
-                    "dnsbl.sorbs.net"
-                ],
-                "whitelist": [],  # IPs to skip DNSBL checks (CIDR supported)
-                "cache_ttl": 3600,  # Cache results for 1 hour
-                "reject_message": "Your IP is listed in a DNS blacklist. Contact staff if you believe this is an error."
-            },
-            "proxy_detection": {
-                "enabled": False,  # Check for known proxy/VPN ports
-                "ports": [8080, 3128, 1080, 9050],  # Common proxy ports
-                "timeout": 2.0,
-                "action": "mark"  # reject, mark, warn
-            },
-            "connection_scoring": {
-                "enabled": False,
-                "threshold": 100,  # Score above this = reject
-                "dnsbl_score": 50,  # Points for DNSBL listing
-                "proxy_score": 30,  # Points for open proxy
-                "no_ident_score": 10,  # Points for no ident response
-                "generic_hostname_score": 5  # Points for generic ISP hostname
-            },
-            "webirc": {
-                "enabled": True,
-                "hosts": {
-                    # gateway_name: { "password": "secret", "allowed_ips": ["127.0.0.1", "::1"] }
-                    "pyircx-webchat": {
-                        "password": "changeme",
-                        "allowed_ips": ["127.0.0.1", "::1"]
-                    }
-                }
-            }
-        },
-        "persistence": {
-            "auto_save": True,
-            "save_interval": 300
-        },
-        "transcript": {
-            "enabled": True,
-            "directory": "transcripts",
-            "max_lines": 10000,  # Max lines per transcript file before rotation
-            "format": "[{timestamp}] {event}"  # Log format
-        },
-        "servicebot": {
-            "enabled": True,
-            "profanity_filter": {
-                "enabled": True,
-                "action": "warn",  # warn, gag, kick, ban
-                "words": ["badword1", "badword2"],  # Default placeholder list
-                "warn_message": "Please watch your language.",
-                "case_sensitive": False
-            },
-            "malicious_detection": {
-                "enabled": True,
-                "flood_threshold": 5,  # Messages in window
-                "flood_window": 3,  # Seconds
-                "flood_action": "gag",  # warn, gag, kick, ban
-                "caps_threshold": 0.7,  # 70% caps triggers
-                "caps_min_length": 10,  # Min message length to check caps
-                "caps_action": "warn",
-                "url_spam_threshold": 3,  # URLs in window
-                "url_spam_window": 10,  # Seconds
-                "url_spam_action": "warn",
-                "repeat_threshold": 3,  # Same message count
-                "repeat_window": 30,  # Seconds
-                "repeat_action": "warn"
-            }
-        },
-        "admin": {
-            "loc1": "Server Administration",
-            "loc2": "Network Operations",
-            "email": "admin@irc.local"
-        }
-    }
-
     def __init__(self, config_file="pyircx_config.json"):
         self.config_file = config_file
-        self.data = self._deep_copy(self.DEFAULT)
+        self.data = {}
         self.load()
 
     def _deep_copy(self, d):
@@ -246,11 +127,10 @@ class ServerConfig:
                 logger.info(f"Loaded config from {self.config_file}")
             except Exception as e:
                 logger.error(f"Config error: {e}")
+                raise
         else:
-            # Create complete default config file
-            self.data = self._deep_copy(self.DEFAULT)
-            self.save()
-            logger.info(f"Created default config at {self.config_file}")
+            logger.error(f"Config file not found: {self.config_file}")
+            raise FileNotFoundError(f"Configuration file '{self.config_file}' is required but not found. Please run the installation script or create the config file.")
 
     def save(self):
         try:
@@ -660,8 +540,9 @@ class User:
                 self.ip, self.port = peername[0], peername[1]
 
         self.is_virtual = is_virtual
+        # User modes: a=ADMIN, g=GUIDE, i=invisible, o=SYSOP, r=registered, s=service, x=IRCX, z=gagged
         self.modes = {m: False for m in CONFIG.get(
-            'modes', 'user', default='aioxzg')}
+            'modes', 'user', default='agiorsxz')}
         self.registered = False
         self.authenticated = False
         self.is_ircx = False
@@ -1532,6 +1413,9 @@ class Channel:
         self.owners = set()
         self.hosts = set()
         self.voices = set()
+        # Channel modes: a=auth-only, d=clone-enabled, e=is-clone, f=strip-formatting, h=hidden, i=invite-only,
+        # j=no-invitations, k=key, l=limit, m=moderated, n=no-external, p=private, r=registered, s=secret,
+        # t=topic-protection, u=knock-mode, w=no-whispers, x=auditorium, y=transcript, z=locked
         self.modes = {m: False for m in CONFIG.get(
             'modes', 'channel', default='adefhijkmnprstuwxyz')}
         # Apply default channel modes from config
@@ -1677,6 +1561,56 @@ class Channel:
             'onpart': self.onpart,
             'access_list': self.access_list
         }
+
+    def get_properties_json(self):
+        """Get channel properties as JSON for storage in registered_channels table"""
+        return json.dumps({
+            'topic': self.topic,
+            'topic_set_by': self.topic_set_by,
+            'topic_set_at': self.topic_set_at,
+            'owners': list(self.owners),
+            'hosts': list(self.hosts),
+            'voices': list(self.voices),
+            'ban_list': self.ban_list,
+            'key': self.key,
+            'host_key': self.host_key,
+            'owner_key': self.owner_key,
+            'user_limit': self.user_limit,
+            'onjoin': self.onjoin,
+            'onpart': self.onpart,
+            'access_list': self.access_list,
+            'modes': {k: v for k, v in self.modes.items() if v}  # Only store enabled modes
+        })
+
+    def load_properties_json(self, properties_json):
+        """Load channel properties from JSON"""
+        if not properties_json:
+            return
+        try:
+            props = json.loads(properties_json)
+            self.topic = props.get('topic', '')
+            self.topic_set_by = props.get('topic_set_by', '')
+            self.topic_set_at = props.get('topic_set_at', 0)
+            self.owners = set(props.get('owners', []))
+            self.hosts = set(props.get('hosts', []))
+            self.voices = set(props.get('voices', []))
+            self.ban_list = props.get('ban_list', [])
+            self.key = props.get('key', None)
+            self.host_key = props.get('host_key', None)
+            self.owner_key = props.get('owner_key', None)
+            self.user_limit = props.get('user_limit', None)
+            self.onjoin = props.get('onjoin', None)
+            self.onpart = props.get('onpart', None)
+            self.access_list = props.get('access_list', {
+                'OWNER': [], 'HOST': [], 'VOICE': [], 'GRANT': [], 'DENY': []
+            })
+            # Restore modes
+            saved_modes = props.get('modes', {})
+            for mode, value in saved_modes.items():
+                if mode in self.modes:
+                    self.modes[mode] = value
+        except Exception as e:
+            logger.error(f"Error loading channel properties: {e}")
 
     @classmethod
     def from_dict(cls, data):
@@ -2490,11 +2424,17 @@ class pyIRCXServer:
                 registered_at INTEGER,
                 last_used INTEGER,
                 description TEXT,
+                properties TEXT,
                 FOREIGN KEY (owner_uuid) REFERENCES registered_nicks(uuid)
             )""")
 
-            # Legacy channel data (for backwards compat)
-            await db.execute("CREATE TABLE IF NOT EXISTS reg_chans (name TEXT PRIMARY KEY, data TEXT, registered_at INTEGER)")
+            # Add properties column if it doesn't exist (migration)
+            try:
+                await db.execute("ALTER TABLE registered_channels ADD COLUMN properties TEXT")
+            except:
+                pass  # Column already exists
+
+            # Removed: reg_chans table (legacy - now using registered_channels with properties JSON)
 
             # Server access rules
             await db.execute("""CREATE TABLE IF NOT EXISTS server_access (
@@ -2543,7 +2483,8 @@ class pyIRCXServer:
 
         await self._load_access_list()
 
-        await self.load_channels()
+        # Channels are now dynamic - only loaded when users join
+        # Registered channels restore their properties from registered_channels table
 
         self.channels["#System"] = Channel("#System")
         self.channels["#System"].registered = True
@@ -2594,10 +2535,7 @@ class pyIRCXServer:
         if CONFIG.get('security', 'connection_scoring', 'enabled', default=False):
             logger.info("Connection scoring enabled")
 
-        if CONFIG.get('persistence', 'auto_save', default=True):
-            interval = CONFIG.get('persistence', 'save_interval', default=300)
-            self.save_task = asyncio.create_task(self.periodic_save(interval))
-            logger.info(f"Auto-save enabled ({interval}s)")
+        # Removed: periodic_save - channels now persist on registration, not periodically
 
         # Initialize database connection pool
         await self.db_pool.initialize()
@@ -2636,64 +2574,24 @@ class pyIRCXServer:
         """Load a registered channel from database if it exists"""
         try:
             async with aiosqlite.connect(CONFIG.get('database', 'path')) as db:
-                # First try reg_chans (JSON serialized channels)
-                async with db.execute("SELECT data FROM reg_chans WHERE LOWER(name) = LOWER(?)", (channel_name,)) as cursor:
-                    row = await cursor.fetchone()
-                    if row:
-                        data = json.loads(row[0])
-                        channel = Channel.from_dict(data)
-                        logger.info(f"Loaded registered channel: {channel.name}")
-                        return channel
-                
-                # If not found, check registered_channels table (web admin registrations)
-                async with db.execute("SELECT uuid, owner_uuid FROM registered_channels WHERE LOWER(channel_name) = LOWER(?)", (channel_name,)) as cursor:
+                # Check registered_channels table
+                async with db.execute("SELECT uuid, owner_uuid, properties FROM registered_channels WHERE LOWER(channel_name) = LOWER(?)", (channel_name,)) as cursor:
                     row = await cursor.fetchone()
                     if row:
                         # Create a new channel object and mark it as registered
                         channel = Channel(channel_name)
                         channel.registered = True
                         channel.account_uuid = row[0]
-                        logger.info(f"Loaded registered channel from registered_channels table: {channel.name}")
+                        channel.modes['r'] = True  # Set +r mode for registered channels
+                        # Load saved properties (owners, hosts, voices, ACCESS, topic, keys, etc.)
+                        channel.load_properties_json(row[2])
+                        logger.info(f"Loaded registered channel: {channel.name}")
                         return channel
         except Exception as e:
             logger.error(f"Error loading registered channel {channel_name}: {e}")
         return None
 
-    async def load_channels(self):
-        try:
-            async with aiosqlite.connect(CONFIG.get('database', 'path')) as db:
-                async with db.execute("SELECT name, data FROM reg_chans") as cursor:
-                    async for row in cursor:
-                        try:
-                            data = json.loads(row[1])
-                            channel = Channel.from_dict(data)
-                            self.channels[channel.name] = channel
-                            logger.info(f"Loaded: {channel.name}")
-                        except Exception as e:
-                            logger.error(f"Load error {row[0]}: {e}")
-        except Exception as e:
-            logger.error(f"Load channels error: {e}")
-
-    async def save_channels(self):
-        try:
-            async with aiosqlite.connect(CONFIG.get('database', 'path')) as db:
-                saved = 0
-                for name, channel in self.channels.items():
-                    # Skip local channels (&), #System, and unregistered channels
-                    if channel.registered and name != "#System" and not channel.is_local:
-                        data = json.dumps(channel.to_dict())
-                        await db.execute("INSERT OR REPLACE INTO reg_chans VALUES (?, ?, ?)",
-                                       (name, data, int(time.time())))
-                        saved += 1
-                await db.commit()
-            logger.info(f"Saved {saved} channels")
-        except Exception as e:
-            logger.error(f"Save error: {e}")
-
-    async def periodic_save(self, interval):
-        while True:
-            await asyncio.sleep(interval)
-            await self.save_channels()
+    # Removed: load_channels(), save_channels(), periodic_save() - channels are now dynamic
 
     async def _cap_timeout_monitor(self):
         """Monitor for clients stuck in CAP negotiation and disconnect them"""
@@ -2725,7 +2623,11 @@ class pyIRCXServer:
             "version": __version__,
             "version_label": __version_label__,
             "created_date": __created__,
+            # User modes: a=ADMIN, g=GUIDE, i=invisible, o=SYSOP, r=registered, s=service, x=IRCX, z=gagged
             "usermodes": CONFIG.get('modes', 'user', default='agiorsxz'),
+            # Channel modes: a=auth-only, d=clone-enabled, e=is-clone, f=strip-formatting, h=hidden, i=invite-only,
+            # j=no-invitations, k=key, l=limit, m=moderated, n=no-external, p=private, r=registered, s=secret,
+            # t=topic-protection, u=knock-mode, w=no-whispers, x=auditorium, y=transcript, z=locked
             "chanmodes": CONFIG.get('modes', 'channel', default='adefhijkmnprstuwxyz'),
             "uptime": int(time.time() - self.boot_time),
             "loc1": CONFIG.get('admin', 'loc1', default=''),
@@ -4816,10 +4718,10 @@ class pyIRCXServer:
             user.send(f":{self.servername} NOTICE {user.nickname} :--- End ---")
 
         elif flag == 's':
-            # Services/bots (users with +s mode)
+            # Services/bots (users with +s mode) - includes virtual services
             user.send(f":{self.servername} NOTICE {user.nickname} :--- Services/Bots (+s) ---")
             for u in self.users.values():
-                if u.is_service() and not u.is_virtual:
+                if u.is_service():
                     user.send(f":{self.servername} NOTICE {user.nickname} :{u.nickname}!{u.username}@{u.host}")
             user.send(f":{self.servername} NOTICE {user.nickname} :--- End ---")
 
@@ -5710,14 +5612,20 @@ class pyIRCXServer:
                 chan_uuid = str(uuid.uuid4())
                 now = int(time.time())
 
+                # Save channel properties (owners, hosts, voices, ACCESS, topic, keys, etc.)
+                properties_json = channel.get_properties_json()
+
                 await db.execute("""INSERT INTO registered_channels
-                    (uuid, channel_name, owner_uuid, registered_at)
-                    VALUES (?, ?, ?, ?)""",
-                    (chan_uuid, channel_name, owner_uuid, now))
+                    (uuid, channel_name, owner_uuid, registered_at, properties)
+                    VALUES (?, ?, ?, ?, ?)""",
+                    (chan_uuid, channel_name, owner_uuid, now, properties_json))
                 await db.commit()
 
                 channel.registered = True
                 channel.account_uuid = chan_uuid
+                channel.modes['r'] = True  # Set +r mode for registered channel
+                # Broadcast mode change to channel
+                channel.broadcast(f":{user.prefix()} MODE {channel_name} +r")
                 if password:
                     channel.owner_key = password
 
@@ -5766,30 +5674,37 @@ class pyIRCXServer:
 
         try:
             async with aiosqlite.connect(CONFIG.get('database', 'path')) as db:
-                # Verify ownership - for staff, use username; for regular users, use nickname
-                if user.authenticated and user.staff_level in ["ADMIN", "SYSOP", "GUIDE"]:
-                    account_name = user.username.lstrip('~')
-                    async with db.execute("SELECT uuid FROM registered_nicks WHERE nickname = ?",
-                                         (account_name,)) as cursor:
-                        nick_row = await cursor.fetchone()
-                        if not nick_row:
-                            user.send(f":{self.servername} NOTICE {user.nickname} :Your staff account is not registered")
-                            return
-                else:
-                    async with db.execute("SELECT uuid FROM registered_nicks WHERE nickname = ?",
-                                         (user.nickname,)) as cursor:
-                        nick_row = await cursor.fetchone()
-                        if not nick_row:
-                            user.send(f":{self.servername} NOTICE {user.nickname} :Your nickname is not registered")
-                            return
-
+                # Check if channel is registered
                 async with db.execute("SELECT owner_uuid FROM registered_channels WHERE channel_name = ?",
                                      (channel_name,)) as cursor:
                     chan_row = await cursor.fetchone()
                     if not chan_row:
                         user.send(f":{self.servername} NOTICE {user.nickname} :Channel {channel_name} is not registered")
                         return
-                    if chan_row[0] != nick_row[0] and not user.has_mode('a'):
+
+                # ADMINs can unregister any channel without needing a registered_nicks entry
+                if user.has_mode('a'):
+                    pass  # Skip ownership check for ADMIN
+                else:
+                    # Verify ownership - for staff, use username; for regular users, use nickname
+                    if user.authenticated and user.staff_level in ["ADMIN", "SYSOP", "GUIDE"]:
+                        account_name = user.username.lstrip('~')
+                        async with db.execute("SELECT uuid FROM registered_nicks WHERE nickname = ?",
+                                             (account_name,)) as cursor:
+                            nick_row = await cursor.fetchone()
+                            if not nick_row:
+                                user.send(f":{self.servername} NOTICE {user.nickname} :Your staff account is not registered")
+                                return
+                    else:
+                        async with db.execute("SELECT uuid FROM registered_nicks WHERE nickname = ?",
+                                             (user.nickname,)) as cursor:
+                            nick_row = await cursor.fetchone()
+                            if not nick_row:
+                                user.send(f":{self.servername} NOTICE {user.nickname} :Your nickname is not registered")
+                                return
+
+                    # Verify ownership
+                    if chan_row[0] != nick_row[0]:
                         user.send(f":{self.servername} NOTICE {user.nickname} :You are not the owner of {channel_name}")
                         return
 
@@ -5798,6 +5713,9 @@ class pyIRCXServer:
 
                 channel.registered = False
                 channel.account_uuid = None
+                channel.modes['r'] = False  # Remove +r mode
+                # Broadcast mode change to channel
+                channel.broadcast(f":{user.prefix()} MODE {channel_name} -r")
                 user.send(f":{self.servername} NOTICE {user.nickname} :Channel {channel_name} has been unregistered")
                 logger.info(f"UNREGISTER: {channel_name} unregistered by {user.nickname}")
 
@@ -6950,14 +6868,20 @@ class pyIRCXServer:
                 chan_uuid = str(uuid.uuid4())
                 now = int(time.time())
 
+                # Save channel properties (owners, hosts, voices, ACCESS, topic, keys, etc.)
+                properties_json = channel.get_properties_json()
+
                 await db.execute("""INSERT INTO registered_channels
-                    (uuid, channel_name, owner_uuid, registered_at, last_used)
-                    VALUES (?, ?, ?, ?, ?)""",
-                    (chan_uuid, channel_name, owner_uuid, now, now))
+                    (uuid, channel_name, owner_uuid, registered_at, last_used, properties)
+                    VALUES (?, ?, ?, ?, ?, ?)""",
+                    (chan_uuid, channel_name, owner_uuid, now, now, properties_json))
                 await db.commit()
 
                 channel.registered = True
                 channel.account_uuid = chan_uuid
+                channel.modes['r'] = True  # Set +r mode for registered channel
+                # Broadcast mode change to channel
+                channel.broadcast(f":Registrar!registrar@{self.servername} MODE {channel_name} +r")
                 self._service_reply("Registrar", user, f"Channel {channel_name} has been registered (UUID: {chan_uuid})")
                 logger.info(f"Registrar: {channel_name} registered by {user.nickname}")
 
@@ -7862,12 +7786,39 @@ class pyIRCXServer:
                     if channel.is_clone_enabled() and channel.clone_children:
                         self.sync_mode_to_clones(channel, 'l', False)
             elif char == 'r':
-                # Registered mode (+r) can only be set by REGISTER command, not manually
-                user.send(f":{self.servername} 696 {user.nickname} {channel.name} r :Cannot manually set or unset +r mode. Use REGISTER/UNREGISTER commands.")
+                # Registered mode (+r) handling
+                if adding:
+                    # Cannot manually set +r - use REGISTER command
+                    user.send(f":{self.servername} 696 {user.nickname} {channel.name} r :Cannot manually set +r mode. Use REGISTER command.")
+                else:
+                    # -r: High staff can unregister channels
+                    if not user.is_high_staff():
+                        user.send(f":{self.servername} 696 {user.nickname} {channel.name} r :Only SYSOPs and ADMINs can unregister channels with -r.")
+                        continue
+                    # Remove from database if registered
+                    if channel.registered:
+                        try:
+                            async with aiosqlite.connect(CONFIG.get('database', 'path')) as db:
+                                await db.execute("DELETE FROM registered_channels WHERE channel_name = ?", (channel.name,))
+                                await db.commit()
+                            channel.registered = False
+                            channel.account_uuid = None
+                            channel.modes['r'] = False
+                            msg = f":{user.prefix()} MODE {channel.name} -r"
+                            channel.broadcast(msg)
+                            logger.info(f"Channel {channel.name} unregistered via MODE -r by {user.nickname}")
+                        except Exception as e:
+                            logger.error(f"MODE -r database error: {e}")
+                            user.send(f":{self.servername} NOTICE {user.nickname} :Failed to unregister channel")
+                    else:
+                        # Not registered, just remove the mode
+                        channel.modes['r'] = False
+                        msg = f":{user.prefix()} MODE {channel.name} -r"
+                        channel.broadcast(msg)
             elif char == 'z':
-                # Locked mode (+z) - high staff only, auto-sets +a and +r
-                if not user.is_high_staff():
-                    user.send(f":{self.servername} 696 {user.nickname} {channel.name} z :Only SYSOPs and ADMINs can set +z (locked) mode.")
+                # Locked mode (+z) - high staff or services, auto-sets +a and +r
+                if not (user.is_high_staff() or user.is_service()):
+                    user.send(f":{self.servername} 696 {user.nickname} {channel.name} z :Only SYSOPs, ADMINs, and services can set +z (locked) mode.")
                     continue
                 if adding:
                     # Setting +z: lock the channel
@@ -8349,13 +8300,7 @@ class ServerManager:
             except Exception as e:
                 logger.error(f"Error shutting down link manager: {e}")
 
-        # Save state before shutdown
-        if self.server:
-            try:
-                await self.server.save_channels()
-                logger.info("Channel state saved")
-            except Exception as e:
-                logger.error(f"Error saving state: {e}")
+        # Removed: save_channels - channel state persists on registration changes, not on shutdown
 
         # Close all TCP servers (plain + SSL)
         all_servers = self.tcp_servers + self.ssl_servers
