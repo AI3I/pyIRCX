@@ -3,7 +3,7 @@
 # pyIRCX Upgrade Script
 #
 # Intelligently upgrades an existing installation to the latest version
-# Version 1.1.0 - Migrates from Cockpit to Web Admin Panel
+# Version 1.1.2 - Channel Operations & Web Admin Fixes
 #
 set -e
 
@@ -23,7 +23,7 @@ SERVICE_GROUP="pyircx"
 
 echo ""
 echo "========================================"
-echo "  pyIRCX Upgrade Script v1.1.0"
+echo "  pyIRCX Upgrade Script v1.1.2"
 echo "========================================"
 echo ""
 
@@ -585,4 +585,4 @@ echo "  systemctl start pyircx    - Start server"
 echo "  systemctl restart pyircx  - Restart server"
 echo "  journalctl -u pyircx -f   - View logs"
 echo ""
-echo -e "${GREEN}pyIRCX v1.1.0 - All done!${NC}"
+echo -e "${GREEN}pyIRCX v1.1.2 - All done!${NC}"

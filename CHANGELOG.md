@@ -5,6 +5,42 @@ All notable changes to pyIRCX will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.2] - 2026-01-12
+
+### Fixed
+- **Channel Unlock Button**: Services (+s) can now set/unset MODE +z (locked mode)
+  - System user no longer incorrectly has +a (admin) mode
+  - Web admin unlock button now works correctly
+  - Permission check updated to allow `is_service()` in addition to `is_high_staff()`
+- **Configuration Template**: Removed static `modes` section from pyircx_config.json
+  - Mode strings are now hardcoded in server (not user-configurable)
+  - Prevents mode inconsistencies from configuration errors
+- **User Mode String**: Fixed inconsistency - now consistently `agiorsxz` (includes 's' for services)
+- **Channel Mode Documentation**: Corrected mode descriptions (x=auditorium, u=knock-mode, z=locked)
+- **STATS s Command**: Now correctly shows virtual services (System, Registrar, etc.)
+- **Channel +r Mode Consistency**: Synchronized `channel.registered` flag with `channel.modes['r']`
+- **UNREGISTER Command**: Now properly removes +r mode and broadcasts MODE change
+- **ADMIN Unregister Permissions**: Check ADMIN privileges before database entries
+
+### Changed
+- **Database Schema**: Migrated from `reg_chans` to `registered_channels` with JSON properties
+  - Added `properties` TEXT column to store channel state as JSON
+  - Channels are now dynamic by default (created on-demand, lost when empty)
+  - Registered channels persist full state (owners, hosts, voices, ACCESS, topic, keys, modes)
+  - Removed legacy `reg_chans` table entirely
+- **API Updates**: Migrated api.py to use `registered_channels.properties` instead of `reg_chans.data`
+  - Updated 8 functions: search_channels, get_registered_channels, edit_channel, get_channel_details, get_channel_access, set_channel_access, get_registered_channels_paginated, unregister_channel
+  - ACCESS list management now requires channels to be registered first
+- **Database Permissions**: Apache user added to pyircx group for web admin write access
+- **MODE -r**: High staff can now use MODE -r to unregister channels directly
+
+### Removed
+- **DEFAULT Configuration Block**: Removed hardcoded configuration from pyircx.py (lines 112-229)
+  - Server now requires config file to start (raises FileNotFoundError if missing)
+  - Configuration should be provided by installation script only
+- **Legacy Channel Persistence**: Removed load_channels(), save_channels(), periodic_save()
+  - Channel state now persists via database for registered channels only
+
 ## [1.1.0] - 2026-01-11
 
 ### Added

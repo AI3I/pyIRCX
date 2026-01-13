@@ -22,9 +22,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
 # Version info - updated with each release
-__version__ = "1.1.1"
+__version__ = "1.1.2"
 __version_label__ = "pyIRCX"
-__created__ = "Mon Jan 12 05:59:36 PM EST 2026"
+__created__ = "Mon Jan 12 07:23:20 PM EST 2026"
 
 import asyncio
 import aiosqlite

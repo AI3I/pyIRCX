@@ -446,7 +446,7 @@ def get_server_stats():
         stats['registered_nicks'] = cursor.fetchone()['count']
 
         # Count registered channels
-        cursor.execute("SELECT COUNT(*) as count FROM reg_chans")
+        cursor.execute("SELECT COUNT(*) as count FROM registered_channels")
         stats['registered_channels'] = cursor.fetchone()['count']
 
         # Count server access entries (bans/glines) - exclude expired
@@ -800,7 +800,7 @@ def search_registered_nicks(query):
         return {"error": str(e)}
 
 def search_channels(query):
-    """Search registered channels from both reg_chans and registered_channels tables"""
+    """Search registered channels from registered_channels table"""
     db_path = get_db_path()
 
     if not os.path.exists(db_path):
@@ -811,20 +811,15 @@ def search_channels(query):
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
-        # Search both tables using UNION
+        # Search registered_channels table
         cursor.execute("""
-            SELECT name as channel_name, registered_at, 0 as last_used,
-                   json_extract(data, '$.owners[0]') as owner
-            FROM reg_chans
-            WHERE name LIKE ?
-            UNION
             SELECT channel_name, registered_at, last_used,
                    (SELECT nickname FROM registered_nicks WHERE uuid = registered_channels.owner_uuid) as owner
             FROM registered_channels
             WHERE channel_name LIKE ?
             ORDER BY channel_name
             LIMIT 50
-        """, (f"%{query}%", f"%{query}%"))
+        """, (f"%{query}%",))
 
         results = []
         for row in cursor.fetchall():
@@ -894,9 +889,9 @@ def get_registered_channels(limit=50):
         cursor = conn.cursor()
 
         cursor.execute("""
-            SELECT rc.name, rc.registered_at, rc.registered_at, json_extract(rc.data, '$.owners[0]') as owner
-            FROM reg_chans rc
-            
+            SELECT rc.channel_name, rc.registered_at, rc.last_used,
+                   (SELECT nickname FROM registered_nicks WHERE uuid = rc.owner_uuid) as owner
+            FROM registered_channels rc
             ORDER BY rc.registered_at DESC
             LIMIT ?
         """, (limit,))
@@ -904,10 +899,10 @@ def get_registered_channels(limit=50):
         channels = []
         for row in cursor.fetchall():
             channels.append({
-                'name': row['channel_name'],
-                'owner': row['owner'] if row['owner'] else 'Unknown',
-                'registered_at': row['registered_at'],
-                'last_used': row['registered_at']  # reg_chans doesn't track last_used separately
+                'name': row[0],  # channel_name
+                'owner': row[3] if row[3] else 'Unknown',  # owner from subquery
+                'registered_at': row[1],  # registered_at
+                'last_used': row[2] if row[2] else row[1]  # last_used or registered_at
             })
 
         conn.close()
@@ -1439,7 +1434,7 @@ def unregister_nickname(nickname):
         nick_uuid = nick_row[0]
 
         # Check if this nickname owns any channels
-        cursor.execute("SELECT COUNT(*) as count FROM reg_chans WHERE owner_uuid = ?", (nick_uuid,))
+        cursor.execute("SELECT COUNT(*) as count FROM registered_channels WHERE owner_uuid = ?", (nick_uuid,))
         channel_count = cursor.fetchone()[0]
 
         if channel_count > 0:
@@ -1690,7 +1685,7 @@ def unregister_channel(channel_name):
             return {"error": f"Channel '{channel_name}' is not registered"}
 
         # Delete the channel
-        cursor.execute("DELETE FROM reg_chans WHERE LOWER(name) = LOWER(?)", (channel_name,))
+        cursor.execute("DELETE FROM registered_channels WHERE LOWER(channel_name) = LOWER(?)", (channel_name,))
         conn.commit()
         conn.close()
 
@@ -1701,7 +1696,7 @@ def unregister_channel(channel_name):
 
 def edit_channel(channel_name, new_owner=None, new_description=None, new_topic=None, new_modes=None,
                  new_onjoin=None, new_onpart=None, new_memberkey=None, new_hostkey=None, new_ownerkey=None, new_userlimit=None):
-    """Edit a registered channel's properties by updating reg_chans table"""
+    """Edit a registered channel's properties by updating registered_channels table"""
     db_path = get_db_path()
 
     if not os.path.exists(db_path):
@@ -1711,22 +1706,41 @@ def edit_channel(channel_name, new_owner=None, new_description=None, new_topic=N
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
 
-        # Load channel data from reg_chans (JSON format)
-        cursor.execute("SELECT data FROM reg_chans WHERE LOWER(name) = LOWER(?)", (channel_name,))
+        # Load channel data from registered_channels (JSON format in properties column)
+        cursor.execute("SELECT properties, owner_uuid, description FROM registered_channels WHERE LOWER(channel_name) = LOWER(?)", (channel_name,))
         row = cursor.fetchone()
 
         if not row:
             conn.close()
             return {"error": f"Channel '{channel_name}' is not registered"}
 
-        # Parse JSON data
-        channel_data = json.loads(row[0])
+        # Parse JSON properties (may be None for newly registered channels)
+        channel_data = json.loads(row[0]) if row[0] else {}
+        current_owner_uuid = row[1]
+        current_description = row[2]
         changes = []
+        owner_uuid_changed = False
+        new_owner_uuid = current_owner_uuid
+        new_description_val = current_description
 
-        # Update owner
+        # Update owner (requires looking up new owner's UUID)
         if new_owner:
-            channel_data['owners'] = [new_owner]
-            changes.append("owner")
+            cursor.execute("SELECT uuid FROM registered_nicks WHERE LOWER(nickname) = LOWER(?)", (new_owner,))
+            owner_row = cursor.fetchone()
+            if owner_row:
+                new_owner_uuid = owner_row[0]
+                owner_uuid_changed = True
+                # Also update owners list in properties
+                channel_data['owners'] = [new_owner]
+                changes.append("owner")
+            else:
+                conn.close()
+                return {"error": f"Owner nickname '{new_owner}' not found"}
+
+        # Update description
+        if new_description is not None:
+            new_description_val = "" if new_description == "*" else new_description
+            changes.append("description")
 
         # Update topic
         if new_topic is not None:
@@ -1793,10 +1807,12 @@ def edit_channel(channel_name, new_owner=None, new_description=None, new_topic=N
             conn.close()
             return {"error": "No changes were made"}
 
-        # Save back to reg_chans
-        cursor.execute("UPDATE reg_chans SET data = ?, registered_at = ? WHERE LOWER(name) = LOWER(?)",
-                      (json.dumps(channel_data), int(time.time()), channel_name))
-        
+        # Save back to registered_channels
+        cursor.execute("""UPDATE registered_channels
+                         SET properties = ?, owner_uuid = ?, description = ?, last_used = ?
+                         WHERE LOWER(channel_name) = LOWER(?)""",
+                      (json.dumps(channel_data), new_owner_uuid, new_description_val, int(time.time()), channel_name))
+
         conn.commit()
         conn.close()
 
@@ -1868,27 +1884,28 @@ def get_registered_channels_paginated(limit=50, offset=0):
         cursor = conn.cursor()
 
         # Get total count
-        cursor.execute("SELECT COUNT(*) as count FROM reg_chans")
+        cursor.execute("SELECT COUNT(*) as count FROM registered_channels")
         total = cursor.fetchone()['count']
 
         # Get paginated results
         cursor.execute("""
-            SELECT 
-                rc.name as channel_name,
+            SELECT
+                rc.channel_name,
                 rc.registered_at,
-                json_extract(rc.data, '$.owners[0]') as owner
-            FROM reg_chans rc
-            ORDER BY rc.name
+                rc.last_used,
+                (SELECT nickname FROM registered_nicks WHERE uuid = rc.owner_uuid) as owner
+            FROM registered_channels rc
+            ORDER BY rc.channel_name
             LIMIT ? OFFSET ?
         """, (limit, offset))
 
         channels = []
         for row in cursor.fetchall():
             channels.append({
-                'name': row['channel_name'],
-                'owner': row['owner'] if row['owner'] else 'Unknown',
-                'registered_at': row['registered_at'],
-                'last_used': row['registered_at']  # reg_chans doesn't track last_used separately
+                'name': row[0],  # channel_name
+                'owner': row[3] if row[3] else 'Unknown',  # owner from subquery
+                'registered_at': row[1],  # registered_at
+                'last_used': row[2] if row[2] else row[1]  # last_used or registered_at
             })
 
         conn.close()
@@ -1901,28 +1918,28 @@ def get_registered_channels_paginated(limit=50, offset=0):
 def get_channel_details(channel_name):
     """Get detailed channel information for editing"""
     db_path = get_db_path()
-    
+
     if not os.path.exists(db_path):
         return {"error": f"Database not found at {db_path}"}
-    
+
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
-        
-        # Load from reg_chans
-        cursor.execute("SELECT data FROM reg_chans WHERE LOWER(name) = LOWER(?)", (channel_name,))
+
+        # Load from registered_channels
+        cursor.execute("SELECT properties FROM registered_channels WHERE LOWER(channel_name) = LOWER(?)", (channel_name,))
         row = cursor.fetchone()
-        
+
         if not row:
             conn.close()
             return {"error": f"Channel '{channel_name}' not found"}
-        
-        # Parse JSON data
-        channel_data = json.loads(row[0])
-        
+
+        # Parse JSON properties (may be None for newly registered channels)
+        channel_data = json.loads(row[0]) if row[0] else {}
+
         # Extract relevant fields
         details = {
-            "name": channel_data.get("name", channel_name),
+            "name": channel_name,
             "topic": channel_data.get("topic", ""),
             "onjoin": channel_data.get("onjoin") or "",
             "onpart": channel_data.get("onpart") or "",
@@ -1933,10 +1950,10 @@ def get_channel_details(channel_name):
             "owners": channel_data.get("owners", []),
             "user_limit": channel_data.get("user_limit") or 0
         }
-        
+
         conn.close()
         return {"success": True, "channel": details}
-        
+
     except Exception as e:
         return {"error": str(e)}
 
@@ -1951,11 +1968,11 @@ def get_channel_access(channel_name):
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
 
-        # Check in reg_chans table (JSON data)
-        cursor.execute("SELECT data FROM reg_chans WHERE LOWER(name) = LOWER(?)", (channel_name,))
+        # Check in registered_channels table (JSON properties)
+        cursor.execute("SELECT properties FROM registered_channels WHERE LOWER(channel_name) = LOWER(?)", (channel_name,))
         row = cursor.fetchone()
 
-        if row:
+        if row and row[0]:
             data = json.loads(row[0])
             access_list = data.get('access_list', {
                 'OWNER': [],
@@ -1965,7 +1982,7 @@ def get_channel_access(channel_name):
                 'DENY': []
             })
         else:
-            # Channel not in reg_chans yet, return empty lists
+            # Channel not registered or no properties yet, return empty lists
             access_list = {
                 'OWNER': [],
                 'HOST': [],
@@ -1993,41 +2010,27 @@ def set_channel_access(channel_name, access_list_json):
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
 
-        # Check if channel exists in reg_chans
-        cursor.execute("SELECT data FROM reg_chans WHERE LOWER(name) = LOWER(?)", (channel_name,))
+        # Check if channel exists in registered_channels
+        cursor.execute("SELECT properties FROM registered_channels WHERE LOWER(channel_name) = LOWER(?)", (channel_name,))
         row = cursor.fetchone()
 
         if row:
-            # Update existing entry
-            data = json.loads(row[0])
+            # Update existing entry - parse properties (may be None)
+            data = json.loads(row[0]) if row[0] else {}
             data['access_list'] = access_list
-            cursor.execute("UPDATE reg_chans SET data = ? WHERE LOWER(name) = LOWER(?)",
-                         (json.dumps(data), channel_name))
+            cursor.execute("UPDATE registered_channels SET properties = ?, last_used = ? WHERE LOWER(channel_name) = LOWER(?)",
+                         (json.dumps(data), int(time.time()), channel_name))
         else:
-            # Create new entry with minimal channel data
-            data = {
-                'name': channel_name,
-                'members': {},
-                'owners': [],
-                'hosts': [],
-                'voices': [],
-                'modes': {},
-                'topic': '',
-                'topic_set_by': '',
-                'topic_set_at': 0,
-                'props': {},
-                'ban_list': [],
-                'gagged': [],
-                'created_at': int(time.time()),
-                'registered': True,
-                'account_uuid': None,
-                'access_list': access_list
-            }
-            cursor.execute("INSERT INTO reg_chans (name, data, registered_at) VALUES (?, ?, ?)",
-                         (channel_name, json.dumps(data), int(time.time())))
+            # Channel not registered - cannot set ACCESS on unregistered channel
+            conn.close()
+            return {"error": f"Channel '{channel_name}' is not registered. Register it first."}
 
         conn.commit()
         conn.close()
+
+        # Kill channel to force reload from database
+        send_irc_kill_channel(channel_name)
+
         return {"success": True, "message": f"ACCESS lists updated for {channel_name}"}
 
     except json.JSONDecodeError as e:
