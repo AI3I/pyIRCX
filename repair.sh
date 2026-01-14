@@ -428,6 +428,24 @@ if [[ ! $REPLY =~ ^[Nn]$ ]]; then
         chmod 755 "$INSTALL_DIR/api.py" 2>/dev/null || true
         chmod 755 "$INSTALL_DIR/linking.py" 2>/dev/null || true
         chmod 644 "$CONFIG_DIR/pyircx_config.json" 2>/dev/null || true
+
+        # Add web server user to pyircx group for database access
+        # Detect web server user (apache, www-data, or http)
+        WEB_USER=""
+        if id apache &>/dev/null; then
+            WEB_USER="apache"
+        elif id www-data &>/dev/null; then
+            WEB_USER="www-data"
+        elif id http &>/dev/null; then
+            WEB_USER="http"
+        fi
+
+        if [ -n "$WEB_USER" ]; then
+            echo -e "${YELLOW}Adding $WEB_USER to $SERVICE_GROUP group for database access...${NC}"
+            usermod -a -G "$SERVICE_GROUP" "$WEB_USER"
+            echo -e "${GREEN}✓ Web server user added to group${NC}"
+        fi
+
         echo -e "${GREEN}✓ Permissions fixed${NC}"
         ((FIXES_APPLIED++))
     fi
