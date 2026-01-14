@@ -428,8 +428,7 @@ function connect() {
         ws.onopen = () => {
             currentNick = nick;
             pendingJoinChannel = channel;
-            // Enable IRCX mode first
-            ws.send(JSON.stringify({ type: 'raw', command: 'IRCX' }));
+            // Send connection registration (NICK/USER)
             ws.send(JSON.stringify({ type: 'connect', nick, username: password ? nick : 'webchat', realname: 'pyIRCX WebChat', password: password || undefined }));
         };
         ws.onmessage = e => handleMessage(JSON.parse(e.data));
@@ -533,6 +532,10 @@ function handleMessage(data) {
             if (p[0]) { currentNick = p[0]; $('currentNick').textContent = p[0]; }
             setConnected();
             sysMsg(p[p.length-1]);
+            // Enable IRCX mode after registration
+            if (ws?.readyState === 1) {
+                ws.send(JSON.stringify({ type: 'raw', command: 'IRCX' }));
+            }
             // Join pending channel after registration completes
             if (pendingJoinChannel && ws?.readyState === 1) {
                 ws.send(JSON.stringify({ type: 'join', channel: pendingJoinChannel }));
