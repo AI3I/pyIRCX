@@ -2918,10 +2918,13 @@ class pyIRCXServer:
                 if self.debug_mode:
                     logger.debug(f"[{user.nickname}] <<< {raw}")
                 await self.dispatch(user, raw)
+                # Check if user has been disconnected (QUIT, KILL, etc.)
+                if user.nickname not in self.users or self.users.get(user.nickname) != user:
+                    break
                 # Flush write buffer to prevent backpressure
                 try:
                     await writer.drain()
-                except ConnectionResetError:
+                except (ConnectionResetError, BrokenPipeError, OSError):
                     break
         except Exception as e:
             if self.debug_mode:
@@ -3066,6 +3069,7 @@ class pyIRCXServer:
             await self.handle_gag_alias(user, params, cmd == "GAG")
         elif cmd == "QUIT":
             await self.quit_user(user)
+            return  # Exit dispatch to break the read loop
         elif cmd == "STATS":
             await self.handle_stats(user, params)
         elif cmd == "CONFIG":
@@ -7630,8 +7634,10 @@ class pyIRCXServer:
         if target.is_service():
             await staff.send(self.get_reply("823", staff, target=target_nick))
             return
+        # Send KILL message to target
         await target.send(f":{CONFIG.get('system', 'nick')} KILL {target_nick} :{reason}")
-        await staff.send(f":{target_nick} KILLED")
+        # Send confirmation NOTICE to staff member
+        await staff.send(f":{self.servername} NOTICE {staff.nickname} :*** User {target_nick} has been killed ({reason})")
         await self.log_staff(staff.nickname, "KILL", target_nick, reason)
         await self.quit_user(target)
 
