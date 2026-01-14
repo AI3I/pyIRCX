@@ -597,7 +597,7 @@ sudo dnf install httpd php php-fpm  # Fedora/RHEL
 # sudo apt install apache2 php        # Debian/Ubuntu
 
 # Install web admin files
-sudo cp -r web-admin/ /var/www/html/pyircx-admin/
+sudo cp -r webadmin/ /var/www/html/pyircx-admin/
 sudo chown -R apache:apache /var/www/html/pyircx-admin/
 
 # Install SELinux policies (Fedora/RHEL/CentOS)
@@ -635,7 +635,7 @@ The web admin provides:
 - Apache user isolation (unprivileged)
 - Audit logging via polkit and systemd
 
-See `web-admin/README.md` and `web-admin/INSTALL.md` for detailed setup instructions.
+See `webadmin/README.md` and `webadmin/INSTALL.md` for detailed setup instructions.
 
 ---
 

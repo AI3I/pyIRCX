@@ -274,11 +274,11 @@ install_web_admin() {
     mkdir -p "$WEB_ADMIN_DIR"
 
     # Copy web admin files
-    if [ -d "$SCRIPT_DIR/web-admin" ]; then
-        cp "$SCRIPT_DIR/web-admin"/*.php "$WEB_ADMIN_DIR/" 2>/dev/null || true
-        cp "$SCRIPT_DIR/web-admin"/*.js "$WEB_ADMIN_DIR/" 2>/dev/null || true
-        cp "$SCRIPT_DIR/web-admin"/*.css "$WEB_ADMIN_DIR/" 2>/dev/null || true
-        cp "$SCRIPT_DIR/web-admin"/.htaccess "$WEB_ADMIN_DIR/" 2>/dev/null || true
+    if [ -d "$SCRIPT_DIR/webadmin" ]; then
+        cp "$SCRIPT_DIR/webadmin"/*.php "$WEB_ADMIN_DIR/" 2>/dev/null || true
+        cp "$SCRIPT_DIR/webadmin"/*.js "$WEB_ADMIN_DIR/" 2>/dev/null || true
+        cp "$SCRIPT_DIR/webadmin"/*.css "$WEB_ADMIN_DIR/" 2>/dev/null || true
+        cp "$SCRIPT_DIR/webadmin"/.htaccess "$WEB_ADMIN_DIR/" 2>/dev/null || true
     else
         echo -e "${RED}Web admin files not found${NC}"
         return 1

@@ -25,8 +25,8 @@ This release fixes critical bugs in the web admin panel and standardizes the UI 
 |------|---------|-------------|
 | **pyircx.py** | +123/-64 | **Version: 1.1.1**, Added SET_CHANNEL_MODE & SET_CHANNEL_TOPIC handlers |
 | **api.py** | +191/-191 | Added set_channel_mode(), set_channel_topic(), fixed handler |
-| **web-admin/admin.js** | +197/-197 | Fixed modals, added functions, standardized buttons |
-| **web-admin/index.php** | +14/-14 | Added emojis to static buttons |
+| **webadmin/admin.js** | +197/-197 | Fixed modals, added functions, standardized buttons |
+| **webadmin/index.php** | +14/-14 | Added emojis to static buttons |
 | **install.sh** | +12/-12 | Support for generate_default_config.py |
 | **upgrade.sh** | +12/-12 | Support for generate_default_config.py |
 | **generate_default_config.py** | +43 (new) | Generates default config from pyircx.py |

@@ -319,8 +319,8 @@ if [ $NEEDS_WEB_ADMIN -eq 1 ]; then
     echo ""
     echo -e "${BLUE}Installing Web Administration Panel...${NC}"
 
-    if [ ! -d "$SCRIPT_DIR/web-admin" ]; then
-        echo -e "${RED}✗ web-admin directory not found${NC}"
+    if [ ! -d "$SCRIPT_DIR/webadmin" ]; then
+        echo -e "${RED}✗ webadmin directory not found${NC}"
         echo -e "${YELLOW}⚠ Skipping web admin installation${NC}"
     else
         # Check for Apache/httpd
@@ -332,11 +332,11 @@ if [ $NEEDS_WEB_ADMIN -eq 1 ]; then
             mkdir -p "$WEB_ADMIN_DIR"
 
             # Copy files
-            cp "$SCRIPT_DIR/web-admin"/*.php "$WEB_ADMIN_DIR/" 2>/dev/null || true
-            cp "$SCRIPT_DIR/web-admin"/*.js "$WEB_ADMIN_DIR/" 2>/dev/null || true
-            cp "$SCRIPT_DIR/web-admin"/*.css "$WEB_ADMIN_DIR/" 2>/dev/null || true
-            cp "$SCRIPT_DIR/web-admin"/.htaccess "$WEB_ADMIN_DIR/" 2>/dev/null || true
-            cp "$SCRIPT_DIR/web-admin"/*.md "$WEB_ADMIN_DIR/" 2>/dev/null || true
+            cp "$SCRIPT_DIR/webadmin"/*.php "$WEB_ADMIN_DIR/" 2>/dev/null || true
+            cp "$SCRIPT_DIR/webadmin"/*.js "$WEB_ADMIN_DIR/" 2>/dev/null || true
+            cp "$SCRIPT_DIR/webadmin"/*.css "$WEB_ADMIN_DIR/" 2>/dev/null || true
+            cp "$SCRIPT_DIR/webadmin"/.htaccess "$WEB_ADMIN_DIR/" 2>/dev/null || true
+            cp "$SCRIPT_DIR/webadmin"/*.md "$WEB_ADMIN_DIR/" 2>/dev/null || true
 
             # Set permissions
             chown -R apache:apache "$WEB_ADMIN_DIR"

@@ -2222,6 +2222,13 @@ def main():
             result = {"error": "Usage: test-staff-login <username> <password>"}
         else:
             result = test_staff_login(sys.argv[2], sys.argv[3])
+    elif command == "test-staff-login-stdin":
+        if len(sys.argv) < 3:
+            result = {"error": "Usage: test-staff-login-stdin <username> (password from stdin)"}
+        else:
+            # Read password from stdin for security (not visible in process list)
+            password = sys.stdin.read().strip()
+            result = test_staff_login(sys.argv[2], password)
     elif command == "get-staff-details":
         if len(sys.argv) < 3:
             result = {"error": "Usage: get-staff-details <username>"}
