@@ -2385,8 +2385,18 @@ class pyIRCXServer:
         logger.info("="*70)
 
         async with aiosqlite.connect(CONFIG.get('database', 'path', default='ircx_server.db')) as db:
-            # Staff users table
-            await db.execute("CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password_hash TEXT, level TEXT)")
+            # Staff users table with all required columns
+            await db.execute("""CREATE TABLE IF NOT EXISTS users (
+                username TEXT PRIMARY KEY,
+                password_hash TEXT,
+                level TEXT,
+                created_at INTEGER DEFAULT 0,
+                last_login INTEGER DEFAULT 0,
+                registered_nick TEXT,
+                email TEXT,
+                realname TEXT,
+                force_realname INTEGER DEFAULT 0
+            )""")
 
             # Create default admin account if no staff accounts exist
             async with db.execute("SELECT COUNT(*) FROM users") as cursor:
@@ -2402,6 +2412,32 @@ class pyIRCXServer:
                     await db.commit()
                     logger.warning(f"Created default ADMIN account: {default_user}")
                     logger.warning("*** CHANGE THE DEFAULT PASSWORD IMMEDIATELY using: STAFF PASS ***")
+
+            # Migrate users table schema (add missing columns for existing installations)
+            try:
+                await db.execute("ALTER TABLE users ADD COLUMN created_at INTEGER DEFAULT 0")
+            except:
+                pass  # Column already exists
+            try:
+                await db.execute("ALTER TABLE users ADD COLUMN last_login INTEGER DEFAULT 0")
+            except:
+                pass  # Column already exists
+            try:
+                await db.execute("ALTER TABLE users ADD COLUMN registered_nick TEXT")
+            except:
+                pass  # Column already exists
+            try:
+                await db.execute("ALTER TABLE users ADD COLUMN email TEXT")
+            except:
+                pass  # Column already exists
+            try:
+                await db.execute("ALTER TABLE users ADD COLUMN realname TEXT")
+            except:
+                pass  # Column already exists
+            try:
+                await db.execute("ALTER TABLE users ADD COLUMN force_realname INTEGER DEFAULT 0")
+            except:
+                pass  # Column already exists
 
             # Registered nicknames with UUID and MFA
             await db.execute("""CREATE TABLE IF NOT EXISTS registered_nicks (
@@ -2443,8 +2479,15 @@ class pyIRCXServer:
                 pattern TEXT,
                 set_by TEXT,
                 set_at INTEGER,
-                reason TEXT
+                reason TEXT,
+                timeout INTEGER DEFAULT 0
             )""")
+
+            # Migrate server_access table schema (add timeout column for existing installations)
+            try:
+                await db.execute("ALTER TABLE server_access ADD COLUMN timeout INTEGER DEFAULT 0")
+            except:
+                pass  # Column already exists
 
             # Messenger mailbox
             await db.execute("""CREATE TABLE IF NOT EXISTS mailbox (

@@ -310,8 +310,8 @@ if [ $NEEDS_DB_MIGRATION -eq 1 ]; then
         fi
     fi
 
-    echo -e "${BLUE}Database migrations handled automatically by pyircx.py on startup${NC}"
-    echo -e "${GREEN}✓ Database schema will be updated on first run${NC}"
+    echo -e "${BLUE}Database migrations are handled automatically by pyircx.py on startup${NC}"
+    echo -e "${GREEN}✓ Database schema will be migrated automatically on next restart${NC}"
 fi
 
 # Install Web Admin Panel
