@@ -532,14 +532,9 @@ function handleMessage(data) {
             if (p[0]) { currentNick = p[0]; $('currentNick').textContent = p[0]; }
             setConnected();
             sysMsg(p[p.length-1]);
-            // Enable IRCX mode after registration
+            // Enable IRCX mode after registration (channel join will happen after 800)
             if (ws?.readyState === 1) {
                 ws.send(JSON.stringify({ type: 'raw', command: 'IRCX' }));
-            }
-            // Join pending channel after registration completes
-            if (pendingJoinChannel && ws?.readyState === 1) {
-                ws.send(JSON.stringify({ type: 'join', channel: pendingJoinChannel }));
-                pendingJoinChannel = '';
             }
             break;
         case '002': case '003': sysMsg(p[p.length-1], 'system'); break;
@@ -702,7 +697,14 @@ function handleMessage(data) {
             break;
 
         // IRCX
-        case '800': isIRCX = true; break;
+        case '800':
+            isIRCX = true;
+            // Now that IRCX mode is confirmed, join pending channel
+            if (pendingJoinChannel && ws?.readyState === 1) {
+                ws.send(JSON.stringify({ type: 'join', channel: pendingJoinChannel }));
+                pendingJoinChannel = '';
+            }
+            break;
         case '804': sysMsg('Authentication successful', 'system'); break;
 
         // ACCESS
