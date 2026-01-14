@@ -597,8 +597,8 @@ sudo dnf install httpd php php-fpm  # Fedora/RHEL
 # sudo apt install apache2 php        # Debian/Ubuntu
 
 # Install web admin files
-sudo cp -r webadmin/ /var/www/html/pyircx-admin/
-sudo chown -R apache:apache /var/www/html/pyircx-admin/
+sudo cp -r webadmin/ /var/www/html/webadmin/
+sudo chown -R apache:apache /var/www/html/webadmin/
 
 # Install SELinux policies (Fedora/RHEL/CentOS)
 cd selinux/
@@ -614,7 +614,7 @@ sudo chmod 644 /etc/polkit-1/rules.d/10-pyircx-admin.rules
 # Add apache to systemd-journal group (for log viewing)
 sudo usermod -a -G systemd-journal apache
 
-# Access at http://yourserver/pyircx-admin/
+# Access at http://yourserver/webadmin/
 ```
 
 The web admin provides:

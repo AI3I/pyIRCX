@@ -6,7 +6,7 @@ Your web admin is now live and fully functional, replacing the old Cockpit inter
 
 ## Access
 
-**URL:** http://your-server/pyircx-admin/
+**URL:** http://your-server/webadmin/
 
 ## What's New
 
@@ -83,7 +83,7 @@ Your web admin is now live and fully functional, replacing the old Cockpit inter
 
 ## Installation Status
 
-✅ Files installed to: `/var/www/html/pyircx-admin/`
+✅ Files installed to: `/var/www/html/webadmin/`
 ✅ Permissions set: `apache:apache`
 ✅ API tested: Working
 ✅ Sudo configured: Service control enabled
@@ -94,7 +94,7 @@ Your web admin is now live and fully functional, replacing the old Cockpit inter
 - [x] API endpoint responds correctly
 - [x] Service control permissions work
 - [x] File permissions correct
-- [ ] Test in browser - navigate to http://your-server/pyircx-admin/
+- [ ] Test in browser - navigate to http://your-server/webadmin/
 - [ ] Test service start/stop/restart
 - [ ] Test user management features
 - [ ] Test channel management features
@@ -132,7 +132,7 @@ sudo rm -rf /usr/share/cockpit/pyircx/
 ## File Structure
 
 ```
-/var/www/html/pyircx-admin/
+/var/www/html/webadmin/
 ├── index.html          # Main HTML (multi-page layout with sidebar)
 ├── admin.js            # JavaScript (replaces Cockpit calls with fetch)
 ├── style.css           # CSS (sidebar layout, cards, responsive)
@@ -155,7 +155,7 @@ All your existing API functions work exactly as before, just accessed via PHP no
 
 ### Can't access the page
 - Check Apache/httpd is running: `sudo systemctl status httpd`
-- Check file permissions: `ls -la /var/www/html/pyircx-admin/`
+- Check file permissions: `ls -la /var/www/html/webadmin/`
 
 ### Service control doesn't work
 - Test sudo: `sudo -u apache systemctl is-active pyircx.service`
@@ -170,7 +170,7 @@ All your existing API functions work exactly as before, just accessed via PHP no
 
 ## Next Steps
 
-1. Open http://your-server/pyircx-admin/ in your browser
+1. Open http://your-server/webadmin/ in your browser
 2. Test all the pages using the left sidebar navigation
 3. Add HTTP Basic Auth for security (optional but recommended)
 4. Configure HTTPS if needed

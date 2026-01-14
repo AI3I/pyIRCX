@@ -153,7 +153,7 @@ echo ""
 
 # Check 6: Web Admin Panel
 echo "=== Checking Web Admin Panel ==="
-WEB_ADMIN_DIR="/var/www/html/pyircx-admin"
+WEB_ADMIN_DIR="/var/www/html/webadmin"
 if [ -d "$WEB_ADMIN_DIR" ]; then
     echo -e "${GREEN}✓${NC} Web Admin directory exists"
 

@@ -258,7 +258,7 @@ install_web_admin() {
 
     local os=$(detect_os)
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    WEB_ADMIN_DIR="/var/www/html/pyircx-admin"
+    WEB_ADMIN_DIR="/var/www/html/webadmin"
 
     # Install Apache and PHP based on OS
     case "$os" in
@@ -323,7 +323,7 @@ install_web_admin() {
 
     echo -e "${GREEN}Web Admin Panel installed successfully!${NC}"
     echo ""
-    echo "Access at: http://localhost/pyircx-admin/"
+    echo "Access at: http://localhost/webadmin/"
     echo "Login with your IRC staff account (administrators only)"
     echo ""
 }
@@ -451,14 +451,22 @@ install_webchat() {
         pip3 install websockets
     fi
 
-    # Create webchat directory
+    # Create webchat backend directory
     mkdir -p "$INSTALL_DIR/webchat"
+
+    # Create webchat web directory
+    WEBCHAT_WEB_DIR="/var/www/html/webchat"
+    mkdir -p "$WEBCHAT_WEB_DIR"
 
     # Copy webchat files
     if [ -d "$SCRIPT_DIR/webchat" ]; then
+        # Backend gateway goes to /opt/pyircx/webchat
         cp "$SCRIPT_DIR/webchat/gateway.py" "$INSTALL_DIR/webchat/"
-        cp "$SCRIPT_DIR/webchat/index.html" "$INSTALL_DIR/webchat/"
         chmod 755 "$INSTALL_DIR/webchat/gateway.py"
+
+        # Frontend index.html goes to /var/www/html/webchat
+        cp "$SCRIPT_DIR/webchat/index.html" "$WEBCHAT_WEB_DIR/"
+        chmod 644 "$WEBCHAT_WEB_DIR/index.html"
     else
         echo -e "${RED}WebChat files not found in $SCRIPT_DIR/webchat${NC}"
         return 1
@@ -466,6 +474,15 @@ install_webchat() {
 
     # Set permissions
     chown -R "$SERVICE_USER:$SERVICE_GROUP" "$INSTALL_DIR/webchat"
+
+    # Set web directory permissions (web server user)
+    if id apache &>/dev/null; then
+        chown -R apache:apache "$WEBCHAT_WEB_DIR"
+    elif id www-data &>/dev/null; then
+        chown -R www-data:www-data "$WEBCHAT_WEB_DIR"
+    elif id http &>/dev/null; then
+        chown -R http:http "$WEBCHAT_WEB_DIR"
+    fi
 
     # Create webchat config file
     if [ ! -f "$CONFIG_DIR/webchat.conf" ]; then
@@ -509,17 +526,18 @@ EOF
 
     echo -e "${GREEN}WebChat installed and started!${NC}"
     echo ""
-    echo "WebChat files: $INSTALL_DIR/webchat/"
+    echo "WebChat backend: $INSTALL_DIR/webchat/"
+    echo "WebChat frontend: $WEBCHAT_WEB_DIR/"
     echo "Configuration: $CONFIG_DIR/webchat.conf"
     echo ""
     echo "Service commands:"
     echo "  systemctl status pyircx-webchat   - Check status"
     echo "  systemctl restart pyircx-webchat  - Restart gateway"
     echo ""
+    echo "Access WebChat at: http://localhost/webchat/"
     echo "WebSocket endpoint: ws://localhost:8765"
     echo ""
     echo "For HTTPS/WSS setup, see: apache/ssl-webchat.conf.example"
-    echo "Copy webchat/index.html to your web server document root"
     echo ""
 }
 

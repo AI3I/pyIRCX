@@ -604,6 +604,7 @@ class User:
         self.pending_mfa = None  # UUID of nick awaiting MFA verification
         self.watch_list = set()  # Nicknames this user is watching
         self.silence_list = set()  # Hostmask patterns to ignore
+        self.disconnected = False  # Flag set when user is being disconnected
 
         # DNSBL and connection security
         self.dnsbl_listed = []  # List of DNSBLs this IP is on (if any)
@@ -2919,8 +2920,8 @@ class pyIRCXServer:
                     logger.debug(f"[{user.nickname}] <<< {raw}")
                 await self.dispatch(user, raw)
                 # Check if user has been disconnected (QUIT, KILL, etc.)
-                # Only check if user has a real nickname (not default "*")
-                if user.nickname != "*" and (user.nickname not in self.users or self.users.get(user.nickname) != user):
+                # Works for all user types: registered, unregistered, CAP negotiation
+                if user.disconnected:
                     break
                 # Flush write buffer to prevent backpressure
                 try:
@@ -8061,6 +8062,7 @@ class pyIRCXServer:
 
     async def quit_user(self, user):
         nick = user.nickname
+        user.disconnected = True  # Mark user as disconnected
 
         # Notify watchers that this user has gone offline
         if user.registered:

@@ -17,7 +17,7 @@ NC='\033[0m' # No Color
 # Installation paths
 INSTALL_DIR="/opt/pyircx"
 CONFIG_DIR="/etc/pyircx"
-WEB_ADMIN_DIR="/var/www/html/pyircx-admin"
+WEB_ADMIN_DIR="/var/www/html/webadmin"
 SERVICE_USER="pyircx"
 SERVICE_GROUP="pyircx"
 
@@ -343,7 +343,7 @@ if [ $NEEDS_WEB_ADMIN -eq 1 ]; then
             chmod 644 "$WEB_ADMIN_DIR"/*.php "$WEB_ADMIN_DIR"/*.js "$WEB_ADMIN_DIR"/*.css 2>/dev/null || true
 
             echo -e "${GREEN}✓ Web Administration Panel installed${NC}"
-            echo -e "${YELLOW}  Access at: http://localhost/pyircx-admin/${NC}"
+            echo -e "${YELLOW}  Access at: http://localhost/webadmin/${NC}"
         fi
     fi
 fi
@@ -581,7 +581,7 @@ echo ""
 
 if [ $NEEDS_WEB_ADMIN -eq 1 ]; then
     echo "🎉 NEW in v1.1.0: Web Administration Panel"
-    echo "  Access at: http://your-server/pyircx-admin/"
+    echo "  Access at: http://your-server/webadmin/"
     echo "  Login with: ADMIN level staff account"
     echo ""
     echo "  Set staff password:"
@@ -592,7 +592,7 @@ fi
 if [ $NEEDS_COCKPIT_REMOVAL -eq 1 ]; then
     echo "📋 Cockpit module has been replaced"
     echo "  Old: Cockpit at :9090"
-    echo "  New: Web Admin at /pyircx-admin/"
+    echo "  New: Web Admin at /webadmin/"
     echo ""
 fi
 

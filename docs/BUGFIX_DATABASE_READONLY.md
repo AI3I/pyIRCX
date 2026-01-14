@@ -145,7 +145,7 @@ $ sudo -u apache test -w /opt/pyircx && echo "✓ Can write to dir" || echo "✗
 
 ### Web Admin Test
 
-1. Access web admin: http://localhost/pyircx-admin/
+1. Access web admin: http://localhost/webadmin/
 2. Log in as ADMIN
 3. Navigate to Staff Management
 4. Try to add/modify staff member
@@ -283,7 +283,7 @@ After applying fix:
 - [ ] Check web server user in pyircx group: `groups apache`
 - [ ] Restart web services: `systemctl restart httpd php-fpm`
 - [ ] Test write access: `sudo -u apache test -w /opt/pyircx/pyircx.db`
-- [ ] Access web admin: http://localhost/pyircx-admin/
+- [ ] Access web admin: http://localhost/webadmin/
 - [ ] Try staff management operation
 - [ ] Try config change
 - [ ] Verify no readonly errors in logs: `journalctl -u httpd -n 50`

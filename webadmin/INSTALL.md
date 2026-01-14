@@ -30,14 +30,14 @@ This is a standalone web admin panel for pyIRCX that runs on any standard webser
 ### 1. Copy files to web root
 
 ```bash
-sudo cp -r /home/jdlewis/GitHub/pyIRCX/webadmin/* /var/www/html/pyircx-admin/
-sudo chown -R www-data:www-data /var/www/html/pyircx-admin/
-sudo chmod 755 /var/www/html/pyircx-admin/
+sudo cp -r /home/jdlewis/GitHub/pyIRCX/webadmin/* /var/www/html/webadmin/
+sudo chown -R www-data:www-data /var/www/html/webadmin/
+sudo chmod 755 /var/www/html/webadmin/
 ```
 
 ### 2. Configure api.php path
 
-Edit `/var/www/html/pyircx-admin/api.php` and verify the path to your api.py:
+Edit `/var/www/html/webadmin/api.php` and verify the path to your api.py:
 
 ```php
 // Line ~55
@@ -78,7 +78,7 @@ Should return `active`, `inactive`, or `failed` without asking for a password.
 Open your browser to:
 
 ```
-http://your-server/pyircx-admin/
+http://your-server/webadmin/
 ```
 
 ## Apache Configuration (Optional)
@@ -86,14 +86,14 @@ http://your-server/pyircx-admin/
 For cleaner URLs and better security:
 
 ```apache
-<Directory /var/www/html/pyircx-admin>
+<Directory /var/www/html/webadmin>
     Options -Indexes +FollowSymLinks
     AllowOverride All
     Require all granted
 </Directory>
 
 # Optional: Add basic auth
-<Directory /var/www/html/pyircx-admin>
+<Directory /var/www/html/webadmin>
     AuthType Basic
     AuthName "pyIRCX Admin"
     AuthUserFile /etc/apache2/.htpasswd
@@ -110,8 +110,8 @@ sudo systemctl restart apache2
 ## nginx Configuration (Optional)
 
 ```nginx
-location /pyircx-admin/ {
-    alias /var/www/html/pyircx-admin/;
+location /webadmin/ {
+    alias /var/www/html/webadmin/;
     index index.html;
 
     location ~ \.php$ {
@@ -140,7 +140,7 @@ location /pyircx-admin/ {
 
 Check file permissions:
 ```bash
-sudo chown -R www-data:www-data /var/www/html/pyircx-admin/
+sudo chown -R www-data:www-data /var/www/html/webadmin/
 ```
 
 ### Service control doesn't work

@@ -85,7 +85,7 @@
       "generic_hostname_score": 5
     },
     "webirc": {
-      "enabled": false,
+      "enabled": true,
       "hosts": {
         "pyircx-webchat": {
           "password": "changeme",
