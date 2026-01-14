@@ -464,9 +464,11 @@ install_webchat() {
         cp "$SCRIPT_DIR/webchat/gateway.py" "$INSTALL_DIR/webchat/"
         chmod 755 "$INSTALL_DIR/webchat/gateway.py"
 
-        # Frontend index.html goes to /var/www/html/webchat
+        # Frontend files go to /var/www/html/webchat
         cp "$SCRIPT_DIR/webchat/index.html" "$WEBCHAT_WEB_DIR/"
+        cp "$SCRIPT_DIR/webchat/favicon.svg" "$WEBCHAT_WEB_DIR/" 2>/dev/null || true
         chmod 644 "$WEBCHAT_WEB_DIR/index.html"
+        chmod 644 "$WEBCHAT_WEB_DIR/favicon.svg" 2>/dev/null || true
     else
         echo -e "${RED}WebChat files not found in $SCRIPT_DIR/webchat${NC}"
         return 1
