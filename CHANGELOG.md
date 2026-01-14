@@ -5,6 +5,40 @@ All notable changes to pyIRCX will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.4] - 2026-01-14
+
+### Fixed - CRITICAL
+- **Channel Broadcast Async Bug**: Fixed catastrophic bug in `Channel.broadcast()` that crashed connections when users joined channels
+  - Bug: `tasks.append(await member.send(msg))` awaited immediately and appended None
+  - Fix: `tasks.append(member.send(msg))` properly collects coroutines for concurrent execution
+  - Impact: All channel broadcasts (joins, parts, messages, modes) were broken with multiple users
+  - Affected: WebChat and any multi-user channel operations since asyncio.gather migration
+
+### Fixed
+- **KILL Command Format**: Now sends proper IRC NOTICE instead of malformed message
+  - No more "GARBAGE" display in IRC clients
+  - Format: `:servername NOTICE staffnick :*** User killed (reason)`
+- **QUIT Command Disconnect**: Users now disconnect immediately (no lingering connections)
+  - Added `user.disconnected` flag for reliable disconnect detection
+  - Works for all user types: registered, unregistered, CAP negotiation, webchat
+- **CAP Negotiation**: Clients can now complete capability negotiation without disconnection
+  - Fixed disconnect check to skip unregistered users (nickname "*")
+- **WebChat IRCX Order**: IRCX command now sent after registration (001) instead of before
+  - Correct order: WEBIRC → NICK/USER → 001 welcome → IRCX → JOIN
+- **Database Write Access**: Web server user automatically added to pyircx group
+  - Fixes "readonly database" errors in web admin
+  - Applied to install.sh, upgrade.sh, and repair.sh scripts
+
+### Changed
+- **Web Admin Directory**: `/var/www/html/pyircx-admin` → `/var/www/html/webadmin`
+- **WebChat Directory**: Frontend now installed to `/var/www/html/webchat/` with index.html
+- **WEBIRC Default**: Now enabled by default in pyircx_config.json template
+- **WebChat Access**: http://localhost/webadmin/ and http://localhost/webchat/
+
+### Added
+- **WebChat Favicon**: Blue SVG favicon with # symbol for IRC theme
+- **Enhanced Debug Logging**: Added traceback logging for client errors in debug mode
+
 ## [1.1.2] - 2026-01-12
 
 ### Fixed

@@ -22,9 +22,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
 # Version info - updated with each release
-__version__ = "1.1.3"
+__version__ = "1.1.4"
 __version_label__ = "pyIRCX"
-__created__ = "Wed Jan 14 03:43:00 PM EST 2026"
+__created__ = "Wed Jan 14 05:20:19 PM EST 2026"
 
 import asyncio
 import aiosqlite
@@ -1579,7 +1579,7 @@ class Channel:
         tasks = []
         for member in self.members.values():
             if member != exclude:
-                tasks.append(await member.send(msg))
+                tasks.append(member.send(msg))
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -2931,6 +2931,7 @@ class pyIRCXServer:
         except Exception as e:
             if self.debug_mode:
                 logger.error(f"Client error [{user.nickname}]: {e}")
+                logger.error(f"Traceback: {traceback.format_exc()}")
         finally:
             await self.quit_user(user)
 
