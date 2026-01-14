@@ -69,8 +69,8 @@ class IRCTestClient:
                 await self.send_raw("QUIT :Test done")
                 self.writer.close()
                 await self.writer.wait_closed()
-            except:
-                pass
+            except Exception:
+                pass  # Connection already closed
 
 
 class TestRunner:

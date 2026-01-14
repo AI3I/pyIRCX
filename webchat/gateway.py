@@ -85,7 +85,7 @@ class IRCWebSocketGateway:
             if remote:
                 logger.debug(f"Using remote_address: {remote[0]}")
                 return remote[0]
-        except:
+        except (AttributeError, TypeError, IndexError):
             pass
 
         return '0.0.0.0'
@@ -155,8 +155,8 @@ class IRCWebSocketGateway:
                     'type': 'error',
                     'message': f'Connection error: {str(e)}'
                 }))
-            except:
-                pass
+            except Exception:
+                pass  # WebSocket already closed
         finally:
             if irc_writer:
                 try:
@@ -164,8 +164,8 @@ class IRCWebSocketGateway:
                     await irc_writer.drain()
                     irc_writer.close()
                     await irc_writer.wait_closed()
-                except:
-                    pass
+                except Exception:
+                    pass  # Connection already closed
 
             if client_id in self.connections:
                 del self.connections[client_id]
@@ -269,7 +269,7 @@ class IRCWebSocketGateway:
                     line, buffer = buffer.split(b'\r\n', 1)
                     try:
                         line_str = line.decode('utf-8', errors='replace')
-                    except:
+                    except UnicodeDecodeError:
                         line_str = line.decode('latin-1', errors='replace')
 
                     # Handle PING

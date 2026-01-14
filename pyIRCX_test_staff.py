@@ -149,8 +149,8 @@ class IRCTestClient:
                 await self.send_raw("QUIT :Test completed")
                 self.writer.close()
                 await self.writer.wait_closed()
-            except:
-                pass
+            except Exception:
+                pass  # Connection already closed
             self.connected = False
 
 
@@ -806,7 +806,7 @@ async def test_kill_admin():
         await victim.read_lines()
         still_connected = any("PONG" in line for line in victim.buffer)
         assert not still_connected, "Victim should be disconnected"
-    except:
+    except Exception:
         pass  # Expected - connection closed
 
     await admin.disconnect()

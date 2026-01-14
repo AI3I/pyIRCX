@@ -19,6 +19,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
 import asyncio
+import bcrypt
 import time
 import logging
 from typing import Dict, Set, Optional, Tuple
@@ -134,7 +135,7 @@ class ServerLinkManager:
                     description = parts[4].lstrip(':') if len(parts) > 4 else ''
 
                     # Authenticate
-                    if not self.authenticate_server(servername, password):
+                    if not await self.authenticate_server(servername, password):
                         logger.warning(f"Failed auth from {servername} at {peer}")
                         await self.send_to_writer(writer, f"ERROR :Bad password")
                         writer.close()
@@ -507,11 +508,35 @@ class ServerLinkManager:
         # Handle as split
         await self.handle_server_split(server)
 
-    def authenticate_server(self, servername: str, password: str) -> bool:
-        """Authenticate an incoming server connection"""
+    async def authenticate_server(self, servername: str, password: str) -> bool:
+        """Authenticate an incoming server connection using bcrypt"""
+        loop = asyncio.get_event_loop()
+
         for link in self.links_config:
-            if link['name'] == servername and link['password'] == password:
-                return True
+            if link['name'] == servername:
+                # Get password hash from config (should be bcrypt hash)
+                password_hash = link['password']
+
+                # Support both bcrypt hashes and plaintext for backwards compatibility
+                # Check if it's a bcrypt hash (starts with $2b$)
+                if password_hash.startswith('$2b$') or password_hash.startswith('$2a$') or password_hash.startswith('$2y$'):
+                    try:
+                        # Verify bcrypt hash asynchronously
+                        result = await loop.run_in_executor(
+                            None,
+                            bcrypt.checkpw,
+                            password.encode(),
+                            password_hash.encode()
+                        )
+                        return result
+                    except (ValueError, TypeError) as e:
+                        logger.error(f"bcrypt verification error for {servername}: {e}")
+                        return False
+                else:
+                    # Fall back to plaintext comparison (deprecated - log warning)
+                    logger.warning(f"Server link {servername} using PLAINTEXT password - UPDATE TO BCRYPT IMMEDIATELY")
+                    return password_hash == password
+
         return False
 
     @staticmethod

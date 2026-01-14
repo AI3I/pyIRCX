@@ -22,9 +22,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
 # Version info - updated with each release
-__version__ = "1.1.2"
+__version__ = "1.1.3"
 __version_label__ = "pyIRCX"
-__created__ = "Mon Jan 12 07:23:20 PM EST 2026"
+__created__ = "Wed Jan 14 03:43:00 PM EST 2026"
 
 import asyncio
 import aiosqlite
@@ -482,9 +482,12 @@ class DatabasePool:
             logger.info(f"Database pool initialized with {self.pool_size} connections")
 
     async def acquire(self):
-        """Get a connection from the pool"""
+        """Get a connection from the pool with queue monitoring"""
         if not self._initialized:
             await self.initialize()
+        # Log warning if pool is saturated
+        if self._pool.qsize() == 0:
+            logger.warning(f"Database pool exhausted ({self.pool_size} connections in use). Consider increasing pool_size.")
         return await self._pool.get()
 
     async def release(self, conn):
@@ -2429,6 +2432,26 @@ class pyIRCXServer:
         logger.info(f" {CONFIG.get('server', 'network')}")
         logger.info("="*70)
 
+        # Validate config file permissions for security
+        config_path = '/etc/pyircx/pyircx_config.json'
+        try:
+            import stat
+            st = os.stat(config_path)
+            mode = st.st_mode
+            if mode & stat.S_IROTH or mode & stat.S_IWOTH:
+                logger.error("="*70)
+                logger.error("SECURITY WARNING: Config file is world-readable/writable!")
+                logger.error(f"File: {config_path}")
+                logger.error(f"Current permissions: {oct(stat.S_IMODE(mode))}")
+                logger.error("Recommended fix: sudo chmod 600 /etc/pyircx/pyircx_config.json")
+                logger.error("="*70)
+            elif mode & stat.S_IRGRP or mode & stat.S_IWGRP:
+                logger.warning(f"Config file {config_path} is group-readable. Consider chmod 600 for maximum security.")
+        except FileNotFoundError:
+            pass  # Using alternate config location
+        except Exception as e:
+            logger.warning(f"Could not validate config file permissions: {e}")
+
         async with aiosqlite.connect(CONFIG.get('database', 'path', default='ircx_server.db')) as db:
             # Staff users table with all required columns
             await db.execute("""CREATE TABLE IF NOT EXISTS users (
@@ -2461,27 +2484,27 @@ class pyIRCXServer:
             # Migrate users table schema (add missing columns for existing installations)
             try:
                 await db.execute("ALTER TABLE users ADD COLUMN created_at INTEGER DEFAULT 0")
-            except:
+            except aiosqlite.OperationalError:
                 pass  # Column already exists
             try:
                 await db.execute("ALTER TABLE users ADD COLUMN last_login INTEGER DEFAULT 0")
-            except:
+            except aiosqlite.OperationalError:
                 pass  # Column already exists
             try:
                 await db.execute("ALTER TABLE users ADD COLUMN registered_nick TEXT")
-            except:
+            except aiosqlite.OperationalError:
                 pass  # Column already exists
             try:
                 await db.execute("ALTER TABLE users ADD COLUMN email TEXT")
-            except:
+            except aiosqlite.OperationalError:
                 pass  # Column already exists
             try:
                 await db.execute("ALTER TABLE users ADD COLUMN realname TEXT")
-            except:
+            except aiosqlite.OperationalError:
                 pass  # Column already exists
             try:
                 await db.execute("ALTER TABLE users ADD COLUMN force_realname INTEGER DEFAULT 0")
-            except:
+            except aiosqlite.OperationalError:
                 pass  # Column already exists
 
             # Registered nicknames with UUID and MFA
@@ -2512,7 +2535,7 @@ class pyIRCXServer:
             # Add properties column if it doesn't exist (migration)
             try:
                 await db.execute("ALTER TABLE registered_channels ADD COLUMN properties TEXT")
-            except:
+            except aiosqlite.OperationalError:
                 pass  # Column already exists
 
             # Removed: reg_chans table (legacy - now using registered_channels with properties JSON)
@@ -2531,7 +2554,7 @@ class pyIRCXServer:
             # Migrate server_access table schema (add timeout column for existing installations)
             try:
                 await db.execute("ALTER TABLE server_access ADD COLUMN timeout INTEGER DEFAULT 0")
-            except:
+            except aiosqlite.OperationalError:
                 pass  # Column already exists
 
             # Messenger mailbox
@@ -2640,7 +2663,7 @@ class pyIRCXServer:
                 try:
                     await db.execute("ALTER TABLE server_access ADD COLUMN timeout INTEGER DEFAULT 0")
                     await db.commit()
-                except:
+                except aiosqlite.OperationalError:
                     pass  # Column already exists
                 async with db.execute("SELECT type, pattern, set_by, set_at, COALESCE(timeout, 0), reason FROM server_access") as cursor:
                     now = int(time.time())
@@ -3284,7 +3307,7 @@ class pyIRCXServer:
                     if user.provided_pass == admin_token:
                         auth, level = True, "ADMIN"
                         logger.info(f"Cockpit admin token accepted from localhost for {user.username}")
-                except:
+                except (FileNotFoundError, PermissionError, IOError):
                     pass  # Token file doesn't exist or can't be read
             
             # If admin token didn't match, try normal password authentication
