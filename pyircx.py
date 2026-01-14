@@ -2919,7 +2919,8 @@ class pyIRCXServer:
                     logger.debug(f"[{user.nickname}] <<< {raw}")
                 await self.dispatch(user, raw)
                 # Check if user has been disconnected (QUIT, KILL, etc.)
-                if user.nickname not in self.users or self.users.get(user.nickname) != user:
+                # Only check if user has a real nickname (not default "*")
+                if user.nickname != "*" and (user.nickname not in self.users or self.users.get(user.nickname) != user):
                     break
                 # Flush write buffer to prevent backpressure
                 try:
