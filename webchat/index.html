@@ -573,6 +573,11 @@ function handleMessage(data) {
                 else if (flags.includes('o')) staffUsers.set(whoNick, 'SYSOP');
                 else if (flags.includes('g')) staffUsers.set(whoNick, 'GUIDE');
                 else if (flags.includes('*')) staffUsers.set(whoNick, 'SYSOP');
+                // Update user list if we're viewing a channel with this user
+                if (currentChannel) {
+                    const ch = getChannel(currentChannel);
+                    if (ch && ch.users.has(whoNick)) renderUserList(ch);
+                }
             }
             break;
 
@@ -767,8 +772,16 @@ function handleMessage(data) {
                 if (nick?.toLowerCase() === currentNick?.toLowerCase()) {
                     switchChannel(p[0]);
                     addMsg(p[0], `You joined ${p[0]}`, 'event');
+                    // Automatically WHO the channel to discover staff status
+                    if (ws?.readyState === 1) {
+                        ws.send(JSON.stringify({ type: 'raw', command: `WHO ${p[0]}` }));
+                    }
                 } else {
                     addMsg(p[0], `${escapeHtml(nick)} joined`, 'event');
+                    // WHO the joining user to discover their staff status
+                    if (ws?.readyState === 1) {
+                        ws.send(JSON.stringify({ type: 'raw', command: `WHO ${nick}` }));
+                    }
                     if (p[0].toLowerCase() === currentChannel.toLowerCase()) renderUserList(ch);
                 }
                 renderChannelList();
