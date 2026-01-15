@@ -14,7 +14,7 @@
 pyIRCX is a **production-ready IRCX chat server** built on Python's asyncio framework. It faithfully recreates — and significantly enhances — the functionality of **Microsoft Exchange Chat Service** (MECS 5.5 and 6.0), the technology that powered legendary chat networks like:
 
 - **MSN Chat** (irc.msn.com) — Microsoft's flagship chat service, serving millions daily from 1996-2006
-- **TalkCity** — One of the largest chat communities of the late 90s, pioneering web-based chat
+- **TalkCity** (chat.talkcity.com) — One of the largest chat communities of the late 90s, pioneering web-based chat
 - **Enterprise Exchange Chat** — Corporate deployments before Slack and Teams existed
 
 If you remember the days of **Microsoft Comic Chat**, chat rooms with real nickserv-style registration, channel properties, and the unique IRCX extensions — pyIRCX brings all of that back with modern security, scalability, and reliability.
