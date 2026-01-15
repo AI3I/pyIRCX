@@ -3,7 +3,7 @@
 # pyIRCX Upgrade Script
 #
 # Intelligently upgrades an existing installation to the latest version
-# Version 1.1.2 - Channel Operations & Web Admin Fixes
+# Version 1.1.5 - VOICEKEY Feature & Protocol Compliance
 #
 set -e
 
@@ -23,7 +23,7 @@ SERVICE_GROUP="pyircx"
 
 echo ""
 echo "========================================"
-echo "  pyIRCX Upgrade Script v1.1.2"
+echo "  pyIRCX Upgrade Script v1.1.5"
 echo "========================================"
 echo ""
 
@@ -314,10 +314,14 @@ if [ $NEEDS_DB_MIGRATION -eq 1 ]; then
     echo -e "${GREEN}✓ Database schema will be migrated automatically on next restart${NC}"
 fi
 
-# Install Web Admin Panel
-if [ $NEEDS_WEB_ADMIN -eq 1 ]; then
+# Install or Update Web Admin Panel
+if [ $NEEDS_WEB_ADMIN -eq 1 ] || [ -d "$WEB_ADMIN_DIR" ]; then
     echo ""
-    echo -e "${BLUE}Installing Web Administration Panel...${NC}"
+    if [ $NEEDS_WEB_ADMIN -eq 1 ]; then
+        echo -e "${BLUE}Installing Web Administration Panel...${NC}"
+    else
+        echo -e "${BLUE}Updating Web Administration Panel...${NC}"
+    fi
 
     if [ ! -d "$SCRIPT_DIR/webadmin" ]; then
         echo -e "${RED}✗ webadmin directory not found${NC}"
@@ -339,10 +343,21 @@ if [ $NEEDS_WEB_ADMIN -eq 1 ]; then
             cp "$SCRIPT_DIR/webadmin"/*.md "$WEB_ADMIN_DIR/" 2>/dev/null || true
 
             # Set permissions
-            chown -R apache:apache "$WEB_ADMIN_DIR"
+            # Detect web server user
+            if id apache &>/dev/null; then
+                chown -R apache:apache "$WEB_ADMIN_DIR"
+            elif id www-data &>/dev/null; then
+                chown -R www-data:www-data "$WEB_ADMIN_DIR"
+            elif id http &>/dev/null; then
+                chown -R http:http "$WEB_ADMIN_DIR"
+            fi
             chmod 644 "$WEB_ADMIN_DIR"/*.php "$WEB_ADMIN_DIR"/*.js "$WEB_ADMIN_DIR"/*.css 2>/dev/null || true
 
-            echo -e "${GREEN}✓ Web Administration Panel installed${NC}"
+            if [ $NEEDS_WEB_ADMIN -eq 1 ]; then
+                echo -e "${GREEN}✓ Web Administration Panel installed${NC}"
+            else
+                echo -e "${GREEN}✓ Web Administration Panel updated${NC}"
+            fi
             echo -e "${YELLOW}  Access at: http://localhost/webadmin/${NC}"
         fi
     fi
@@ -479,10 +494,17 @@ if [ $NEEDS_WEBCHAT_UPDATE -eq 1 ] && [ -d "$SCRIPT_DIR/webchat" ]; then
     echo ""
     echo -e "${BLUE}Updating WebChat...${NC}"
 
+    # Update backend (gateway)
     if [ -d "$INSTALL_DIR/webchat" ]; then
         cp "$SCRIPT_DIR/webchat/gateway.py" "$INSTALL_DIR/webchat/"
-        cp "$SCRIPT_DIR/webchat/index.html" "$INSTALL_DIR/webchat/"
-        echo -e "${GREEN}✓ WebChat files updated${NC}"
+        echo -e "${GREEN}✓ WebChat gateway updated${NC}"
+    fi
+
+    # Update frontend (HTML)
+    if [ -d "/var/www/html/webchat" ]; then
+        cp "$SCRIPT_DIR/webchat/index.html" /var/www/html/webchat/
+        cp "$SCRIPT_DIR/webchat/favicon.svg" /var/www/html/webchat/ 2>/dev/null || true
+        echo -e "${GREEN}✓ WebChat frontend updated${NC}"
     fi
 
     # Update webchat service file
@@ -602,4 +624,4 @@ echo "  systemctl start pyircx    - Start server"
 echo "  systemctl restart pyircx  - Restart server"
 echo "  journalctl -u pyircx -f   - View logs"
 echo ""
-echo -e "${GREEN}pyIRCX v1.1.2 - All done!${NC}"
+echo -e "${GREEN}pyIRCX v1.1.5 - All done!${NC}"

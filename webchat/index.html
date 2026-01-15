@@ -119,10 +119,11 @@
         .input-area button:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
 
         /* User List */
-        .user-list { width: 200px; background: var(--bg-primary); border-left: 1px solid var(--border-color); display: flex; flex-direction: column; }
+        .user-list { width: 280px; background: var(--bg-primary); border-left: 1px solid var(--border-color); display: flex; flex-direction: column; }
         .user-list-items { flex: 1; overflow-y: auto; padding: 8px; }
         .user-item { padding: 8px 12px; font-size: 15px; color: var(--text-secondary); cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-radius: 6px; margin-bottom: 2px; transition: all 0.15s; }
         .user-item:hover { background: var(--bg-tertiary); }
+        .user-item.service { color: #8b5cf6; font-weight: 700; }
         .user-item.admin { color: #eab308; font-weight: 700; }
         .user-item.sysop { color: #f97316; font-weight: 700; }
         .user-item.guide { color: #3b82f6; font-weight: 700; }
@@ -164,6 +165,14 @@
         ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
+        /* Context Menu */
+        .context-menu-item { padding: 8px 12px; cursor: pointer; border-radius: 4px; transition: background 0.15s; font-size: 14px; }
+        .context-menu-item:hover { background: var(--bg-tertiary); }
+        .context-menu-divider { height: 1px; background: var(--border-color); margin: 4px 0; }
+
+        /* Settings & Modes hover */
+        .setting-row:hover, .mode-row:hover { background: var(--bg-secondary); }
+
         @media (max-width: 768px) { .channel-list, .user-list { display: none; } }
     </style>
 </head>
@@ -174,7 +183,7 @@
             <div class="form-group"><label>Nickname</label><input type="text" id="loginNick" maxlength="30" autocomplete="off"></div>
             <div class="form-group"><label>Channel</label><input type="text" id="loginChannel" value="#lobby"></div>
             <div class="form-group"><label>Password (staff)</label><input type="password" id="loginPassword"></div>
-            <button id="connectBtn">Connect</button>
+            <button id="connectBtn">🔌 Connect</button>
             <div class="error-message" id="loginError"></div>
         </div>
     </div>
@@ -199,16 +208,19 @@
                     <div class="chat-topic" id="chatTopic"></div>
                 </div>
                 <div class="chat-actions">
-                    <button id="joinBtn">Join</button>
-                    <button id="partBtn">Leave</button>
-                    <button id="usersBtn">Users</button>
-                    <button id="propsBtn">Properties</button>
+                    <button id="joinBtn">➕ Join</button>
+                    <button id="partBtn">➖ Leave</button>
+                    <button id="modesBtn">🔧 Modes</button>
+                    <button id="propsBtn">⚙️ Properties</button>
+                    <button id="searchBtn">🔍 Search</button>
+                    <button id="settingsBtn">⚙️ Settings</button>
                 </div>
             </div>
             <div class="messages-container" id="messages"></div>
             <div class="input-area">
                 <input type="text" id="messageInput" placeholder="Type message or /command..." disabled autocomplete="off">
-                <button id="sendBtn" disabled>Send</button>
+                <button id="emojiBtn" disabled style="padding: 12px 16px;">😀</button>
+                <button id="sendBtn" disabled>📤 Send</button>
             </div>
         </div>
         <div class="user-list">
@@ -220,15 +232,268 @@
         <div class="info-panel-header"><h3 id="infoPanelTitle">Info</h3><button class="info-panel-close" id="infoPanelClose">&times;</button></div>
         <div class="info-panel-content" id="infoPanelContent"></div>
     </div>
+
+    <!-- Settings Modal -->
+    <div class="modal-overlay hidden" id="settingsModal">
+        <div class="modal" style="width: 500px; max-width: 90vw;">
+            <h2>⚙️ Settings</h2>
+            <div style="margin: 16px 0; border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden;">
+                <label class="setting-row" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; cursor: pointer; border-bottom: 1px solid var(--border-color); transition: background 0.15s;">
+                    <span style="font-weight: 500;">Use 24-hour time format</span>
+                    <input type="checkbox" id="setting24Hour" style="width: 18px; height: 18px; cursor: pointer;">
+                </label>
+                <label class="setting-row" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; cursor: pointer; border-bottom: 1px solid var(--border-color); transition: background 0.15s;">
+                    <span style="font-weight: 500;">Desktop notifications</span>
+                    <input type="checkbox" id="settingDesktopNotif" style="width: 18px; height: 18px; cursor: pointer;">
+                </label>
+                <label class="setting-row" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; cursor: pointer; transition: background 0.15s;">
+                    <span style="font-weight: 500;">Sound notifications</span>
+                    <input type="checkbox" id="settingSoundNotif" style="width: 18px; height: 18px; cursor: pointer;">
+                </label>
+            </div>
+            <div class="form-group" style="text-align: left;">
+                <label style="display: block; margin-bottom: 8px; font-weight: 600;">Ignored Users</label>
+                <div id="ignoredList" style="margin: 8px 0; min-height: 40px; padding: 8px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 14px; text-align: left;"></div>
+                <button type="button" id="addIgnoreBtn" style="width: auto; padding: 8px 16px; margin: 0;">➕ Add User to Ignore</button>
+            </div>
+            <button id="settingsCloseBtn">Close</button>
+        </div>
+    </div>
+
+    <!-- Emoji Picker Modal -->
+    <div class="modal-overlay hidden" id="emojiModal">
+        <div class="modal" style="width: 500px; max-width: 90vw;">
+            <h2>😀 Emoji Picker</h2>
+            <div style="display: grid; grid-template-columns: repeat(8, 1fr); gap: 8px; margin: 16px 0; max-height: 350px; overflow-y: auto; overflow-x: hidden; padding-right: 8px;" id="emojiGrid"></div>
+            <button id="emojiCloseBtn">Close</button>
+        </div>
+    </div>
+
+    <!-- Channel Modes Modal -->
+    <div class="modal-overlay hidden" id="modesModal">
+        <div class="modal" style="width: 600px; max-width: 90vw;">
+            <h2>🔧 Channel Modes</h2>
+            <div style="margin: 16px 0; border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; max-height: 500px; overflow-y: auto;">
+                <div id="modesContent"></div>
+            </div>
+            <button id="modesCloseBtn">Close</button>
+        </div>
+    </div>
+
+    <!-- PROP Editor Modal -->
+    <div class="modal-overlay hidden" id="propModal">
+        <div class="modal">
+            <h2>⚙️ Channel Properties</h2>
+            <div class="form-group">
+                <label>Topic</label>
+                <input type="text" id="propTopic" placeholder="Channel topic">
+            </div>
+            <div class="form-group">
+                <label>Subject</label>
+                <input type="text" id="propSubject" placeholder="Channel subject">
+            </div>
+            <div class="form-group">
+                <label>Owner Key</label>
+                <input type="text" id="propOwnerkey" placeholder="Key for auto-owner">
+            </div>
+            <div class="form-group">
+                <label>Host Key</label>
+                <input type="text" id="propHostkey" placeholder="Key for auto-host">
+            </div>
+            <div class="form-group">
+                <label>Voice Key</label>
+                <input type="text" id="propVoicekey" placeholder="Key for auto-voice">
+            </div>
+            <div class="form-group">
+                <label>Member Key</label>
+                <input type="text" id="propMemberkey" placeholder="Key for access">
+            </div>
+            <button id="propSaveBtn">💾 Save Properties</button>
+            <button id="propCloseBtn" style="background: var(--bg-secondary); color: var(--text-primary);">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Search Modal -->
+    <div class="modal-overlay hidden" id="searchModal">
+        <div class="modal">
+            <h2>🔍 Search Messages</h2>
+            <div class="form-group">
+                <input type="text" id="searchInput" placeholder="Search current channel...">
+            </div>
+            <div id="searchResults" style="max-height: 300px; overflow-y: auto; margin: 16px 0; font-size: 14px;"></div>
+            <button id="searchCloseBtn">Close</button>
+        </div>
+    </div>
+
+    <!-- LIST Results Modal -->
+    <div class="modal-overlay hidden" id="listModal">
+        <div class="modal" style="width: 600px; max-width: 90vw;">
+            <h2>📋 Channel List</h2>
+            <div style="overflow-x: auto; margin: 16px 0;">
+                <table id="listTable" style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                    <thead>
+                        <tr style="background: var(--bg-secondary); border-bottom: 2px solid var(--border-color);">
+                            <th style="padding: 8px; text-align: left; cursor: pointer;">Channel</th>
+                            <th style="padding: 8px; text-align: left; cursor: pointer;">Users</th>
+                            <th style="padding: 8px; text-align: left;">Topic</th>
+                        </tr>
+                    </thead>
+                    <tbody id="listTableBody"></tbody>
+                </table>
+            </div>
+            <button id="listCloseBtn">Close</button>
+        </div>
+    </div>
+
+    <!-- Context Menu -->
+    <div id="contextMenu" style="display: none; position: fixed; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 8px; box-shadow: var(--shadow-lg); padding: 4px; z-index: 2000; min-width: 200px;"></div>
+
 <script>
 const WS_URL = window.location.protocol === 'https:' ? `wss://${window.location.host}/ws` : `ws://${window.location.hostname}:8765`;
 let ws = null, currentNick = '', currentChannel = '', channels = {}, myModes = new Set(), isIRCX = false, pendingJoinChannel = '';
 const staffUsers = new Map(); // Track server staff: nick -> 'ADMIN'|'SYSOP'|'GUIDE'
+const lastWhoTime = new Map(); // Track last WHO time per channel to throttle requests
+const WHO_THROTTLE_MS = 2000; // Minimum 2 seconds between WHO requests for the same channel
+
+// User settings
+const settings = {
+    use24HourTime: localStorage.getItem('use24HourTime') === 'true',
+    desktopNotifications: localStorage.getItem('desktopNotifications') === 'true',
+    soundNotifications: localStorage.getItem('soundNotifications') === 'true',
+    highlightSound: localStorage.getItem('highlightSound') !== 'false'
+};
+const ignoredUsers = new Set(JSON.parse(localStorage.getItem('ignoredUsers') || '[]'));
+let notificationPermission = 'default';
 const $ = id => document.getElementById(id);
 const escapeHtml = t => { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; };
 const nickColor = n => 'nick-' + (Math.abs([...n].reduce((h,c) => c.charCodeAt(0) + ((h << 5) - h), 0)) % 8);
-const ts = () => new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+const ts = () => new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: !settings.use24HourTime });
 const isChannel = n => n && (n[0] === '#' || n[0] === '&');
+
+// Staff emoji mapping for PM windows
+const staffEmoji = { 'SERVICE': '🤖', 'ADMIN': '👑', 'SYSOP': '🏅', 'GUIDE': '🔰' };
+
+// Check if user is ignored
+const isIgnored = nick => ignoredUsers.has(nick.toLowerCase());
+
+// Play notification sound using Web Audio API
+function playSound(type = 'message') {
+    if (!settings.soundNotifications) return;
+
+    try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const now = audioCtx.currentTime;
+
+        switch(type) {
+            case 'notice': // "Ahem" - two distinct tones
+                createBeep(audioCtx, 400, 0.4, 0.7, now);
+                createBeep(audioCtx, 600, 0.4, 0.7, now + 0.45);
+                break;
+
+            case 'join': // Rising "door opening" chime
+                createBeep(audioCtx, 600, 0.25, 0.7, now);
+                createBeep(audioCtx, 900, 0.25, 0.7, now + 0.27);
+                break;
+
+            case 'part': // Falling "door closing" chime
+                createBeep(audioCtx, 900, 0.25, 0.7, now);
+                createBeep(audioCtx, 600, 0.25, 0.7, now + 0.27);
+                break;
+
+            case 'mode': // Sharp mechanical click
+                createBeep(audioCtx, 2000, 0.08, 0.7);
+                break;
+
+            case 'kick': // AGGRESSIVE LOUD THUMP - violent impact
+                // Heavy bass slam
+                createBeep(audioCtx, 60, 0.6, 0.7, now);
+                // Mid punch
+                createBeep(audioCtx, 150, 0.4, 0.7, now + 0.02);
+                // High crack
+                createBeep(audioCtx, 350, 0.3, 0.7, now + 0.05);
+                // Reverb/echo
+                createBeep(audioCtx, 80, 0.3, 0.7, now + 0.15);
+                break;
+
+            case 'pm': // Pleasant chime
+                createBeep(audioCtx, 600, 0.3, 0.7, now);
+                createBeep(audioCtx, 800, 0.3, 0.7, now + 0.32);
+                break;
+
+            case 'highlight': // Three urgent beeps
+                createBeep(audioCtx, 880, 0.2, 0.7, now);
+                createBeep(audioCtx, 880, 0.2, 0.7, now + 0.25);
+                createBeep(audioCtx, 880, 0.2, 0.7, now + 0.5);
+                break;
+
+            case 'whisper': // Soft chime
+                createBeep(audioCtx, 700, 0.3, 0.7);
+                break;
+
+            case 'error': // Harsh buzz
+                createBeep(audioCtx, 200, 0.4, 0.7);
+                break;
+
+            case 'invite': // Friendly ascending chime
+                createBeep(audioCtx, 523, 0.3, 0.7, now);
+                createBeep(audioCtx, 659, 0.3, 0.7, now + 0.32);
+                createBeep(audioCtx, 784, 0.3, 0.7, now + 0.64);
+                break;
+
+            default: // Generic message sound
+                createBeep(audioCtx, 800, 0.3, 0.7);
+        }
+
+        // Close context after sound finishes
+        setTimeout(() => audioCtx.close(), 2000);
+    } catch (e) {
+        console.log('Audio playback failed:', e);
+    }
+}
+
+// Helper function to create a beep tone
+function createBeep(ctx, frequency, duration, volume, startTime = null) {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const now = startTime || ctx.currentTime;
+
+    osc.type = 'sine';
+    osc.frequency.value = frequency;
+    gain.gain.setValueAtTime(volume, now);
+    gain.gain.exponentialRampToValueAtTime(0.01, now + duration);
+
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + duration);
+}
+
+// Show desktop notification
+function showNotification(title, body, icon = null) {
+    if (!settings.desktopNotifications || notificationPermission !== 'granted') return;
+    try {
+        const notification = new Notification(title, { body, icon: icon || 'favicon.svg', tag: 'pyircx' });
+        notification.onclick = () => { window.focus(); notification.close(); };
+        setTimeout(() => notification.close(), 5000);
+    } catch (e) {}
+}
+
+// Request notification permission
+async function requestNotificationPermission() {
+    if ('Notification' in window && notificationPermission === 'default') {
+        notificationPermission = await Notification.requestPermission();
+        if (notificationPermission === 'granted') {
+            settings.desktopNotifications = true;
+            localStorage.setItem('desktopNotifications', 'true');
+        }
+    }
+}
+
+// Highlight nickname mentions
+function highlightNick(text) {
+    if (!currentNick) return text;
+    const regex = new RegExp(`\\b${currentNick}\\b`, 'gi');
+    return text.replace(regex, `<span style="background: #fbbf24; color: #1e293b; padding: 2px 4px; border-radius: 3px; font-weight: 700;">$&</span>`);
+}
 
 // Command queue for throttling - prevents "Too fast" errors
 const cmdQueue = [];
@@ -249,11 +514,25 @@ function processQueue() {
     cmdTimer = setTimeout(processQueue, CMD_DELAY);
 }
 
+// Throttled WHO - only send if enough time has passed since last WHO for this channel
+function throttledWho(channel) {
+    const now = Date.now();
+    const lastWho = lastWhoTime.get(channel.toLowerCase()) || 0;
+    if (now - lastWho >= WHO_THROTTLE_MS) {
+        lastWhoTime.set(channel.toLowerCase(), now);
+        if (ws?.readyState === 1) {
+            ws.send(JSON.stringify({ type: 'raw', command: `WHO ${channel}` }));
+        }
+        return true;
+    }
+    return false;
+}
+
 // Channel mode descriptions
 const MODE_DESC = {
-    a:'Admin only',d:'Clone parent',e:'Clone',f:'Profanity filter',h:'Hidden',i:'Invite only',
+    a:'Admin only',d:'Clone parent',e:'Clone',f:'Strip formatting',h:'Hidden',i:'Invite only',
     j:'No invitations',k:'Key required',m:'Moderated',n:'No external',p:'Private',r:'Registered',
-    s:'Secret',t:'Topic lock',u:'Auditorium',w:'No whisper',x:'IRCX',y:'Transcript'
+    s:'Secret',t:'Topic lock',u:'Knock mode',w:'No whisper',x:'Auditorium',y:'Transcript'
 };
 
 // User mode prefixes - maps mode char to display prefix
@@ -316,7 +595,13 @@ function switchChannel(name) {
     if (!ch) return;
     currentChannel = name;
     ch.unread = 0;
-    $('chatTitle').textContent = ch.isStatus ? 'Status' : name;
+    // Show staff emoji in PM titles
+    let title = ch.isStatus ? 'Status' : name;
+    if (ch.isPrivate && staffUsers.has(name)) {
+        const staff = staffUsers.get(name);
+        title = `${staffEmoji[staff] || ''} ${name}`;
+    }
+    $('chatTitle').textContent = title;
     updateChannelModeDisplay(ch);
     $('chatTopic').textContent = ch.topic || (ch.isStatus ? 'Server messages and notifications' : (ch.isPrivate ? 'Private conversation' : ''));
     $('messages').innerHTML = '';
@@ -351,6 +636,9 @@ function renderChannelList() {
         div.innerHTML = ch.isStatus ? '&#9432; Status' : escapeHtml(ch.name);
         if (ch.unread > 0) div.innerHTML += `<span class="unread">${ch.unread}</span>`;
         div.onclick = () => switchChannel(ch.name);
+        if (!ch.isStatus) {
+            div.oncontextmenu = (e) => { e.preventDefault(); showChannelContextMenu(ch, e.pageX, e.pageY); };
+        }
         $('channelList').appendChild(div);
     });
 }
@@ -360,12 +648,12 @@ function renderUserList(ch) {
     $('userList').innerHTML = '';
     if (!ch || ch.isPrivate) { $('userCount').textContent = '(0)'; return; }
     const users = [...ch.users.entries()].sort((a,b) => {
-        // Sort: staff first, then by channel prefix, then alphabetically
-        const staffOrder = {'ADMIN':0,'SYSOP':1,'GUIDE':2,'':3};
+        // Sort: services/staff first, then by channel prefix, then alphabetically
+        const staffOrder = {'SERVICE':0,'ADMIN':1,'SYSOP':2,'GUIDE':3,'':4};
         const prefixOrder = {'.':0,'~':0,'@':1,'+':2,'':3};
         const aStaff = staffUsers.get(a[0]) || '';
         const bStaff = staffUsers.get(b[0]) || '';
-        const staffDiff = (staffOrder[aStaff]??3) - (staffOrder[bStaff]??3);
+        const staffDiff = (staffOrder[aStaff]??4) - (staffOrder[bStaff]??4);
         if (staffDiff !== 0) return staffDiff;
         const prefixDiff = (prefixOrder[a[1].prefix]??3) - (prefixOrder[b[1].prefix]??3);
         if (prefixDiff !== 0) return prefixDiff;
@@ -375,9 +663,10 @@ function renderUserList(ch) {
         const div = document.createElement('div');
         const p = info.prefix;
         const staff = staffUsers.get(nick);
-        // Icon priority: ADMIN/SYSOP=crown, GUIDE/owner/host=gavel, voice=speech, else=person
+        // Icon priority: SERVICE=robot, ADMIN/SYSOP=crown/medal, GUIDE=badge, owner/host/voice, else=person
         let icon, cssClass;
-        if (staff === 'ADMIN') { icon = '👑'; cssClass = 'admin'; }
+        if (staff === 'SERVICE') { icon = '🤖'; cssClass = 'service'; }
+        else if (staff === 'ADMIN') { icon = '👑'; cssClass = 'admin'; }
         else if (staff === 'SYSOP') { icon = '🏅'; cssClass = 'sysop'; }
         else if (staff === 'GUIDE') { icon = '🔰'; cssClass = 'guide'; } else if (p === '.' || p === '~') { icon = '🔑'; cssClass = 'owner'; }
         else if (p === '@') { icon = '⭐'; cssClass = 'host'; }
@@ -387,6 +676,7 @@ function renderUserList(ch) {
         div.innerHTML = `<span class="user-icon">${icon}</span> ${escapeHtml(nick)}`;
         div.title = info.away ? `Away: ${info.away}` : (staff ? `${staff} - ${nick}` : nick);
         div.onclick = () => showUserInfo(nick);
+        div.oncontextmenu = (e) => { e.preventDefault(); showContextMenu(nick, e.pageX, e.pageY); };
         $('userList').appendChild(div);
     });
     $('userCount').textContent = `(${users.length})`;
@@ -444,11 +734,14 @@ function setConnected() {
     $('currentNick').textContent = currentNick;
     $('messageInput').disabled = false;
     $('sendBtn').disabled = false;
+    $('emojiBtn').disabled = false;
     $('messageInput').focus();
     // Create Status window and switch to it
     const status = getChannel('Status');
     status.isStatus = true;
     switchChannel('Status');
+    // Request notification permission if enabled
+    if (settings.desktopNotifications) requestNotificationPermission();
 }
 
 function setDisconnected() {
@@ -462,6 +755,7 @@ function setDisconnected() {
     $('userModes').textContent = '';
     $('messageInput').disabled = true;
     $('sendBtn').disabled = true;
+    $('emojiBtn').disabled = true;
     $('connectBtn').disabled = false;
     $('loginError').textContent = '';
     channels = {}; currentChannel = ''; myModes.clear(); pendingJoinChannel = ''; staffUsers.clear();
@@ -537,41 +831,78 @@ function handleMessage(data) {
                 ws.send(JSON.stringify({ type: 'raw', command: 'IRCX' }));
             }
             break;
-        case '002': case '003': sysMsg(p[p.length-1], 'system'); break;
-        case '004': break; // Server info
-        case '005': break; // ISUPPORT
+        case '002': case '003':
+            sysMsg(p[p.length-1] || p.join(' '), 'system');
+            break;
+        case '004':
+            // Server info - just show all params to ensure it displays
+            sysMsg(p.slice(1).join(' ') || p.join(' '), 'system');
+            break;
+        case '005':
+            // ISUPPORT tokens - show all on one line like standard IRC clients
+            const tokens005 = p.slice(1).join(' '); // Skip nick, join the rest
+            sysMsg(tokens005 || p.join(' '), 'system');
+            break;
+        case '010': sysMsg(p[p.length-1] || p.join(' '), 'system'); break; // Bounce/redirect
+        case '042': sysMsg(p[p.length-1] || p.join(' '), 'system'); break; // Your unique ID
 
         // MOTD - all go to Status window
-        case '372': sysMsg(p[p.length-1], 'motd'); break;
+        case '372': sysMsg(p[p.length-1] || p.join(' '), 'motd'); break;
         case '375': sysMsg('--- Message of the Day ---', 'motd'); break;
         case '376': case '422': sysMsg('--- End of MOTD ---', 'motd'); break;
 
-        // User/Server info
+        // User/Server info - always show even if empty
+        case '250': sysMsg(p[p.length-1] || p.join(' '), 'system'); break;
         case '251': case '252': case '253': case '254': case '255': case '265': case '266':
-            sysMsg(p[p.length-1]); break;
+            sysMsg(p[p.length-1] || p.join(' '), 'system');
+            break;
+        case '264': sysMsg(p[p.length-1] || p.join(' '), 'system'); break;
 
         // LUSERS/ADMIN
-        case '256': case '257': case '258': case '259': sysMsg(p[p.length-1]); break;
+        case '256': case '257': case '258': case '259':
+            sysMsg(p[p.length-1] || p.join(' '), 'system');
+            break;
+
+        // Host hiding
+        case '396': sysMsg(p[p.length-1] || p.join(' '), 'system'); break;
+
+        // SASL/Auth
+        case '900': case '901': case '902': case '903': case '904': case '905': case '906': case '907':
+            sysMsg(p[p.length-1] || p.join(' '), 'system');
+            break;
 
         // WHO replies
         case '315': // End of WHO - update user list
-            if (p.length >= 2 && isChannel(p[1]) && p[1].toLowerCase() === currentChannel.toLowerCase()) {
-                renderUserList(getChannel(currentChannel));
+            // Update user list for current channel (whether WHO was for channel or individual user)
+            if (currentChannel) {
+                const ch = getChannel(currentChannel);
+                if (ch) {
+                    renderUserList(ch);
+                }
             }
             break;
         case '352': // WHO reply - detect staff from flags
             if (p.length >= 7) {
                 const whoNick = p[5];
                 const flags = p[6] || '';
-                // IRCX flags: a=admin, o=oper/sysop, g=guide; standard: *=oper
-                if (flags.includes('a')) staffUsers.set(whoNick, 'ADMIN');
-                else if (flags.includes('o')) staffUsers.set(whoNick, 'SYSOP');
-                else if (flags.includes('g')) staffUsers.set(whoNick, 'GUIDE');
-                else if (flags.includes('*')) staffUsers.set(whoNick, 'SYSOP');
+                // IRCX flags: s=service, a=admin, o=oper/sysop, g=guide; standard: *=oper
+                if (flags.includes('s')) {
+                    staffUsers.set(whoNick, 'SERVICE');
+                } else if (flags.includes('a')) {
+                    staffUsers.set(whoNick, 'ADMIN');
+                } else if (flags.includes('o')) {
+                    staffUsers.set(whoNick, 'SYSOP');
+                } else if (flags.includes('g')) {
+                    staffUsers.set(whoNick, 'GUIDE');
+                } else if (flags.includes('*')) {
+                    staffUsers.set(whoNick, 'SYSOP');
+                }
                 // Update user list if we're viewing a channel with this user
                 if (currentChannel) {
                     const ch = getChannel(currentChannel);
-                    if (ch && ch.users.has(whoNick)) renderUserList(ch);
+                    if (ch && ch.users.has(whoNick)) {
+                        renderUserList(ch);
+                    }
                 }
             }
             break;
@@ -583,7 +914,8 @@ function handleMessage(data) {
             if (p.length >= 2) {
                 const targetNick = p[1];
                 const status = p[p.length-1].toLowerCase();
-                if (status.includes('administrator')) staffUsers.set(targetNick, 'ADMIN');
+                if (status.includes('service')) staffUsers.set(targetNick, 'SERVICE');
+                else if (status.includes('administrator')) staffUsers.set(targetNick, 'ADMIN');
                 else if (status.includes('operator')) staffUsers.set(targetNick, 'SYSOP');
                 else if (status.includes('guide')) staffUsers.set(targetNick, 'GUIDE');
                 appendWhois('Status', p[p.length-1]);
@@ -607,11 +939,17 @@ function handleMessage(data) {
         case '369': break;
 
         // LIST
-        case '321': break;
+        case '321': listData = []; break; // Start of LIST - clear data
         case '322': case '812': // LIST/LISTX reply
-            if (p.length >= 3) sysMsg(`${p[1]} (${p[2]} users): ${p[3]||''}`, 'system');
+            if (p.length >= 3) {
+                handleListReply(p[1], p[2], p[3] || '');
+                sysMsg(`${p[1]} (${p[2]} users): ${p[3]||''}`, 'system');
+            }
             break;
-        case '323': case '813': sysMsg('End of channel list', 'system'); break;
+        case '323': case '813':
+            sysMsg('End of channel list', 'system');
+            if (listData.length > 0) showListModal();
+            break;
 
         // Topic
         case '331': break; // No topic
@@ -780,11 +1118,14 @@ function handleMessage(data) {
                     }
                 } else {
                     addMsg(p[0], `${escapeHtml(nick)} joined`, 'event');
-                    // WHO the joining user to discover their staff status
-                    if (ws?.readyState === 1) {
+                    // WHO the joining user to discover their staff status (no throttle - always send)
+                    if (ws?.readyState === 1 && p[0].toLowerCase() === currentChannel.toLowerCase()) {
                         ws.send(JSON.stringify({ type: 'raw', command: `WHO ${nick}` }));
                     }
-                    if (p[0].toLowerCase() === currentChannel.toLowerCase()) renderUserList(ch);
+                    if (p[0].toLowerCase() === currentChannel.toLowerCase()) {
+                        renderUserList(ch);
+                        playSound('join');
+                    }
                 }
                 renderChannelList();
             }
@@ -803,7 +1144,10 @@ function handleMessage(data) {
                         else { currentChannel = ''; $('messages').innerHTML = ''; $('userList').innerHTML = ''; $('chatTitle').textContent = 'No channel'; $('chatTopic').textContent = ''; }
                     } else {
                         addMsg(p[0], `${escapeHtml(nick)} left${p[1]?' ('+escapeHtml(p[1])+')':''}`, 'event');
-                        if (p[0].toLowerCase() === currentChannel.toLowerCase()) renderUserList(ch);
+                        if (p[0].toLowerCase() === currentChannel.toLowerCase()) {
+                            renderUserList(ch);
+                            playSound('part');
+                        }
                     }
                     renderChannelList();
                 }
@@ -829,6 +1173,7 @@ function handleMessage(data) {
                     ch.users.delete(p[1]);
                     const reason = p[2] || '';
                     addMsg(p[0], `${escapeHtml(p[1])} was kicked by ${escapeHtml(nick)}${reason?' ('+escapeHtml(reason)+')':''}`, 'event');
+                    playSound('kick');
                     if (p[1] === currentNick) {
                         delete channels[p[0].toLowerCase()];
                         sysMsg(`You were kicked from ${p[0]}`, 'error');
@@ -876,6 +1221,7 @@ function handleMessage(data) {
                         if (lower === currentChannel.toLowerCase()) {
                             updateChannelModeDisplay(ch);
                             renderUserList(ch);
+                            playSound('mode');
                         }
                     }
                 } else if (p[0] === currentNick) {
@@ -911,19 +1257,42 @@ function handleMessage(data) {
         // PRIVMSG
         case 'PRIVMSG':
             if (p.length >= 2) {
+                // Check if user is ignored
+                if (isIgnored(nick)) break;
+
                 let target = p[0], text = p[1];
                 const action = text.startsWith('\x01ACTION ') && text.endsWith('\x01');
-                if (!isChannel(target)) {
+                const isPM = !isChannel(target);
+
+                if (isPM) {
                     // Private message - create PM channel
                     target = nick;
                     const ch = getChannel(target);
                     ch.isPrivate = true;
                     renderChannelList();
+
+                    // Notify for PM
+                    playSound('pm');
+                    showNotification(`Private message from ${nick}`, text);
                 }
+
+                // Check for nickname mention
+                const mentioned = text.toLowerCase().includes(currentNick.toLowerCase());
+                if (mentioned && !isPM) {
+                    playSound('highlight');
+                    showNotification(`${nick} mentioned you in ${target}`, text);
+                }
+
+                // Get staff emoji if applicable
+                const staff = staffUsers.get(nick);
+                const emoji = staff ? staffEmoji[staff] + ' ' : '';
+
                 if (action) {
-                    addMsg(target, `<span class="nick ${nickColor(nick)}">${escapeHtml(nick)}</span> ${escapeHtml(text.slice(8,-1))}`, 'action');
+                    const actionText = escapeHtml(text.slice(8,-1));
+                    addMsg(target, `<span class="nick ${nickColor(nick)}">${emoji}${escapeHtml(nick)}</span> ${mentioned ? highlightNick(actionText) : actionText}`, 'action');
                 } else {
-                    addMsg(target, `<span class="nick ${nickColor(nick)}">${escapeHtml(nick)}:</span> ${escapeHtml(text)}`);
+                    const msgText = escapeHtml(text);
+                    addMsg(target, `<span class="nick ${nickColor(nick)}">${emoji}${escapeHtml(nick)}:</span> ${mentioned ? highlightNick(msgText) : msgText}`);
                 }
             }
             break;
@@ -934,7 +1303,13 @@ function handleMessage(data) {
                 const text = p[p.length-1];
                 const src = nick || prefix || 'Server';
                 const target = isChannel(p[0]) ? p[0] : currentChannel;
-                if (target) addMsg(target, `<span class="nick">[${escapeHtml(src)}]</span> ${escapeHtml(text)}`, 'notice');
+                // Get staff emoji if applicable
+                const noticeStaff = staffUsers.get(src);
+                const noticeEmoji = noticeStaff ? staffEmoji[noticeStaff] + ' ' : '';
+                if (target) {
+                    addMsg(target, `<span class="nick">[${noticeEmoji}${escapeHtml(src)}]</span> ${escapeHtml(text)}`, 'notice');
+                    playSound('notice');
+                }
             }
             break;
 
@@ -944,7 +1319,11 @@ function handleMessage(data) {
                 // WHISPER #channel targetnick :message
                 const chan = p[0], targetNick = p[1], text = p[2];
                 if (isChannel(chan)) {
-                    addMsg(chan, `<span class="nick">${escapeHtml(nick)} whispers to ${escapeHtml(targetNick)}:</span> ${escapeHtml(text)}`, 'whisper');
+                    // Get staff emoji if applicable
+                    const whisperStaff = staffUsers.get(nick);
+                    const whisperEmoji = whisperStaff ? staffEmoji[whisperStaff] + ' ' : '';
+                    addMsg(chan, `<span class="nick">${whisperEmoji}${escapeHtml(nick)} whispers to ${escapeHtml(targetNick)}:</span> ${escapeHtml(text)}`, 'whisper');
+                    playSound('whisper');
                 }
             }
             break;
@@ -953,11 +1332,24 @@ function handleMessage(data) {
         case 'INVITE':
             if (p.length >= 2) {
                 sysMsg(`${nick} invites you to ${p[1]}`, 'system');
+                playSound('invite');
             }
             break;
 
         default:
-            console.log('Unhandled:', command, p);
+            // Show ALL unhandled numerics in status window
+            if (/^\d{3}$/.test(command)) {
+                // Numeric reply - show in status with full params
+                // Skip first param if it's our nickname, show the rest
+                let displayParams = p.slice();
+                if (displayParams.length > 0 && displayParams[0] === currentNick) {
+                    displayParams = displayParams.slice(1);
+                }
+                const msg = displayParams.join(' ');
+                sysMsg(`[${command}] ${msg || '(no data)'}`, 'system');
+            } else {
+                console.log('Unhandled:', command, p);
+            }
     }
 }
 
@@ -1019,7 +1411,9 @@ function sendMessage() {
                     const ch = getChannel(args[0]);
                     if (ch || !isChannel(args[0])) {
                         if (!isChannel(args[0])) { getChannel(args[0]).isPrivate = true; renderChannelList(); }
-                        addMsg(args[0], `<span class="nick ${nickColor(currentNick)}">${escapeHtml(currentNick)}:</span> ${escapeHtml(args.slice(1).join(' '))}`);
+                        const myStaff = staffUsers.get(currentNick);
+                        const myEmoji = myStaff ? staffEmoji[myStaff] + ' ' : '';
+                        addMsg(args[0], `<span class="nick ${nickColor(currentNick)}">${myEmoji}${escapeHtml(currentNick)}:</span> ${escapeHtml(args.slice(1).join(' '))}`);
                     }
                 }
                 break;
@@ -1030,7 +1424,9 @@ function sendMessage() {
                 if (currentChannel && args.length) {
                     const t = args.join(' ');
                     ws.send(JSON.stringify({ type: 'message', target: currentChannel, text: '\x01ACTION ' + t + '\x01' }));
-                    addMsg(currentChannel, `<span class="nick ${nickColor(currentNick)}">${escapeHtml(currentNick)}</span> ${escapeHtml(t)}`, 'action');
+                    const myStaff = staffUsers.get(currentNick);
+                    const myEmoji = myStaff ? staffEmoji[myStaff] + ' ' : '';
+                    addMsg(currentChannel, `<span class="nick ${nickColor(currentNick)}">${myEmoji}${escapeHtml(currentNick)}</span> ${escapeHtml(t)}`, 'action');
                 }
                 break;
             case 'topic':
@@ -1060,6 +1456,12 @@ function sendMessage() {
             case 'devoice':
                 if (currentChannel && args[0]) queueCmd(`MODE ${currentChannel} -v ${args[0]}`);
                 break;
+            case 'owner':
+                if (currentChannel && args[0]) queueCmd(`MODE ${currentChannel} +q ${args[0]}`);
+                break;
+            case 'deowner':
+                if (currentChannel && args[0]) queueCmd(`MODE ${currentChannel} -q ${args[0]}`);
+                break;
             case 'invite':
                 if (args[0]) queueCmd(`INVITE ${args[0]} ${args[1]||currentChannel}`);
                 break;
@@ -1088,7 +1490,9 @@ function sendMessage() {
             case 'whisper':
                 if (currentChannel && args.length >= 2) {
                     queueCmd(`WHISPER ${currentChannel} ${args[0]} :${args.slice(1).join(' ')}`);
-                    addMsg(currentChannel, `<span class="nick">You whisper to ${escapeHtml(args[0])}:</span> ${escapeHtml(args.slice(1).join(' '))}`, 'whisper');
+                    const myStaff = staffUsers.get(currentNick);
+                    const myEmoji = myStaff ? staffEmoji[myStaff] + ' ' : '';
+                    addMsg(currentChannel, `<span class="nick">${myEmoji}You whisper to ${escapeHtml(args[0])}:</span> ${escapeHtml(args.slice(1).join(' '))}`, 'whisper');
                 }
                 break;
             case 'away':
@@ -1104,29 +1508,444 @@ function sendMessage() {
             case 'clear':
                 if (currentChannel) { getChannel(currentChannel).messages = []; $('messages').innerHTML = ''; }
                 break;
+            case 'raw':
+                if (args.length) queueCmd(args.join(' '));
+                break;
             case 'help':
-                sysMsg('Commands: /join /part /msg /nick /me /topic /kick /ban /mode /host /voice /invite /knock /whois /who /list /prop /access /whisper /away /quit /clear', 'system');
+                sysMsg('Commands: /join /part /msg /nick /me /topic /kick /ban /mode /owner /host /voice /invite /knock /whois /who /list /prop /access /whisper /away /quit /clear /raw', 'system');
                 break;
             default:
                 queueCmd(text.slice(1));
         }
     } else if (currentChannel) {
         ws.send(JSON.stringify({ type: 'message', target: currentChannel, text }));
-        addMsg(currentChannel, `<span class="nick ${nickColor(currentNick)}">${escapeHtml(currentNick)}:</span> ${escapeHtml(text)}`);
+        const myStaff = staffUsers.get(currentNick);
+        const myEmoji = myStaff ? staffEmoji[myStaff] + ' ' : '';
+        addMsg(currentChannel, `<span class="nick ${nickColor(currentNick)}">${myEmoji}${escapeHtml(currentNick)}:</span> ${escapeHtml(text)}`);
     }
     $('messageInput').value = '';
+}
+
+// Settings modal
+function openSettings() {
+    $('setting24Hour').checked = settings.use24HourTime;
+    $('settingDesktopNotif').checked = settings.desktopNotifications;
+    $('settingSoundNotif').checked = settings.soundNotifications;
+    updateIgnoredList();
+    $('settingsModal').classList.remove('hidden');
+}
+
+function updateIgnoredList() {
+    const list = $('ignoredList');
+    if (ignoredUsers.size === 0) {
+        list.innerHTML = '<span style="color: var(--text-muted);">No ignored users</span>';
+    } else {
+        list.innerHTML = [...ignoredUsers].map(u => `
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 0;">
+                <span>${escapeHtml(u)}</span>
+                <button onclick="unignoreUser('${escapeHtml(u)}')" style="all: unset; cursor: pointer; color: var(--danger);">✕</button>
+            </div>
+        `).join('');
+    }
+}
+
+function addIgnoredUser() {
+    const nick = prompt('Enter nickname to ignore:');
+    if (nick) {
+        ignoredUsers.add(nick.toLowerCase());
+        localStorage.setItem('ignoredUsers', JSON.stringify([...ignoredUsers]));
+        updateIgnoredList();
+    }
+}
+
+function unignoreUser(nick) {
+    ignoredUsers.delete(nick.toLowerCase());
+    localStorage.setItem('ignoredUsers', JSON.stringify([...ignoredUsers]));
+    updateIgnoredList();
+}
+
+function saveSettings() {
+    settings.use24HourTime = $('setting24Hour').checked;
+    settings.desktopNotifications = $('settingDesktopNotif').checked;
+    settings.soundNotifications = $('settingSoundNotif').checked;
+    localStorage.setItem('use24HourTime', settings.use24HourTime);
+    localStorage.setItem('desktopNotifications', settings.desktopNotifications);
+    localStorage.setItem('soundNotifications', settings.soundNotifications);
+    if (settings.desktopNotifications && notificationPermission !== 'granted') {
+        requestNotificationPermission();
+    }
+    $('settingsModal').classList.add('hidden');
+}
+
+// Emoji picker
+const emojis = ['😀','😃','😄','😁','😆','😅','🤣','😂','🙂','🙃','😉','😊','😇','🥰','😍','🤩','😘','😗','😚','😙','🥲','😋','😛','😜','🤪','😝','🤑','🤗','🤭','🤫','🤔','🤐','🤨','😐','😑','😶','😏','😒','🙄','😬','🤥','😌','😔','😪','🤤','😴','😷','🤒','🤕','🤢','🤮','🤧','🥵','🥶','🥴','😵','🤯','🤠','🥳','🥸','😎','🤓','🧐','😕','😟','🙁','😮','😯','😲','😳','🥺','😦','😧','😨','😰','😥','😢','😭','😱','😖','😣','😞','😓','😩','😫','🥱','😤','😡','😠','🤬','😈','👿','💀','💩','🤡','👹','👺','👻','👽','👾','🤖','😺','😸','😹','😻','😼','😽','🙀','😿','😾','👋','🤚','🖐','✋','🖖','👌','🤌','🤏','✌','🤞','🤟','🤘','🤙','👈','👉','👆','🖕','👇','👍','👎','✊','👊','🤛','🤜','👏','🙌','👐','🤲','🤝','🙏','✍','💅','🤳','💪','🦾','🦿','🦵','🦶','👂','🦻','👃','🧠','🦷','🦴','👀','👁','👅','👄','💋','🩸'];
+
+function openEmojiPicker() {
+    const grid = $('emojiGrid');
+    grid.innerHTML = emojis.map(e => `<button onclick="insertEmoji('${e}')" style="all: unset; cursor: pointer; font-size: 24px; text-align: center; padding: 8px; border-radius: 6px; transition: background 0.15s;" onmouseover="this.style.background='var(--bg-tertiary)'" onmouseout="this.style.background='transparent'">${e}</button>`).join('');
+    $('emojiModal').classList.remove('hidden');
+}
+
+function insertEmoji(emoji) {
+    const input = $('messageInput');
+    const pos = input.selectionStart;
+    const val = input.value;
+    input.value = val.substring(0, pos) + emoji + val.substring(pos);
+    input.selectionStart = input.selectionEnd = pos + emoji.length;
+    input.focus();
+    $('emojiModal').classList.add('hidden');
+}
+
+// Channel modes modal
+function openModesModal() {
+    if (!currentChannel || !isChannel(currentChannel)) return;
+    const ch = getChannel(currentChannel);
+    const modes = [
+        {key:'n',name:'No External',desc:'Block messages from outside'},
+        {key:'t',name:'Topic Lock',desc:'Only hosts can change topic'},
+        {key:'i',name:'Invite Only',desc:'Require invitation to join'},
+        {key:'m',name:'Moderated',desc:'Only hosts/voice can speak'},
+        {key:'p',name:'Private',desc:'Hide from channel list'},
+        {key:'s',name:'Secret',desc:'Hide from user WHOIS'},
+        {key:'a',name:'Admin Only',desc:'Only admins can join'},
+        {key:'d',name:'Clone Parent',desc:'Enable as clone source'},
+        {key:'f',name:'Strip Formatting',desc:'Strip text formatting codes'},
+        {key:'g',name:'Guide Op',desc:'Auto-grant owner to guides'},
+        {key:'h',name:'Hidden',desc:'Hide from normal LIST'},
+        {key:'j',name:'No Invitations',desc:'Block INVITE command'},
+        {key:'u',name:'Knock Mode',desc:'Allow KNOCK to request entry'},
+        {key:'w',name:'No Whisper',desc:'Block WHISPER command'},
+        {key:'x',name:'Auditorium',desc:'Hide user list from non-ops'},
+        {key:'y',name:'Transcript',desc:'Log all messages'}
+    ];
+
+    $('modesContent').innerHTML = modes.map((m, idx) => `
+        <label class="mode-row" style="display: flex; align-items: flex-start; padding: 12px 16px; ${idx < modes.length - 1 ? 'border-bottom: 1px solid var(--border-color);' : ''} gap: 12px; cursor: pointer; transition: background 0.15s;">
+            <input type="checkbox" id="mode-${m.key}" ${ch.modes[m.key] ? 'checked' : ''} style="width: 18px; height: 18px; margin-top: 2px; flex-shrink: 0; cursor: pointer;">
+            <div style="flex: 1; pointer-events: none;">
+                <div style="font-weight: 600; margin-bottom: 4px;"><span style="color: var(--accent); font-family: monospace;">+${m.key}</span> ${m.name}</div>
+                <div style="font-size: 13px; color: var(--text-muted);">${m.desc}</div>
+            </div>
+        </label>
+    `).join('');
+    $('modesModal').classList.remove('hidden');
+}
+
+function saveChannelModes() {
+    if (!currentChannel || !isChannel(currentChannel)) return;
+    const ch = getChannel(currentChannel);
+    const modes = ['n','t','i','m','p','s','a','d','f','g','h','j','u','w','x','y'];
+    let add = '', remove = '';
+
+    modes.forEach(m => {
+        const checked = $('mode-' + m)?.checked || false;
+        const current = ch.modes[m] || false;
+        if (checked && !current) add += m;
+        if (!checked && current) remove += m;
+    });
+
+    if (add) queueCmd(`MODE ${currentChannel} +${add}`);
+    if (remove) queueCmd(`MODE ${currentChannel} -${remove}`);
+    $('modesModal').classList.add('hidden');
+}
+
+// PROP editor modal
+function openPropModal() {
+    if (!currentChannel || !isChannel(currentChannel)) return;
+    const ch = getChannel(currentChannel);
+    $('propTopic').value = ch.props.TOPIC || ch.topic || '';
+    $('propSubject').value = ch.props.SUBJECT || '';
+    $('propOwnerkey').value = ch.props.OWNERKEY || '';
+    $('propHostkey').value = ch.props.HOSTKEY || '';
+    $('propVoicekey').value = ch.props.VOICEKEY || '';
+    $('propMemberkey').value = ch.props.MEMBERKEY || '';
+    $('propModal').classList.remove('hidden');
+}
+
+function savePropModal() {
+    if (!currentChannel || !isChannel(currentChannel)) return;
+
+    // Handle topic separately with TOPIC command
+    const topic = $('propTopic').value;
+    if (topic) {
+        queueCmd(`TOPIC ${currentChannel} :${topic}`);
+    } else {
+        queueCmd(`TOPIC ${currentChannel} :`); // Clear topic
+    }
+
+    // Handle other properties with PROP commands
+    const props = {
+        SUBJECT: $('propSubject').value,
+        OWNERKEY: $('propOwnerkey').value,
+        HOSTKEY: $('propHostkey').value,
+        VOICEKEY: $('propVoicekey').value,
+        MEMBERKEY: $('propMemberkey').value
+    };
+
+    Object.entries(props).forEach(([key, val]) => {
+        if (val) queueCmd(`PROP ${currentChannel} ${key} :${val}`);
+        else queueCmd(`PROP ${currentChannel} ${key}`); // Clear if empty
+    });
+
+    $('propModal').classList.add('hidden');
+}
+
+// Message search
+function openSearch() {
+    if (!currentChannel) return;
+    $('searchInput').value = '';
+    $('searchResults').innerHTML = '';
+    $('searchModal').classList.remove('hidden');
+    $('searchInput').focus();
+}
+
+function performSearch() {
+    const query = $('searchInput').value.toLowerCase();
+    if (!query || !currentChannel) {
+        $('searchResults').innerHTML = '';
+        return;
+    }
+
+    const ch = getChannel(currentChannel);
+    const results = ch.messages.filter(m => m.textContent.toLowerCase().includes(query));
+
+    if (results.length === 0) {
+        $('searchResults').innerHTML = '<p style="color: var(--text-muted); text-align: center;">No results found</p>';
+    } else {
+        $('searchResults').innerHTML = results.map(m => {
+            const clone = m.cloneNode(true);
+            clone.style.padding = '6px';
+            clone.style.borderBottom = '1px solid var(--border-color)';
+            return clone.outerHTML;
+        }).join('');
+    }
+}
+
+// LIST modal
+let listData = [];
+function handleListReply(channel, users, topic) {
+    listData.push({ channel, users: parseInt(users), topic });
+}
+
+function showListModal() {
+    const tbody = $('listTableBody');
+    tbody.innerHTML = listData.map(row => `
+        <tr style="border-bottom: 1px solid var(--border-color);">
+            <td style="padding: 8px; font-weight: 600; cursor: pointer;" onclick="joinFromList('${escapeHtml(row.channel)}')">${escapeHtml(row.channel)}</td>
+            <td style="padding: 8px;">${row.users}</td>
+            <td style="padding: 8px; color: var(--text-muted);">${escapeHtml(row.topic || '')}</td>
+        </tr>
+    `).join('');
+    $('listModal').classList.remove('hidden');
+}
+
+function joinFromList(channel) {
+    if (ws) ws.send(JSON.stringify({ type: 'join', channel }));
+    $('listModal').classList.add('hidden');
+}
+
+// Channel context menu
+function showChannelContextMenu(ch, x, y) {
+    const menu = $('contextMenu');
+
+    if (ch.isPrivate) {
+        // Private message context menu
+        menu.innerHTML = `
+            <div class="context-menu-item" onclick="switchChannel('${escapeHtml(ch.name)}');hideContextMenu();">💬 Open Chat</div>
+            <div class="context-menu-divider"></div>
+            <div class="context-menu-item" onclick="closePrivateChat('${escapeHtml(ch.name)}');hideContextMenu();">✕ Close Chat</div>
+        `;
+    } else {
+        // Channel context menu
+        menu.innerHTML = `
+            <div class="context-menu-item" onclick="switchChannel('${escapeHtml(ch.name)}');hideContextMenu();">📺 View Channel</div>
+            <div class="context-menu-divider"></div>
+            <div class="context-menu-item" onclick="openModesModal();hideContextMenu();">🔧 Channel Modes</div>
+            <div class="context-menu-item" onclick="openPropModal();hideContextMenu();">⚙️ Properties</div>
+            <div class="context-menu-divider"></div>
+            <div class="context-menu-item" onclick="partChannelFromMenu('${escapeHtml(ch.name)}');hideContextMenu();">🚪 Leave Channel</div>
+        `;
+    }
+
+    menu.style.left = x + 'px';
+    menu.style.top = y + 'px';
+    menu.style.display = 'block';
+}
+
+function closePrivateChat(nick) {
+    const lower = nick.toLowerCase();
+    if (channels[lower]) {
+        delete channels[lower];
+        // If we're viewing this PM, switch to another channel
+        if (currentChannel.toLowerCase() === lower) {
+            const remaining = Object.keys(channels);
+            if (remaining.length > 0) {
+                switchChannel(channels[remaining[0]].name);
+            } else {
+                currentChannel = '';
+                $('messages').innerHTML = '';
+                $('chatTitle').textContent = 'No channel';
+                $('chatTopic').textContent = '';
+            }
+        }
+        renderChannelList();
+    }
+}
+
+function partChannelFromMenu(channel) {
+    if (ws) ws.send(JSON.stringify({ type: 'part', channel }));
+}
+
+// User context menu
+function showContextMenu(nick, x, y) {
+    const menu = $('contextMenu');
+    const isMe = nick.toLowerCase() === currentNick.toLowerCase();
+    const ignored = isIgnored(nick);
+
+    menu.innerHTML = `
+        <div class="context-menu-item" onclick="queueCmd('WHOIS ${escapeHtml(nick)}');hideContextMenu();">📋 WHOIS ${escapeHtml(nick)}</div>
+        <div class="context-menu-item" onclick="startPM('${escapeHtml(nick)}');hideContextMenu();">💬 Private Message</div>
+        ${!isMe ? `
+            <div class="context-menu-divider"></div>
+            <div class="context-menu-item" onclick="queueCmd('MODE ${currentChannel} +q ${escapeHtml(nick)}');hideContextMenu();">👑 Give Owner</div>
+            <div class="context-menu-item" onclick="queueCmd('MODE ${currentChannel} +o ${escapeHtml(nick)}');hideContextMenu();">⭐ Give Host</div>
+            <div class="context-menu-item" onclick="queueCmd('MODE ${currentChannel} +v ${escapeHtml(nick)}');hideContextMenu();">💬 Give Voice</div>
+            <div class="context-menu-divider"></div>
+            <div class="context-menu-item" onclick="kickUser('${escapeHtml(nick)}');hideContextMenu();">🚪 Kick</div>
+            <div class="context-menu-item" onclick="banUser('${escapeHtml(nick)}');hideContextMenu();">🚫 Ban</div>
+            <div class="context-menu-divider"></div>
+            <div class="context-menu-item" onclick="${ignored ? 'unignoreUser' : 'ignoreUserFromMenu'}('${escapeHtml(nick)}');hideContextMenu();">${ignored ? '✅ Unignore' : '🔇 Ignore'}</div>
+        ` : ''}
+    `;
+
+    menu.style.left = x + 'px';
+    menu.style.top = y + 'px';
+    menu.style.display = 'block';
+}
+
+function hideContextMenu() {
+    $('contextMenu').style.display = 'none';
+}
+
+function startPM(nick) {
+    const ch = getChannel(nick);
+    ch.isPrivate = true;
+    switchChannel(nick);
+    renderChannelList();
+    $('messageInput').focus();
+}
+
+function kickUser(nick) {
+    const reason = prompt(`Kick reason for ${nick}:`, '');
+    if (reason !== null) queueCmd(`KICK ${currentChannel} ${nick}${reason ? ' :' + reason : ''}`);
+}
+
+function banUser(nick) {
+    queueCmd(`MODE ${currentChannel} +b ${nick}!*@*`);
+}
+
+function ignoreUserFromMenu(nick) {
+    ignoredUsers.add(nick.toLowerCase());
+    localStorage.setItem('ignoredUsers', JSON.stringify([...ignoredUsers]));
+}
+
+// Autocomplete state
+let autocompleteIndex = -1;
+let autocompleteMatches = [];
+let autocompletePrefix = '';
+
+// Handle tab autocomplete
+function handleAutocomplete(e) {
+    if (e.key !== 'Tab') {
+        autocompleteIndex = -1;
+        autocompleteMatches = [];
+        autocompletePrefix = '';
+        return;
+    }
+    e.preventDefault();
+
+    const input = $('messageInput');
+    const text = input.value.substring(0, input.selectionStart);
+    const words = text.split(/\s+/);
+    const lastWord = words[words.length - 1];
+
+    // First tab - build matches
+    if (autocompleteIndex === -1) {
+        autocompletePrefix = lastWord.toLowerCase();
+        autocompleteMatches = [];
+
+        // Commands (if starts with /)
+        if (lastWord.startsWith('/')) {
+            const commands = ['join', 'part', 'msg', 'nick', 'me', 'topic', 'kick', 'ban', 'mode', 'owner', 'host', 'voice', 'invite', 'whois', 'who', 'list', 'prop', 'access', 'whisper', 'away', 'quit', 'clear', 'raw', 'help'];
+            autocompleteMatches = commands.filter(c => ('/' + c).startsWith(autocompletePrefix)).map(c => '/' + c);
+        } else {
+            // Nicknames from current channel
+            const ch = getChannel(currentChannel);
+            if (ch && !ch.isPrivate) {
+                const nicks = [...ch.users.keys()];
+                autocompleteMatches = nicks.filter(n => n.toLowerCase().startsWith(autocompletePrefix));
+            }
+        }
+
+        if (autocompleteMatches.length === 0) return;
+        autocompleteIndex = 0;
+    } else {
+        // Cycle through matches
+        autocompleteIndex = (autocompleteIndex + 1) % autocompleteMatches.length;
+    }
+
+    // Replace last word with match
+    const match = autocompleteMatches[autocompleteIndex];
+    words[words.length - 1] = match + (words.length === 1 && !match.startsWith('/') ? ': ' : ' ');
+    input.value = words.join(' ') + input.value.substring(input.selectionStart);
+    input.selectionStart = input.selectionEnd = words.join(' ').length;
 }
 
 // Event listeners
 $('connectBtn').onclick = connect;
 $('sendBtn').onclick = sendMessage;
 $('messageInput').onkeypress = e => { if (e.key === 'Enter') sendMessage(); };
+$('messageInput').onkeydown = handleAutocomplete;
 $('loginNick').onkeypress = e => { if (e.key === 'Enter') connect(); };
-$('joinBtn').onclick = () => { const c = prompt('Channel:', '#'); if (c && ws) ws.send(JSON.stringify({ type: 'join', channel: c.startsWith('#')?c:'#'+c })); };
+$('joinBtn').onclick = () => {
+    const c = prompt('Channel:', '#');
+    if (c && ws) {
+        const key = prompt('Channel key (leave empty if none):', '');
+        const chan = c.startsWith('#') ? c : '#' + c;
+        ws.send(JSON.stringify({ type: 'join', channel: chan, key: key || '' }));
+    }
+};
 $('partBtn').onclick = () => { if (currentChannel && ws) ws.send(JSON.stringify({ type: 'part', channel: currentChannel })); };
-$('usersBtn').onclick = () => { if (currentChannel && ws) queueCmd(`WHO ${currentChannel}`); };
-$('propsBtn').onclick = showChannelProps;
+$('modesBtn').onclick = openModesModal;
+$('propsBtn').onclick = openPropModal;
+$('searchBtn').onclick = openSearch;
+$('settingsBtn').onclick = openSettings;
+$('emojiBtn').onclick = openEmojiPicker;
 $('infoPanelClose').onclick = () => $('infoPanel').classList.remove('open');
+
+// Modal event listeners
+$('settingsCloseBtn').onclick = saveSettings;
+$('addIgnoreBtn').onclick = addIgnoredUser;
+$('emojiCloseBtn').onclick = () => $('emojiModal').classList.add('hidden');
+$('modesCloseBtn').onclick = saveChannelModes;
+$('propSaveBtn').onclick = savePropModal;
+$('propCloseBtn').onclick = () => $('propModal').classList.add('hidden');
+$('searchInput').oninput = performSearch;
+$('searchCloseBtn').onclick = () => $('searchModal').classList.add('hidden');
+$('listCloseBtn').onclick = () => $('listModal').classList.add('hidden');
+
+// Click outside modal to close
+document.addEventListener('click', (e) => {
+    if (e.target.classList.contains('modal-overlay')) {
+        e.target.classList.add('hidden');
+    }
+});
+
+// Click outside context menu to close
+document.addEventListener('click', (e) => {
+    if (!$('contextMenu').contains(e.target)) hideContextMenu();
+});
+
 $('loginNick').focus();
 
 // Dark mode toggle

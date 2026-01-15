@@ -1695,7 +1695,7 @@ def unregister_channel(channel_name):
         return {"error": str(e)}
 
 def edit_channel(channel_name, new_owner=None, new_description=None, new_topic=None, new_modes=None,
-                 new_onjoin=None, new_onpart=None, new_memberkey=None, new_hostkey=None, new_ownerkey=None, new_userlimit=None):
+                 new_onjoin=None, new_onpart=None, new_memberkey=None, new_hostkey=None, new_ownerkey=None, new_voicekey=None, new_userlimit=None):
     """Edit a registered channel's properties by updating registered_channels table"""
     db_path = get_db_path()
 
@@ -1782,6 +1782,11 @@ def edit_channel(channel_name, new_owner=None, new_description=None, new_topic=N
         if new_ownerkey is not None:
             channel_data['owner_key'] = None if new_ownerkey == "*" else new_ownerkey
             changes.append("ownerkey")
+
+        # Update VOICEKEY
+        if new_voicekey is not None:
+            channel_data['voice_key'] = None if new_voicekey == "*" else new_voicekey
+            changes.append("voicekey")
 
         # Update USERLIMIT
         if new_userlimit is not None:
@@ -2222,13 +2227,6 @@ def main():
             result = {"error": "Usage: test-staff-login <username> <password>"}
         else:
             result = test_staff_login(sys.argv[2], sys.argv[3])
-    elif command == "test-staff-login-stdin":
-        if len(sys.argv) < 3:
-            result = {"error": "Usage: test-staff-login-stdin <username> (password from stdin)"}
-        else:
-            # Read password from stdin for security (not visible in process list)
-            password = sys.stdin.read().strip()
-            result = test_staff_login(sys.argv[2], password)
     elif command == "get-staff-details":
         if len(sys.argv) < 3:
             result = {"error": "Usage: get-staff-details <username>"}
@@ -2236,7 +2234,7 @@ def main():
             result = get_staff_details(sys.argv[2])
     elif command == "edit-channel":
         if len(sys.argv) < 3:
-            result = {"error": "Usage: edit-channel <channel_name> <new_owner> [new_description] [new_topic] [new_modes] [new_onjoin] [new_onpart] [new_memberkey] [new_hostkey] [new_ownerkey]"}
+            result = {"error": "Usage: edit-channel <channel_name> <new_owner> [new_description] [new_topic] [new_modes] [new_onjoin] [new_onpart] [new_memberkey] [new_hostkey] [new_ownerkey] [new_voicekey]"}
         else:
             new_owner = sys.argv[3] if len(sys.argv) > 3 and sys.argv[3] else None
             new_description = sys.argv[4] if len(sys.argv) > 4 and sys.argv[4] else None
@@ -2247,9 +2245,10 @@ def main():
             new_memberkey = sys.argv[9] if len(sys.argv) > 9 and sys.argv[9] else None
             new_hostkey = sys.argv[10] if len(sys.argv) > 10 and sys.argv[10] else None
             new_ownerkey = sys.argv[11] if len(sys.argv) > 11 and sys.argv[11] else None
-            new_userlimit = sys.argv[12] if len(sys.argv) > 12 and sys.argv[12] else None
+            new_voicekey = sys.argv[12] if len(sys.argv) > 12 and sys.argv[12] else None
+            new_userlimit = sys.argv[13] if len(sys.argv) > 13 and sys.argv[13] else None
             result = edit_channel(sys.argv[2], new_owner, new_description, new_topic, new_modes,
-                                new_onjoin, new_onpart, new_memberkey, new_hostkey, new_ownerkey, new_userlimit)
+                                new_onjoin, new_onpart, new_memberkey, new_hostkey, new_ownerkey, new_voicekey, new_userlimit)
     elif command == "list-nicks-paginated":
         limit = int(sys.argv[2]) if len(sys.argv) > 2 else 50
         offset = int(sys.argv[3]) if len(sys.argv) > 3 else 0

@@ -90,7 +90,6 @@ console.log("=== admin.js LOADING ===");
         // Use system-wide installation path
         const fd = new FormData();
         fd.append('cmd', cmd);
-        fd.append('csrf_token', typeof CSRF_TOKEN !== 'undefined' ? CSRF_TOKEN : '');
         args.forEach((a,i) => fd.append(`args[${i}]`, a));
         return fetch('api.php', {method: 'POST', body: fd})
             .then(r => {
@@ -119,7 +118,7 @@ console.log("=== admin.js LOADING ===");
 
         showToast('Service Control', `${actionLabels[action]} pyIRCX service...`, 'info');
 
-        fetch('api.php', {method: 'POST', body: (() => { const fd = new FormData(); fd.append('cmd', 'service-control'); fd.append('csrf_token', typeof CSRF_TOKEN !== 'undefined' ? CSRF_TOKEN : ''); fd.append('action', action); return fd; })() }).then(r => r.json()).then(d => { if(d.error) throw new Error(d.error); })
+        fetch('api.php', {method: 'POST', body: (() => { const fd = new FormData(); fd.append('cmd', 'service-control'); fd.append('action', action); return fd; })() }).then(r => r.json()).then(d => { if(d.error) throw new Error(d.error); })
             .then(() => {
                 showToast('Success', `Service ${action}ed successfully`, 'success');
                 setTimeout(() => {
@@ -1277,6 +1276,7 @@ console.log("=== admin.js LOADING ===");
             $('#edit-channel-memberkey').value = channel.memberkey || '';
             $('#edit-channel-hostkey').value = channel.hostkey || '';
             $('#edit-channel-ownerkey').value = channel.ownerkey || '';
+            $('#edit-channel-voicekey').value = channel.voicekey || '';
             $('#edit-channel-userlimit').value = channel.user_limit || '';
 
             // Clear all mode checkboxes first
@@ -1323,6 +1323,7 @@ console.log("=== admin.js LOADING ===");
         const memberkey = $('#edit-channel-memberkey').value.trim();
         const hostkey = $('#edit-channel-hostkey').value.trim();
         const ownerkey = $('#edit-channel-ownerkey').value.trim();
+        const voicekey = $('#edit-channel-voicekey').value.trim();
 
         // Build modes string from checkboxes
         let modes = '';
@@ -1330,9 +1331,9 @@ console.log("=== admin.js LOADING ===");
             // Clear all modes
             modes = '*';
         } else {
-            // Collect checked modes (Basic: n,t,i,m,p,s | Extended: a,d,f,h,j,u,w,x,y)
+            // Collect checked modes (Basic: n,t,i,m,p,s | Extended: a,d,f,g,h,j,u,w,x,y)
             const modesList = [];
-            const modeCheckboxes = ['n', 't', 'i', 'm', 'p', 's', 'a', 'd', 'f', 'h', 'j', 'u', 'w', 'x', 'y'];
+            const modeCheckboxes = ['n', 't', 'i', 'm', 'p', 's', 'a', 'd', 'f', 'g', 'h', 'j', 'u', 'w', 'x', 'y'];
             for (const mode of modeCheckboxes) {
                 if ($('#mode-' + mode).checked) {
                     modesList.push(mode);
@@ -1353,7 +1354,7 @@ console.log("=== admin.js LOADING ===");
 
         // Check if any changes were made
         if (!owner && !description && !topic && !modes && !onjoin && !onpart &&
-            !memberkey && !hostkey && !ownerkey) {
+            !memberkey && !hostkey && !ownerkey && !voicekey) {
             showToast('Error', 'No changes specified', 'error');
             return;
         }
@@ -1369,7 +1370,8 @@ console.log("=== admin.js LOADING ===");
             onpart || '',
             memberkey || '',
             hostkey || '',
-            ownerkey || ''
+            ownerkey || '',
+            voicekey || ''
         ];
 
         callAPI('edit-channel', args).then(res => {

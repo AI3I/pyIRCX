@@ -1,10 +1,4 @@
 <?php
-// Secure session configuration
-ini_set('session.cookie_httponly', 1);
-ini_set('session.cookie_secure', 1);
-ini_set('session.cookie_samesite', 'Strict');
-ini_set('session.use_strict_mode', 1);
-
 session_start();
 
 // Authentication check - redirect to login if not authenticated
@@ -13,13 +7,7 @@ if (!isset($_SESSION["admin_user"]) || !isset($_SESSION["admin_level"]) || $_SES
     exit();
 }
 
-// Generate CSRF token if not exists
-if (!isset($_SESSION['csrf_token'])) {
-    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-}
-
 $admin_user = htmlspecialchars($_SESSION["admin_user"]);
-$csrf_token = $_SESSION['csrf_token'];
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -60,7 +48,7 @@ $csrf_token = $_SESSION['csrf_token'];
                     <span class="nav-label">Services</span>
                 </a>
                 <a href="#staff" class="nav-item" data-page="staff">
-                    <span class="nav-icon">👮</span>
+                    <span class="nav-icon">👑</span>
                     <span class="nav-label">Staff</span>
                 </a>
                 <a href="#access" class="nav-item" data-page="access">
@@ -261,7 +249,7 @@ $csrf_token = $_SESSION['csrf_token'];
 
                 <div class="card">
                     <div class="card-header">
-                        <h3>👮 Staff Members</h3>
+                        <h3>👑 Staff Members</h3>
                         <button class="btn btn-success" id="btn-add-staff">➕ Add Staff</button>
                     </div>
                     <div class="card-body">
@@ -899,10 +887,6 @@ Type /help for available commands."></textarea>
     <!-- Additional modals (staff, config, etc.) would go here - keeping this concise -->
     <!-- The full version would include all modals from the original code -->
 
-    <script>
-        // Expose CSRF token to JavaScript
-        const CSRF_TOKEN = '<?php echo $csrf_token; ?>';
-    </script>
     <script src="admin.js?v=1768258256"></script>
     <!-- Modal: Edit Configuration -->
     <div id="modal-edit-config" class="modal" style="display: none;">
@@ -1233,6 +1217,14 @@ Type /help for available commands."></textarea>
 
                             <div>
                                 <label style="display: flex; align-items: center; margin-bottom: 8px;">
+                                    <input type="checkbox" id="mode-g" style="margin-right: 8px;">
+                                    <strong>+g</strong>&nbsp;(Guide Op)
+                                </label>
+                                <small class="text-muted" style="display: block; margin-left: 24px;">Auto-grant owner to guides on join</small>
+                            </div>
+
+                            <div>
+                                <label style="display: flex; align-items: center; margin-bottom: 8px;">
                                     <input type="checkbox" id="mode-h" style="margin-right: 8px;">
                                     <strong>+h</strong>&nbsp;(Hidden)
                                 </label>
@@ -1311,6 +1303,14 @@ Type /help for available commands."></textarea>
                         <input type="text" id="edit-channel-memberkey" class="form-control" style="width: 100%;" placeholder="Leave empty to keep current, * to clear">
                         <small class="form-text text-muted" style="display: block; margin-top: 5px;">
                             Password required for regular members to join the channel
+                        </small>
+                    </div>
+
+                    <div class="form-group" style="margin-bottom: 20px;">
+                        <label for="edit-channel-voicekey" style="font-weight: 600;">Voice Key</label>
+                        <input type="text" id="edit-channel-voicekey" class="form-control" style="width: 100%;" placeholder="Leave empty to keep current, * to clear">
+                        <small class="form-text text-muted" style="display: block; margin-top: 5px;">
+                            Password to join with voice (+v) privileges automatically
                         </small>
                     </div>
 
