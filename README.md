@@ -5,7 +5,7 @@
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-1.1.5-brightgreen.svg)](#)
-[![Tests](https://img.shields.io/badge/tests-54%20passing-brightgreen.svg)](#testing)
+[![Tests](https://img.shields.io/badge/tests-243%20passing-brightgreen.svg)](#testing)
 
 ---
 
@@ -26,23 +26,49 @@ If you remember the days of **Microsoft Comic Chat**, chat rooms with real nicks
 ## Recent Updates
 
 ### Version 1.1.5 (January 2026)
-**VOICEKEY Feature & IRC Protocol Compliance**
+**Critical Bug Fixes & Test Harness**
 
-- **Channel Mode +g (guide-op)** — Auto-grant owner (+q) to guides when they join
-  - Settable by channel owners, hosts, services, admins, or sysops
-  - Works on registered and dynamic channels
-- **VOICEKEY Property** — Auto-grant voice (+v) on join with password
+- **CRITICAL: JOIN Race Condition Fix** — Fixed race condition causing multiple users to receive owner mode (+q)
+  - Added channel_creation_lock to prevent concurrent channel creation
+  - Resolves broadcast failures, KICK errors, and MODE issues
+- **VOICEKEY Feature** — Auto-grant voice (+v) on join with password
   - Similar to OWNERKEY/HOSTKEY, completes the privilege key trio
   - Integrated into web admin channel edit modal
   - Case-insensitive key matching for all channel keys
+- **Comprehensive Test Harness** — 243 tests across 8 suites (100% passing)
+  - 28 new core command tests (JOIN/PART/QUIT/MODE/TOPIC/KICK/etc.)
+  - 16 new STATS system tests
+  - 15 new HELP system tests
+  - Automated markdown logging system
+- **Channel Mode +g (guide-op)** — Auto-grant owner (+q) to guides when they join
 - **Case-Sensitivity Fixes** — Fixed 7 critical handlers (PROP, TRANSCRIPT, KNOCK, INVITE, REGISTER, DROP, Registrar)
 - **ACCESS GRANT Bypasses** — Users with ACCESS GRANT can now bypass mode +j (no-invitations) and +u (knock-mode)
 - **IRC Protocol Compliance** — Numerics 004/005 now IRCv3-compliant
-  - CHANMODES formatted as A,B,C,D: `,k,l,adefghijmnprstuwxyz`
-  - Added TOPICLEN parameter (390 chars), enforced in TOPIC and PROP commands
-  - Added missing mode +l (limit) to channel modes
-- **WebChat Improvements** — Service bot detection (🤖), button icons, connection info display, key prompting on join
-- **MODE Permissions** — Services can now set channel modes
+- **WebChat Improvements** — Service bot detection (🤖), button icons, connection info display
+
+### Version 1.1.4 (January 2026)
+**Critical Async Bug Fix**
+
+- **CRITICAL: Channel Broadcast Bug** — Fixed catastrophic async bug in Channel.broadcast()
+  - Tasks were being awaited immediately instead of collected for concurrent execution
+  - Caused "An asyncio.Future, a coroutine or an awaitable is required" errors
+  - All multi-user channel operations were broken (JOIN/PART/messages)
+  - **Action Required:** Immediate upgrade recommended for all v1.1.3 and earlier installations
+
+### Version 1.1.3 (January 2026)
+**Security Hardening & Code Quality**
+
+- **Error Handling Specificity** — Replaced all bare `except:` clauses with specific exception types
+  - Improved error handling in 17 locations across codebase
+  - Better exception specificity prevents masking unexpected errors
+- **Server Link Password Security** — Implemented bcrypt authentication for server-to-server links
+  - Server link passwords now use bcrypt hashing instead of plaintext
+  - Backwards compatible with plaintext fallback
+  - Added `utils/hash_link_password.py` utility
+- **Configuration Security** — Added config file permission validation on startup
+  - Warns if `/etc/pyircx/pyircx_config.json` is world-readable/writable
+- **Database Connection Pooling** — Increased default pool size from 5 to 10 connections
+  - Added pool saturation monitoring and warnings
 
 ### Version 1.1.2 (January 2026)
 **Channel Operations & Database Architecture Improvements**
@@ -556,22 +582,38 @@ For IRCX features, use the IRCX command after connecting:
 pyIRCX includes comprehensive test suites to ensure protocol compliance:
 
 ```bash
-# Start the server
-python3 pyircx.py &
+# Run all test suites (recommended)
+./run_tests.sh
 
-# Run user protocol tests (50 tests)
-python3 pyIRCX_test_users.py
-
-# Run server linking tests (4 tests)
-python3 pyIRCX_test_linking.py
+# Or run individual test suites
+cd testing
+python3 users.py        # 115 IRC/IRCX protocol tests
+python3 commands.py     # 28 core command tests
+python3 staff.py        # 39 staff authentication tests
+python3 links.py        # 4 server linking tests
+python3 access.py       # 10 access control tests
+python3 stats.py        # 16 STATS system tests
+python3 help.py         # 15 HELP system tests
+python3 services.py     # 13 service improvements tests
 ```
 
 **Test Coverage:**
-- ✅ **50 User/IRC Tests** — All IRC/IRCX protocol features
-- ✅ **4 Linking Tests** — Server linking functionality
-- **Total: 54 tests, 100% passing**
+- ✅ **115 IRC/IRCX Protocol Tests** — Core IRC/IRCX protocol features
+- ✅ **28 Core Command Tests** — JOIN/PART/QUIT/MODE/TOPIC/KICK/etc.
+- ✅ **39 Staff Authentication Tests** — ADMIN/SYSOP/GUIDE authentication
+- ✅ **4 Server Linking Tests** — Server-to-server linking
+- ✅ **10 Access Control Tests** — Channel and server ACCESS lists
+- ✅ **16 STATS System Tests** — All STATS flags and features
+- ✅ **15 HELP System Tests** — HELP topics and permissions
+- ✅ **13 Service Tests** — ServiceBot, Registrar, Messenger, NewsFlash
+- **Total: 243 tests across 8 suites, 100% passing**
 
-See [TEST_RESULTS.md](TEST_RESULTS.md) for detailed test results.
+**Automated Logging:**
+- Test reports saved as `testing/logs/test_run_<epoch>.md`
+- Latest report symlinked to `testing/logs/latest.md`
+- Full test output captured for failure diagnosis
+
+See [TESTING_UPDATES.md](TESTING_UPDATES.md) for detailed test harness documentation.
 
 ---
 
@@ -817,7 +859,7 @@ GNU General Public License v3.0 — See [LICENSE](LICENSE) for details.
 <p align="center">
   <i>Bringing back the chat rooms of yesterday, with the technology of today.</i>
   <br><br>
-  <b>pyIRCX 1.0.5</b> — The production-ready IRCX server for distributed networks
+  <b>pyIRCX 1.1.5</b> — The production-ready IRCX server for distributed networks
   <br><br>
   ⭐ <b>Star this project on GitHub if you find it useful!</b> ⭐
 </p>
