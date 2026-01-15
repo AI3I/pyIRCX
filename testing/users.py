@@ -38,8 +38,15 @@ class IRCTestClient:
         self.buffer = []
         self.connected = False
 
-    async def connect(self, nickname: str, username: str = None, password: str = None):
-        """Connect to IRC server (with optional SSL)"""
+    async def connect(self, nickname: str, username: str = None, password: str = None, staff_account: str = None):
+        """Connect to IRC server (with optional SSL and staff authentication)
+
+        Args:
+            nickname: IRC nickname to use
+            username: IRC username (defaults to nickname)
+            password: Password for PASS command (for staff auto-auth or regular auth)
+            staff_account: If provided, authenticate as staff after connection (admin/sysop/guide)
+        """
         try:
             if self.use_ssl:
                 # Create SSL context that doesn't verify certificates (for testing)
@@ -52,17 +59,22 @@ class IRCTestClient:
             else:
                 self.reader, self.writer = await asyncio.open_connection(self.host, self.port)
             self.connected = True
-            
-            if password:
-                await self.send_raw(f"PASS {password}")
-            
-            await self.send_raw(f"NICK {nickname}")
-            await self.send_raw(f"USER {username or nickname} 0 * :{nickname}")
-            
+
+            # For staff accounts, use PASS with staff account password
+            if staff_account:
+                await self.send_raw(f"PASS testpass")
+                await self.send_raw(f"NICK {staff_account}")
+                await self.send_raw(f"USER {staff_account} 0 * :Test {staff_account.title()}")
+            else:
+                if password:
+                    await self.send_raw(f"PASS {password}")
+                await self.send_raw(f"NICK {nickname}")
+                await self.send_raw(f"USER {username or nickname} 0 * :{nickname}")
+
             # Wait for registration
             await asyncio.sleep(0.5)
             await self.read_lines()
-            
+
             return True
         except Exception as e:
             print(f"[{self.name}] Connection failed: {e}")
@@ -717,11 +729,11 @@ async def test_mode_display_params():
     await asyncio.sleep(0.3)
     await client.read_lines()
 
+    # Find the MODE reply - use the LAST 324 (most recent)
     mode_line = None
     for line in client.buffer:
         if "324" in line:
-            mode_line = line
-            break
+            mode_line = line  # Don't break - keep last one
 
     assert mode_line, "No MODE reply"
     assert "50" in mode_line or "secret" in mode_line, f"Parameters not shown: {mode_line}"

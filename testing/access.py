@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-Test Access Control System (GRANT/DENY/OWNER/HOST/VOICE)
+pyIRCX Access Control System Test Suite
+Tests IRCX ACCESS command for channel and server access control
 
 Tests:
 1. Channel access levels (OWNER, HOST, VOICE)
@@ -10,440 +11,457 @@ Tests:
 5. Staff vs owner permissions
 6. Wildcard mask matching
 7. Services cannot be added to DENY lists
+
+Test Staff Accounts:
+  - admin/testpass (ADMIN) - Can manage server-level access
+  - sysop/testpass (SYSOP) - Can manage server-level access
+  - guide/testpass (GUIDE) - Limited access management
+
+Copyright (C) 2026 pyIRCX Project
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
-import socket
-import time
-import re
+import asyncio
+import sys
+from typing import List
 
-class IRCTestClient:
-    def __init__(self, nickname, username, realname, password=None, server='localhost', port=6667):
-        self.nickname = nickname
-        self.username = username
-        self.realname = realname
-        self.password = password
-        self.server = server
-        self.port = port
-        self.sock = None
-        self.buffer = ""
+# Import test client from users.py
+sys.path.insert(0, '.')
+from users import IRCTestClient, TestRunner
 
-    def connect(self):
-        """Connect to IRC server"""
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.settimeout(5.0)
-        self.sock.connect((self.server, self.port))
-        print(f"✓ Connected to {self.server}:{self.port}")
+# Create test runner instance
+runner = TestRunner()
 
-        # Send registration
-        if self.password:
-            self.send(f"PASS {self.password}")
-        self.send(f"NICK {self.nickname}")
-        self.send(f"USER {self.username} 0 * :{self.realname}")
 
-        # Wait for welcome
-        while True:
-            line = self.recv_line()
-            if not line:
-                break
-            print(f"< {line}")
-            if "001" in line or "Welcome" in line:
-                print(f"✓ Registered as {self.nickname}")
-                return True
+# ==============================================================================
+# Channel Access Tests
+# ==============================================================================
+
+@runner.test("ACCESS - Channel OWNER")
+async def test_channel_owner_access():
+    """Test adding OWNER to channel access list"""
+    client = IRCTestClient("access_owner")
+
+    await client.connect("AccessOwner")
+    await client.send_raw("JOIN #testowner")
+    await asyncio.sleep(0.3)
+    await client.read_lines()
+
+    client.buffer.clear()
+    await client.send_raw("ACCESS #testowner ADD OWNER TestUser!*@*")
+    await asyncio.sleep(0.3)
+    await client.read_lines()
+
+    # Should succeed (806) or show entry added
+    has_success = any("806" in line or "added" in line.lower() for line in client.buffer)
+
+    print(f"   OWNER entry added: {has_success}")
+
+    # Verify it's in the list
+    client.buffer.clear()
+    await client.send_raw("ACCESS #testowner LIST OWNER")
+    await asyncio.sleep(0.3)
+    await client.read_lines()
+
+    has_entry = any("TestUser" in line for line in client.buffer)
+
+    print(f"   OWNER entry in list: {has_entry}")
+
+    assert has_success or has_entry, "OWNER access entry should be added"
+
+    await client.disconnect()
+
+
+@runner.test("ACCESS - Channel HOST")
+async def test_channel_host_access():
+    """Test adding HOST to channel access list"""
+    client = IRCTestClient("access_host")
+
+    await client.connect("AccessHost")
+    await client.send_raw("JOIN #testhost")
+    await asyncio.sleep(0.3)
+    await client.read_lines()
+
+    client.buffer.clear()
+    await client.send_raw("ACCESS #testhost ADD HOST HostUser!*@*")
+    await asyncio.sleep(0.3)
+    await client.read_lines()
+
+    has_success = any("806" in line or "added" in line.lower() for line in client.buffer)
+
+    print(f"   HOST entry added: {has_success}")
+
+    # Verify in list
+    client.buffer.clear()
+    await client.send_raw("ACCESS #testhost LIST HOST")
+    await asyncio.sleep(0.3)
+    await client.read_lines()
+
+    has_entry = any("HostUser" in line for line in client.buffer)
+
+    print(f"   HOST entry in list: {has_entry}")
+
+    assert has_success or has_entry, "HOST access entry should be added"
+
+    await client.disconnect()
+
+
+@runner.test("ACCESS - Channel VOICE")
+async def test_channel_voice_access():
+    """Test adding VOICE to channel access list"""
+    client = IRCTestClient("access_voice")
+
+    await client.connect("AccessVoice")
+    await client.send_raw("JOIN #testvoice")
+    await asyncio.sleep(0.3)
+    await client.read_lines()
+
+    client.buffer.clear()
+    await client.send_raw("ACCESS #testvoice ADD VOICE VoiceUser!*@*")
+    await asyncio.sleep(0.3)
+    await client.read_lines()
+
+    has_success = any("806" in line or "added" in line.lower() for line in client.buffer)
+
+    print(f"   VOICE entry added: {has_success}")
+
+    # Verify in list
+    client.buffer.clear()
+    await client.send_raw("ACCESS #testvoice LIST VOICE")
+    await asyncio.sleep(0.3)
+    await client.read_lines()
+
+    has_entry = any("VoiceUser" in line for line in client.buffer)
+
+    print(f"   VOICE entry in list: {has_entry}")
+
+    assert has_success or has_entry, "VOICE access entry should be added"
+
+    await client.disconnect()
+
+
+@runner.test("ACCESS - Channel DENY")
+async def test_channel_deny_access():
+    """Test adding DENY to channel access list"""
+    client = IRCTestClient("access_deny")
+
+    await client.connect("AccessDeny")
+    await client.send_raw("JOIN #testdeny")
+    await asyncio.sleep(0.3)
+    await client.read_lines()
+
+    client.buffer.clear()
+    await client.send_raw("ACCESS #testdeny ADD DENY BadUser!*@*")
+    await asyncio.sleep(0.3)
+    await client.read_lines()
+
+    has_success = any("806" in line or "added" in line.lower() for line in client.buffer)
+
+    print(f"   DENY entry added: {has_success}")
+
+    # Verify in list
+    client.buffer.clear()
+    await client.send_raw("ACCESS #testdeny LIST DENY")
+    await asyncio.sleep(0.3)
+    await client.read_lines()
+
+    has_entry = any("BadUser" in line for line in client.buffer)
+
+    print(f"   DENY entry in list: {has_entry}")
+
+    assert has_success or has_entry, "DENY access entry should be added"
+
+    await client.disconnect()
+
+
+# ==============================================================================
+# Access Modification Tests
+# ==============================================================================
+
+@runner.test("ACCESS - Remove entry")
+async def test_access_remove():
+    """Test removing access entry"""
+    client = IRCTestClient("access_remove")
+
+    await client.connect("AccessRemove")
+    await client.send_raw("JOIN #testremove")
+    await asyncio.sleep(0.3)
+    await client.read_lines()
+
+    # Add entry
+    await client.send_raw("ACCESS #testremove ADD VOICE TempUser!*@*")
+    await asyncio.sleep(0.3)
+    await client.read_lines()
+
+    # Remove entry
+    client.buffer.clear()
+    await client.send_raw("ACCESS #testremove REMOVE VOICE TempUser!*@*")
+    await asyncio.sleep(0.3)
+    await client.read_lines()
+
+    has_removed = any("removed" in line.lower() or "807" in line for line in client.buffer)
+
+    print(f"   Entry removed: {has_removed}")
+
+    # Verify it's gone
+    client.buffer.clear()
+    await client.send_raw("ACCESS #testremove LIST VOICE")
+    await asyncio.sleep(0.3)
+    await client.read_lines()
+
+    has_entry = any("TempUser" in line for line in client.buffer)
+
+    print(f"   Entry still in list: {has_entry}")
+
+    assert has_removed or not has_entry, "Entry should be removed from access list"
+
+    await client.disconnect()
+
+
+@runner.test("ACCESS - Clear list")
+async def test_access_clear():
+    """Test clearing all access entries"""
+    client = IRCTestClient("access_clear")
+
+    await client.connect("AccessClear")
+    await client.send_raw("JOIN #testclear")
+    await asyncio.sleep(0.3)
+    await client.read_lines()
+
+    # Add multiple entries
+    await client.send_raw("ACCESS #testclear ADD VOICE User1!*@*")
+    await asyncio.sleep(0.2)
+    await client.send_raw("ACCESS #testclear ADD VOICE User2!*@*")
+    await asyncio.sleep(0.2)
+    await client.send_raw("ACCESS #testclear ADD VOICE User3!*@*")
+    await asyncio.sleep(0.3)
+    await client.read_lines()
+
+    # Clear all
+    client.buffer.clear()
+    await client.send_raw("ACCESS #testclear CLEAR VOICE")
+    await asyncio.sleep(0.3)
+    await client.read_lines()
+
+    has_cleared = any("cleared" in line.lower() or "808" in line for line in client.buffer)
+
+    print(f"   List cleared: {has_cleared}")
+
+    # Verify empty
+    client.buffer.clear()
+    await client.send_raw("ACCESS #testclear LIST VOICE")
+    await asyncio.sleep(0.3)
+    await client.read_lines()
+
+    has_entries = any("User1" in line or "User2" in line or "User3" in line for line in client.buffer)
+
+    print(f"   Entries still present: {has_entries}")
+
+    assert has_cleared or not has_entries, "Access list should be cleared"
+
+    await client.disconnect()
+
+
+# ==============================================================================
+# Service Protection Tests
+# ==============================================================================
+
+@runner.test("ACCESS - Service DENY protection")
+async def test_service_deny_protection():
+    """Test services cannot be added to DENY lists"""
+    client = IRCTestClient("access_service")
+
+    await client.connect("AccessService")
+    await client.send_raw("JOIN #testservice")
+    await asyncio.sleep(0.3)
+    await client.read_lines()
+
+    # Try to add System service to DENY
+    client.buffer.clear()
+    await client.send_raw("ACCESS #testservice ADD DENY System!*@*")
+    await asyncio.sleep(0.3)
+    await client.read_lines()
+
+    has_error = any("cannot" in line.lower() or "825" in line for line in client.buffer)
+
+    print(f"   Service protection error: {has_error}")
+
+    for line in client.buffer[:5]:
+        if "825" in line or "annot" in line:
+            print(f"   {line[:80]}...")
+
+    assert has_error, "Services should be protected from DENY lists"
+
+    await client.disconnect()
+
+
+# ==============================================================================
+# Wildcard Matching Tests
+# ==============================================================================
+
+@runner.test("ACCESS - Wildcard patterns")
+async def test_wildcard_patterns():
+    """Test wildcard mask matching in access lists"""
+    client = IRCTestClient("access_wildcard")
+
+    await client.connect("AccessWildcard")
+    await client.send_raw("JOIN #testwildcard")
+    await asyncio.sleep(0.3)
+    await client.read_lines()
+
+    # Test various wildcard patterns
+    patterns = [
+        "*!*@*.example.com",
+        "User*!*@*",
+        "*!user@*",
+        "TestUser!test@host.com"
+    ]
+
+    for pattern in patterns:
+        await client.send_raw(f"ACCESS #testwildcard ADD VOICE {pattern}")
+        await asyncio.sleep(0.2)
+
+    await client.read_lines()
+
+    # List all entries
+    client.buffer.clear()
+    await client.send_raw("ACCESS #testwildcard LIST VOICE")
+    await asyncio.sleep(0.5)
+    await client.read_lines()
+
+    found_count = 0
+    for pattern in patterns:
+        # Check if pattern appears in any line (may be escaped or formatted)
+        if any(pattern.replace("*", "") in line or "example.com" in line or "TestUser" in line for line in client.buffer):
+            found_count += 1
+
+    print(f"   Patterns found: {found_count}/{len(patterns)}")
+
+    for line in client.buffer[:10]:
+        if "VOICE" in line or "806" in line:
+            print(f"   {line[:80]}...")
+
+    assert found_count > 0, "At least some wildcard patterns should be added"
+
+    await client.disconnect()
+
+
+# ==============================================================================
+# Server Access Tests (requires staff)
+# ==============================================================================
+
+@runner.test("ACCESS - Server GRANT (ADMIN)")
+async def test_server_access_grant():
+    """Test server-level GRANT access (ADMIN only)"""
+    client = IRCTestClient("access_server_grant")
+
+    await client.connect("AccessServerGrant", staff_account="admin")
+    await asyncio.sleep(0.3)
+    await asyncio.sleep(0.5)
+    await client.read_lines()
+
+    # Try to add GRANT entry
+    client.buffer.clear()
+    await client.send_raw("ACCESS SERVER ADD GRANT AdminUser!*@*")
+    await asyncio.sleep(0.3)
+    await client.read_lines()
+
+    has_success = any("806" in line or "added" in line.lower() for line in client.buffer)
+
+    print(f"   Server GRANT added: {has_success}")
+
+    # List GRANT entries
+    client.buffer.clear()
+    await client.send_raw("ACCESS SERVER LIST GRANT")
+    await asyncio.sleep(0.3)
+    await client.read_lines()
+
+    has_entry = any("AdminUser" in line or "GRANT" in line for line in client.buffer)
+
+    print(f"   GRANT entry listed: {has_entry}")
+
+    assert has_success or has_entry, "Server GRANT access should work for ADMIN"
+
+    await client.disconnect()
+
+
+@runner.test("ACCESS - Server DENY (ADMIN)")
+async def test_server_access_deny():
+    """Test server-level DENY access (ADMIN only)"""
+    client = IRCTestClient("access_server_deny")
+
+    await client.connect("AccessServerDeny", staff_account="admin")
+    await asyncio.sleep(0.3)
+    await asyncio.sleep(0.5)
+    await client.read_lines()
+
+    # Try to add DENY entry
+    client.buffer.clear()
+    await client.send_raw("ACCESS SERVER ADD DENY BannedUser!*@*")
+    await asyncio.sleep(0.3)
+    await client.read_lines()
+
+    has_success = any("806" in line or "added" in line.lower() for line in client.buffer)
+
+    print(f"   Server DENY added: {has_success}")
+
+    # List DENY entries
+    client.buffer.clear()
+    await client.send_raw("ACCESS SERVER LIST DENY")
+    await asyncio.sleep(0.3)
+    await client.read_lines()
+
+    has_entry = any("BannedUser" in line or "DENY" in line for line in client.buffer)
+
+    print(f"   DENY entry listed: {has_entry}")
+
+    assert has_success or has_entry, "Server DENY access should work for ADMIN"
+
+    await client.disconnect()
+
+
+# ==============================================================================
+# Test Runner
+# ==============================================================================
+
+async def main():
+    """Run all access control tests"""
+    print("\n⚠️  Make sure pyIRCX server is running on localhost:6667\n")
+
+    # Test server connection first
+    try:
+        reader, writer = await asyncio.wait_for(
+            asyncio.open_connection("127.0.0.1", 6667),
+            timeout=2.0
+        )
+        writer.close()
+        await writer.wait_closed()
+        print("✅ Server is reachable\n")
+    except Exception as e:
+        print(f"❌ Cannot connect to server: {e}")
+        print("Please start the pyIRCX server first!")
         return False
 
-    def send(self, message):
-        """Send a message to the server"""
-        self.sock.send(f"{message}\r\n".encode())
-        print(f"> {message}")
+    # Run all tests
+    success = await runner.run_all()
 
-    def recv_line(self):
-        """Receive a single line from the server"""
-        while '\n' not in self.buffer:
-            try:
-                data = self.sock.recv(4096).decode('utf-8', errors='ignore')
-                if not data:
-                    return None
-                self.buffer += data
-            except socket.timeout:
-                return None
-
-        line, self.buffer = self.buffer.split('\n', 1)
-        return line.strip()
-
-    def recv_until(self, pattern, timeout=3):
-        """Receive lines until pattern matches or timeout"""
-        start = time.time()
-        matches = []
-        while time.time() - start < timeout:
-            line = self.recv_line()
-            if not line:
-                continue
-            print(f"< {line}")
-            if re.search(pattern, line, re.IGNORECASE):
-                matches.append(line)
-        return matches
-
-    def recv_all(self, timeout=2):
-        """Receive all pending lines"""
-        start = time.time()
-        lines = []
-        while time.time() - start < timeout:
-            line = self.recv_line()
-            if not line:
-                continue
-            print(f"< {line}")
-            lines.append(line)
-        return lines
-
-    def join(self, channel):
-        """Join a channel"""
-        self.send(f"JOIN {channel}")
-        time.sleep(0.5)
-
-    def access(self, target, *args):
-        """Send ACCESS command"""
-        self.send(f"ACCESS {target} {' '.join(args)}")
-
-    def close(self):
-        """Close connection"""
-        if self.sock:
-            self.sock.close()
-            print(f"✓ Disconnected")
-
-
-def test_channel_owner_mode():
-    """Test channel OWNER access level"""
-    print("\n" + "="*60)
-    print("TEST: Channel OWNER Access Level")
-    print("="*60)
-
-    owner = IRCTestClient("ChannelOwner", "owner", "Channel Owner")
-    try:
-        owner.connect()
-        owner.join("#testchan")
-        time.sleep(1)
-
-        print("\nAdding user to OWNER access list...")
-        owner.access("#testchan", "ADD", "OWNER", "TestUser!*@*")
-
-        matches = owner.recv_until("ACCESS.*added|806", timeout=2)
-        if matches:
-            print("✓ PASS: OWNER entry added successfully")
-        else:
-            print("✗ FAIL: OWNER entry not added")
-
-        print("\nListing OWNER access...")
-        owner.access("#testchan", "LIST", "OWNER")
-        matches = owner.recv_until("TestUser", timeout=2)
-        if matches:
-            print("✓ PASS: OWNER entry appears in list")
-        else:
-            print("✗ FAIL: OWNER entry not in list")
-
-    finally:
-        owner.close()
-
-
-def test_channel_host_mode():
-    """Test channel HOST access level"""
-    print("\n" + "="*60)
-    print("TEST: Channel HOST Access Level")
-    print("="*60)
-
-    owner = IRCTestClient("ChannelOwner", "owner", "Channel Owner")
-    try:
-        owner.connect()
-        owner.join("#testchan2")
-        time.sleep(1)
-
-        print("\nAdding user to HOST access list...")
-        owner.access("#testchan2", "ADD", "HOST", "HostUser!*@*")
-
-        matches = owner.recv_until("ACCESS.*added|806", timeout=2)
-        if matches:
-            print("✓ PASS: HOST entry added successfully")
-        else:
-            print("✗ FAIL: HOST entry not added")
-
-        print("\nListing HOST access...")
-        owner.access("#testchan2", "LIST", "HOST")
-        matches = owner.recv_until("HostUser", timeout=2)
-        if matches:
-            print("✓ PASS: HOST entry appears in list")
-        else:
-            print("✗ FAIL: HOST entry not in list")
-
-    finally:
-        owner.close()
-
-
-def test_channel_voice_mode():
-    """Test channel VOICE access level"""
-    print("\n" + "="*60)
-    print("TEST: Channel VOICE Access Level")
-    print("="*60)
-
-    owner = IRCTestClient("ChannelOwner", "owner", "Channel Owner")
-    try:
-        owner.connect()
-        owner.join("#testchan3")
-        time.sleep(1)
-
-        print("\nAdding user to VOICE access list...")
-        owner.access("#testchan3", "ADD", "VOICE", "VoiceUser!*@*")
-
-        matches = owner.recv_until("ACCESS.*added|806", timeout=2)
-        if matches:
-            print("✓ PASS: VOICE entry added successfully")
-        else:
-            print("✗ FAIL: VOICE entry not added")
-
-        print("\nListing VOICE access...")
-        owner.access("#testchan3", "LIST", "VOICE")
-        matches = owner.recv_until("VoiceUser", timeout=2)
-        if matches:
-            print("✓ PASS: VOICE entry appears in list")
-        else:
-            print("✗ FAIL: VOICE entry not in list")
-
-    finally:
-        owner.close()
-
-
-def test_channel_deny_mode():
-    """Test channel DENY access level"""
-    print("\n" + "="*60)
-    print("TEST: Channel DENY Access Level")
-    print("="*60)
-
-    owner = IRCTestClient("ChannelOwner", "owner", "Channel Owner")
-    try:
-        owner.connect()
-        owner.join("#testchan4")
-        time.sleep(1)
-
-        print("\nAdding user to DENY access list...")
-        owner.access("#testchan4", "ADD", "DENY", "BadUser!*@*")
-
-        matches = owner.recv_until("ACCESS.*added|806", timeout=2)
-        if matches:
-            print("✓ PASS: DENY entry added successfully")
-        else:
-            print("✗ FAIL: DENY entry not added")
-
-        print("\nListing DENY access...")
-        owner.access("#testchan4", "LIST", "DENY")
-        matches = owner.recv_until("BadUser", timeout=2)
-        if matches:
-            print("✓ PASS: DENY entry appears in list")
-        else:
-            print("✗ FAIL: DENY entry not in list")
-
-    finally:
-        owner.close()
-
-
-def test_access_remove():
-    """Test removing access entries"""
-    print("\n" + "="*60)
-    print("TEST: Remove Access Entry")
-    print("="*60)
-
-    owner = IRCTestClient("ChannelOwner", "owner", "Channel Owner")
-    try:
-        owner.connect()
-        owner.join("#testchan5")
-        time.sleep(1)
-
-        print("\nAdding then removing VOICE entry...")
-        owner.access("#testchan5", "ADD", "VOICE", "TempUser!*@*")
-        time.sleep(1)
-        owner.access("#testchan5", "REMOVE", "VOICE", "TempUser!*@*")
-
-        matches = owner.recv_until("removed|ACCESS.*removed", timeout=2)
-        if matches:
-            print("✓ PASS: Entry removed successfully")
-        else:
-            print("✗ FAIL: Entry not removed")
-
-        print("\nVerifying entry is gone...")
-        owner.access("#testchan5", "LIST", "VOICE")
-        matches = owner.recv_until("TempUser", timeout=2)
-        if not matches:
-            print("✓ PASS: Entry no longer in list")
-        else:
-            print("✗ FAIL: Entry still in list")
-
-    finally:
-        owner.close()
-
-
-def test_access_clear():
-    """Test clearing all access entries"""
-    print("\n" + "="*60)
-    print("TEST: Clear Access List")
-    print("="*60)
-
-    owner = IRCTestClient("ChannelOwner", "owner", "Channel Owner")
-    try:
-        owner.connect()
-        owner.join("#testchan6")
-        time.sleep(1)
-
-        print("\nAdding multiple VOICE entries...")
-        owner.access("#testchan6", "ADD", "VOICE", "User1!*@*")
-        time.sleep(0.5)
-        owner.access("#testchan6", "ADD", "VOICE", "User2!*@*")
-        time.sleep(0.5)
-        owner.access("#testchan6", "ADD", "VOICE", "User3!*@*")
-        time.sleep(1)
-
-        print("\nClearing all VOICE entries...")
-        owner.access("#testchan6", "CLEAR", "VOICE")
-
-        matches = owner.recv_until("Cleared|cleared", timeout=2)
-        if matches:
-            print("✓ PASS: Access list cleared")
-        else:
-            print("✗ FAIL: Access list not cleared")
-
-        print("\nVerifying list is empty...")
-        owner.access("#testchan6", "LIST", "VOICE")
-        matches = owner.recv_until("User1|User2|User3", timeout=2)
-        if not matches:
-            print("✓ PASS: List is empty")
-        else:
-            print("✗ FAIL: List still has entries")
-
-    finally:
-        owner.close()
-
-
-def test_service_deny_protection():
-    """Test that services cannot be added to DENY lists"""
-    print("\n" + "="*60)
-    print("TEST: Services Cannot Be Added to DENY Lists")
-    print("="*60)
-
-    owner = IRCTestClient("ChannelOwner", "owner", "Channel Owner")
-    try:
-        owner.connect()
-        owner.join("#testchan7")
-        time.sleep(1)
-
-        print("\nAttempting to add System service to DENY list...")
-        owner.access("#testchan7", "ADD", "DENY", "System!*@*")
-
-        matches = owner.recv_until("Cannot add services|825", timeout=2)
-        if matches:
-            print("✓ PASS: System service protected from DENY list")
-        else:
-            print("✗ FAIL: Service was added to DENY list or no protection error")
-
-        print("\nAttempting to add Registrar service to DENY list...")
-        owner.access("#testchan7", "ADD", "DENY", "Registrar!*@*")
-
-        matches = owner.recv_until("Cannot add services|825", timeout=2)
-        if matches:
-            print("✓ PASS: Registrar service protected from DENY list")
-        else:
-            print("✗ FAIL: Service was added to DENY list")
-
-    finally:
-        owner.close()
-
-
-def test_server_access():
-    """Test server-level GRANT/DENY access (requires ADMIN/SYSOP)"""
-    print("\n" + "="*60)
-    print("TEST: Server-Level Access Control")
-    print("="*60)
-
-    print("⚠ MANUAL TEST REQUIRED:")
-    print("  1. Connect as ADMIN/SYSOP")
-    print("  2. Test: ACCESS SERVER ADD GRANT admin!*@*")
-    print("  3. Test: ACCESS SERVER ADD DENY baduser!*@*")
-    print("  4. Test: ACCESS SERVER LIST GRANT")
-    print("  5. Test: ACCESS SERVER LIST DENY")
-    print("  6. Verify entries appear correctly")
-
-
-def test_wildcard_matching():
-    """Test wildcard mask matching"""
-    print("\n" + "="*60)
-    print("TEST: Wildcard Mask Matching")
-    print("="*60)
-
-    owner = IRCTestClient("ChannelOwner", "owner", "Channel Owner")
-    try:
-        owner.connect()
-        owner.join("#testchan8")
-        time.sleep(1)
-
-        print("\nTesting various wildcard patterns...")
-        patterns = [
-            "*!*@*.example.com",
-            "User*!*@*",
-            "*!user@*",
-            "User!user@host.com"
-        ]
-
-        for pattern in patterns:
-            print(f"\n  Adding pattern: {pattern}")
-            owner.access("#testchan8", "ADD", "VOICE", pattern)
-            time.sleep(0.5)
-
-        print("\nListing all patterns...")
-        owner.access("#testchan8", "LIST", "VOICE")
-        lines = owner.recv_all(timeout=3)
-
-        found_count = sum(1 for line in lines if any(p in line for p in patterns))
-        print(f"\n✓ Found {found_count}/{len(patterns)} patterns in list")
-
-    finally:
-        owner.close()
-
-
-def test_access_auto_grant():
-    """Test that users automatically get modes based on access list"""
-    print("\n" + "="*60)
-    print("TEST: Automatic Mode Grant on Join")
-    print("="*60)
-
-    print("⚠ MANUAL TEST REQUIRED:")
-    print("  1. Create channel #testautogrant")
-    print("  2. Add entry: ACCESS #testautogrant ADD OWNER TestUser!*@*")
-    print("  3. User TestUser joins #testautogrant")
-    print("  4. Verify TestUser receives +q (owner) mode automatically")
-    print("  5. Repeat for HOST (+o) and VOICE (+v)")
-
+    return success
 
 if __name__ == "__main__":
-    print("\n" + "="*60)
-    print("Access Control System Test Suite")
-    print("="*60)
-
     try:
-        # Automated tests
-        test_channel_owner_mode()
-        test_channel_host_mode()
-        test_channel_voice_mode()
-        test_channel_deny_mode()
-        test_access_remove()
-        test_access_clear()
-        test_service_deny_protection()
-        test_wildcard_matching()
-
-        # Manual tests
-        test_server_access()
-        test_access_auto_grant()
-
-        print("\n" + "="*60)
-        print("Test Suite Complete")
-        print("="*60)
-        print("\nNOTE: Some tests require manual verification with ADMIN/SYSOP privileges")
-
-    except Exception as e:
-        print(f"\n✗ ERROR: {e}")
-        import traceback
-        traceback.print_exc()
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\nTests interrupted")
+        sys.exit(1)

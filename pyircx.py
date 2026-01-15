@@ -22,9 +22,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
 # Version info - updated with each release
-__version__ = "1.1.4"
+__version__ = "1.1.5"
 __version_label__ = "pyIRCX"
-__created__ = "Wed Jan 14 05:20:19 PM EST 2026"
+__created__ = "Thu Jan 15 05:23:39 PM EST 2026"
 
 import asyncio
 import aiosqlite
@@ -1458,11 +1458,11 @@ class Channel:
         self.owners = set()
         self.hosts = set()
         self.voices = set()
-        # Channel modes: a=auth-only, d=clone-enabled, e=is-clone, f=strip-formatting, h=hidden, i=invite-only,
-        # j=no-invitations, k=key, l=limit, m=moderated, n=no-external, p=private, r=registered, s=secret,
-        # t=topic-protection, u=knock-mode, w=no-whispers, x=auditorium, y=transcript, z=locked
+        # Channel modes: a=auth-only, d=clone-enabled, e=is-clone, f=strip-formatting, g=guide-op, h=hidden,
+        # i=invite-only, j=no-invitations, k=key, l=limit, m=moderated, n=no-external, p=private, r=registered,
+        # s=secret, t=topic-protection, u=knock-mode, w=no-whispers, x=auditorium, y=transcript, z=locked
         self.modes = {m: False for m in CONFIG.get(
-            'modes', 'channel', default='adefhijkmnprstuwxyz')}
+            'modes', 'channel', default='adefghijklmnprstuwxyz')}
         # Apply default channel modes from config
         default_modes = CONFIG.get('modes', 'channel_defaults', default='nt')
         for mode in default_modes:
@@ -1480,6 +1480,7 @@ class Channel:
         self.key = None
         self.host_key = None
         self.owner_key = None
+        self.voice_key = None
         self.user_limit = None
         self.knock_cooldowns = {}
         # Clone channel support
@@ -1602,6 +1603,7 @@ class Channel:
             'key': self.key,
             'host_key': self.host_key,
             'owner_key': self.owner_key,
+            'voice_key': self.voice_key,
             'user_limit': self.user_limit,
             'clone_parent': self.clone_parent,
             'clone_children': self.clone_children,
@@ -1624,6 +1626,7 @@ class Channel:
             'key': self.key,
             'host_key': self.host_key,
             'owner_key': self.owner_key,
+            'voice_key': self.voice_key,
             'user_limit': self.user_limit,
             'onjoin': self.onjoin,
             'onpart': self.onpart,
@@ -1647,6 +1650,7 @@ class Channel:
             self.key = props.get('key', None)
             self.host_key = props.get('host_key', None)
             self.owner_key = props.get('owner_key', None)
+            self.voice_key = props.get('voice_key', None)
             self.user_limit = props.get('user_limit', None)
             self.onjoin = props.get('onjoin', None)
             self.onpart = props.get('onpart', None)
@@ -1682,6 +1686,7 @@ class Channel:
         channel.key = data.get('key', None)
         channel.host_key = data.get('host_key', None)
         channel.owner_key = data.get('owner_key', None)
+        channel.voice_key = data.get('voice_key', None)
         channel.user_limit = data.get('user_limit', None)
         channel.clone_parent = data.get('clone_parent', None)
         channel.clone_children = data.get('clone_children', [])
@@ -1708,7 +1713,7 @@ RESPONSES = {
     "002": "Your host is {servername}, running version {version_label} {version}",
     "003": "This server was created {created_date}",
     "004": "{servername} {version_label} {version} {usermodes} {chanmodes}",
-    "005": "CHANTYPES=#& PREFIX=(qov).@+ CHANMODES={chanmodes} NICKLEN={nicklen} USERLEN={userlen} CHANNELLEN={chanlen} MODES=20 NETWORK={network_name} IRCX ACCESS PROPS :are supported",
+    "005": "CHANTYPES=#& PREFIX=(qov).@+ CHANMODES={chanmodes_param} NICKLEN={nicklen} MAXNICKLEN={nicklen} USERLEN={userlen} CHANNELLEN={chanlen} TOPICLEN={topiclen} MODES={max_modes} CASEMAPPING=rfc1459 STATUSMSG=.@+ NETWORK={network_name} IRCX ACCESS PROPS :are supported",
     "219": "{flag} :End of /STATS report",
     "221": "+{modes}",
     "251": "There are {users} users and {invisible} invisible on {server_count} servers",
@@ -1999,6 +2004,7 @@ class pyIRCXServer:
         self.servername = CONFIG.get('server', 'name', default='irc.local')
         self.users = {}
         self.channels = {}
+        self.channel_creation_lock = asyncio.Lock()  # Prevent race conditions in channel creation
         self.whowas = OrderedDict()  # LRU cache for WHOWAS
         self.whowas_max_entries = 1000  # Maximum entries to keep
         self.whowas_max_age = 86400  # 24 hours in seconds
@@ -2031,7 +2037,14 @@ class pyIRCXServer:
         self.stats = {
             'total_connections': 0,
             'messages_sent': 0,
-            'commands_processed': 0
+            'commands_processed': 0,
+            'command_usage': {},  # Track usage count per command
+            'peak_users': 0,  # Peak simultaneous users
+            'peak_time': None,  # When peak occurred
+            'flood_events': 0,  # Total flood protection triggers
+            'messages_by_channel': {},  # Message count per channel
+            'servicebot_violations': {},  # Violation type -> count
+            'servicebot_actions': {}  # Action type -> count
         }
 
         self.access_list = {
@@ -2121,6 +2134,7 @@ class pyIRCXServer:
         clone.key = original.key
         clone.host_key = original.host_key
         clone.owner_key = original.owner_key
+        clone.voice_key = original.voice_key
         clone.user_limit = original.user_limit
 
         # Copy modes (except +d, add +e)
@@ -2223,6 +2237,15 @@ class pyIRCXServer:
         """
         if not CONFIG.get('servicebot', 'enabled', default=True):
             return
+
+        # Track violation and action
+        if violation_type not in self.stats['servicebot_violations']:
+            self.stats['servicebot_violations'][violation_type] = 0
+        self.stats['servicebot_violations'][violation_type] += 1
+
+        if action not in self.stats['servicebot_actions']:
+            self.stats['servicebot_actions'][action] = 0
+        self.stats['servicebot_actions'][action] += 1
 
         bot = self._get_servicebot_for_channel(channel)
         if not bot:
@@ -2737,10 +2760,14 @@ class pyIRCXServer:
             "created_date": __created__,
             # User modes: a=ADMIN, g=GUIDE, i=invisible, o=SYSOP, r=registered, s=service, x=IRCX, z=gagged
             "usermodes": CONFIG.get('modes', 'user', default='agiorsxz'),
-            # Channel modes: a=auth-only, d=clone-enabled, e=is-clone, f=strip-formatting, h=hidden, i=invite-only,
-            # j=no-invitations, k=key, l=limit, m=moderated, n=no-external, p=private, r=registered, s=secret,
-            # t=topic-protection, u=knock-mode, w=no-whispers, x=auditorium, y=transcript, z=locked
-            "chanmodes": CONFIG.get('modes', 'channel', default='adefhijkmnprstuwxyz'),
+            # Channel modes: a=auth-only, d=clone-enabled, e=is-clone, f=strip-formatting, g=guide-op, h=hidden,
+            # i=invite-only, j=no-invitations, k=key, l=limit, m=moderated, n=no-external, p=private, r=registered,
+            # s=secret, t=topic-protection, u=knock-mode, w=no-whispers, x=auditorium, y=transcript, z=locked
+            "chanmodes": CONFIG.get('modes', 'channel', default='adefghijklmnprstuwxyz'),
+            # CHANMODES parameter (IRCv3 format: A,B,C,D where A=list modes, B=always param, C=param on set, D=no param)
+            # A=empty (no ban lists via MODE), B=k (key), C=l (limit), D=all others
+            "chanmodes_param": ",k,l,adefghijmnprstuwxyz",
+            "max_modes": CONFIG.get('limits', 'max_modes_per_command', default=6),
             "uptime": int(time.time() - self.boot_time),
             "loc1": CONFIG.get('admin', 'loc1', default=''),
             "loc2": CONFIG.get('admin', 'loc2', default=''),
@@ -2750,6 +2777,7 @@ class pyIRCXServer:
             "nicklen": CONFIG.get('limits', 'max_nick_length', default=30),
             "userlen": CONFIG.get('limits', 'max_user_length', default=30),
             "chanlen": CONFIG.get('limits', 'max_channel_length', default=50),
+            "topiclen": CONFIG.get('limits', 'max_topic_length', default=390),
             **kwargs
         }
         try:
@@ -2908,6 +2936,12 @@ class pyIRCXServer:
         self.stats['total_connections'] += 1
         self.max_users_seen = max(self.max_users_seen, len(self.users))
 
+        # Track peak users
+        current_users = len([u for u in self.users.values() if not u.is_virtual])
+        if current_users > self.stats['peak_users']:
+            self.stats['peak_users'] = current_users
+            self.stats['peak_time'] = int(time.time())
+
         try:
             while True:
                 line = await reader.readline()
@@ -2948,23 +2982,25 @@ class pyIRCXServer:
         user.last_activity = int(time.time())
         self.stats['commands_processed'] += 1
 
-        # Flood protection - services and localhost admins are exempt
-        # Services (+s mode) and localhost ADMIN connections bypass flood protection
+        # Track individual command usage
+        if cmd not in self.stats['command_usage']:
+            self.stats['command_usage'][cmd] = 0
+        self.stats['command_usage'][cmd] += 1
+
+        # Flood protection - only apply to message commands (PRIVMSG, NOTICE, WHISPER, BROADCAST)
+        # Only services are exempt
+        MESSAGE_COMMANDS = ['PRIVMSG', 'NOTICE', 'WHISPER', 'BROADCAST']
         is_service = user.has_mode('s')
-        is_localhost_admin = user.ip in ['127.0.0.1', '::1', '::ffff:127.0.0.1'] and user.has_mode('a')
-        
-        if user.registered and not is_service and not is_localhost_admin:
+
+        if cmd in MESSAGE_COMMANDS and user.registered and not is_service:
             if CONFIG.get('security', 'enable_flood_protection', default=True):
-                is_staff = user.is_high_staff()
-                # Staff get 3x the normal flood limit before being throttled
                 flood_ok = user.check_flood()
                 if not flood_ok:
-                    # Staff still get throttled at 3x the limit
-                    if not is_staff or len(user.flood_protection.messages) >= 15:
-                        await user.send(
-                            f":{self.servername} NOTICE {user.nickname} :*** Too fast")
-                        logger.warning(f"Flood: {user.nickname}")
-                        return
+                    self.stats['flood_events'] += 1
+                    await user.send(
+                        f":{self.servername} NOTICE {user.nickname} :*** Too fast")
+                    logger.warning(f"Flood: {user.nickname}")
+                    return
 
         # Rate limiting is handled in individual command handlers
         # with appropriate error messages, not silently at dispatch level
@@ -3092,6 +3128,8 @@ class pyIRCXServer:
             await user.send(self.get_reply("259", user))
         elif cmd == "INFO":
             await self.handle_info(user)
+        elif cmd == "HELP":
+            await self.handle_help(user, params)
         elif cmd == "MOTD":
             await self.handle_motd(user)
         elif cmd == "LUSERS":
@@ -3387,8 +3425,7 @@ class pyIRCXServer:
         await user.send(self.get_reply("251", user, users=real_users, invisible=invisible))
         await user.send(self.get_reply("252", user, ops=ops))
         await user.send(self.get_reply("255", user, users=real_users))
-        await user.send(self.get_reply("375", user))
-        await user.send(self.get_reply("376", user))
+        await self.handle_motd(user)
 
         if auth:
             mode = 'a' if level == "ADMIN" else 'o' if level == "SYSOP" else 'g'
@@ -3441,9 +3478,15 @@ class pyIRCXServer:
             text = text[:max_msg_len]
             await user.send(f":{self.servername} NOTICE {user.nickname} :Message truncated to {max_msg_len} characters")
 
-        # System service doesn't accept direct messages
+        # System service - provide help about available services
         if target.lower() == CONFIG.get('system', 'nick', default='System').lower():
-            await user.send(f":{CONFIG.get('system', 'nick')}!{CONFIG.get('system', 'ident')}@{self.servername} NOTICE {user.nickname} :System does not accept messages. Use /HELP for available services.")
+            system_nick = CONFIG.get('system', 'nick', default='System')
+            await self._service_reply(system_nick, user, "pyIRCX System - Available Services:")
+            await self._service_reply(system_nick, user, "  Registrar - Nickname registration and authentication")
+            await self._service_reply(system_nick, user, "  Messenger - Offline message delivery")
+            await self._service_reply(system_nick, user, "  NewsFlash - Network news and announcements")
+            await self._service_reply(system_nick, user, "  ServiceBot## - Channel monitoring and moderation")
+            await self._service_reply(system_nick, user, "Send a message to any service for help. Example: /msg Registrar HELP")
             return
 
         # Route messages to services
@@ -3456,6 +3499,11 @@ class pyIRCXServer:
         if target.lower() == 'newsflash':
             await self._handle_newsflash_msg(user, text)
             return
+        # Check if target is a ServiceBot (case-insensitive)
+        for botname in self.servicebots:
+            if target.lower() == botname.lower():
+                await self._handle_servicebot_msg(user, text, botname)
+                return
 
         source = f":{user.prefix()}"
         out = f"{source} {cmd} {target} {params[1] + ' ' if cmd in ['WHISPER', 'DATA'] and len(params) > 2 else ''}:{text}"
@@ -3558,6 +3606,11 @@ class pyIRCXServer:
                 chan_out = f"{source} {cmd} {chan_name} {params[1] + ' ' if cmd in ['DATA'] and len(params) > 2 else ''}:{text}"
             await channel.broadcast(chan_out, exclude=user)
             self.stats['messages_sent'] += 1
+
+            # Track messages by channel
+            if chan_name not in self.stats['messages_by_channel']:
+                self.stats['messages_by_channel'][chan_name] = 0
+            self.stats['messages_by_channel'][chan_name] += 1
 
             # Log to transcript if +y mode is enabled
             if cmd == "PRIVMSG":
@@ -3667,6 +3720,7 @@ class pyIRCXServer:
             await user.send(self.get_reply("315", user, target=target))
             return
 
+        # Check if target is a channel
         channel, chan_name = self.get_channel(target)
         if channel:
             for nick in channel.members:
@@ -3716,7 +3770,49 @@ class pyIRCXServer:
                 display_host = member.ip if is_staff else member.host
                 await user.send(self.get_reply("352", user, channel=chan_name, ident=member.username,
                                         host=display_host, target=nick, flags=flags, real=member.realname))
-        await user.send(self.get_reply("315", user, target=chan_name if channel else target))
+            await user.send(self.get_reply("315", user, target=chan_name))
+            return
+
+        # Check if target is a specific user (case-insensitive nickname match)
+        member = self.users.get(target)
+        if not member:
+            # Try case-insensitive search
+            target_lower = target.lower()
+            for nick, usr in self.users.items():
+                if nick.lower() == target_lower:
+                    member = usr
+                    break
+
+        if member:
+            # Skip invisible users unless requester is staff or is the member
+            if not (member.has_mode('i') and not is_staff and user != member):
+                # Skip virtual users unless requester is staff OR member is a service
+                if not (member.is_virtual and not is_staff and not member.has_mode('s')):
+                    flags = "G" if member.away_msg else "H"
+                    if member.has_mode('i') and (is_staff or user == member):
+                        flags += "i"
+                    if member.has_mode('x') or member.is_ircx:
+                        flags += "x"
+                    if user.is_ircx:
+                        if member.has_mode('s'):
+                            flags += "s"
+                        elif member.has_mode('a'):
+                            flags += "a"
+                        elif member.has_mode('o'):
+                            flags += "o"
+                        elif member.has_mode('g'):
+                            flags += "g"
+                    else:
+                        if member.has_mode('s'):
+                            flags += "*"
+                        elif member.is_high_staff():
+                            flags += "*"
+                    # Staff see IP address, others see hostname
+                    display_host = member.ip if is_staff else member.host
+                    await user.send(self.get_reply("352", user, channel="*", ident=member.username,
+                                            host=display_host, target=member.nickname, flags=flags, real=member.realname))
+
+        await user.send(self.get_reply("315", user, target=target))
 
     async def handle_whois(self, user, params):
         if not params:
@@ -3843,36 +3939,39 @@ class pyIRCXServer:
             await user.send(self.get_reply("473", user, target="#System"))
             return
 
-        # Case-insensitive channel lookup
-        channel, chan_name = self.get_channel(channel_name)
+        # Use lock to prevent race condition where multiple users create the same channel
+        async with self.channel_creation_lock:
+            # Case-insensitive channel lookup
+            channel, chan_name = self.get_channel(channel_name)
 
-        # Check if trying to join a clone directly - redirect through original
-        # Staff (SYSOP, ADMIN, GUIDE) and services/bots can join any clone directly
-        if not channel and not is_staff and not user.is_virtual:
-            original, original_name = self.get_clone_original(channel_name)
-            if original:
-                # Redirect: treat as joining the original, clone logic will handle placement
-                channel = original
-                chan_name = original_name
+            # Check if trying to join a clone directly - redirect through original
+            # Staff (SYSOP, ADMIN, GUIDE) and services/bots can join any clone directly
+            if not channel and not is_staff and not user.is_virtual:
+                original, original_name = self.get_clone_original(channel_name)
+                if original:
+                    # Redirect: treat as joining the original, clone logic will handle placement
+                    channel = original
+                    chan_name = original_name
 
-        if not channel:
-            # New channel - use provided name as canonical
-            chan_name = channel_name
-            # Try to load from database first if registered
-            channel = await self.load_registered_channel(chan_name)
             if not channel:
-                # Not registered - create new dynamic channel
-                channel = Channel(chan_name)
-            self.channels[chan_name] = channel
+                # New channel - use provided name as canonical
+                chan_name = channel_name
+                # Try to load from database first if registered
+                channel = await self.load_registered_channel(chan_name)
+                if not channel:
+                    # Not registered - create new dynamic channel
+                    channel = Channel(chan_name)
+                self.channels[chan_name] = channel
 
-        used_owner_key = key and channel.owner_key and key == channel.owner_key
-        used_host_key = key and channel.host_key and key == channel.host_key
+        used_owner_key = key and channel.owner_key and key.lower() == channel.owner_key.lower()
+        used_host_key = key and channel.host_key and key.lower() == channel.host_key.lower()
+        used_voice_key = key and channel.voice_key and key.lower() == channel.voice_key.lower()
 
         # Check channel ACCESS lists for grants
         access_grants = channel.get_access_grants(user)
         has_access_grant = 'GRANT' in access_grants or 'OWNER' in access_grants or 'HOST' in access_grants or 'VOICE' in access_grants
 
-        if not is_staff and not used_owner_key and not used_host_key:
+        if not is_staff and not used_owner_key and not used_host_key and not used_voice_key:
             # Check ACCESS DENY (works like ban)
             denied, deny_reason = channel.check_access(user, 'DENY')
             if denied or channel.is_banned(user):
@@ -3883,7 +3982,7 @@ class pyIRCXServer:
                 await user.send(self.get_reply("473", user, target=chan_name))
                 return
             if channel.modes.get('k') and channel.key:
-                if key != channel.key:
+                if not key or key.lower() != channel.key.lower():
                     await user.send(self.get_reply("475", user, target=chan_name))
                     return
             if channel.modes.get('l') and channel.user_limit:
@@ -3905,13 +4004,16 @@ class pyIRCXServer:
 
         # ADMINs, SYSOPs, and services/bots always get +q, owner key grants +q
         # First user gets +q ONLY for unregistered (dynamic) channels
+        # Channel mode +g grants owner to guides
         # ACCESS OWNER/HOST/VOICE entries also grant modes
         is_high_staff = user.is_high_staff()
         is_service = user.has_mode('s')
+        is_guide = user.has_mode('g')
         is_first_in_dynamic = len(channel.members) == 1 and not channel.registered
-        grant_owner = is_high_staff or is_service or is_first_in_dynamic or used_owner_key or 'OWNER' in access_grants
+        guide_auto_op = channel.modes.get('g', False) and is_guide
+        grant_owner = is_high_staff or is_service or is_first_in_dynamic or used_owner_key or 'OWNER' in access_grants or guide_auto_op
         grant_host = (used_host_key or 'HOST' in access_grants) and not grant_owner
-        grant_voice = 'VOICE' in access_grants and not grant_owner and not grant_host
+        grant_voice = (used_voice_key or 'VOICE' in access_grants) and not grant_owner and not grant_host
 
         # Track mode to grant (applied after JOIN broadcast so clients see it)
         if grant_owner:
@@ -4064,6 +4166,11 @@ class pyIRCXServer:
                     await user.send(self.get_reply("482", user, target=chan_name))
                     return
 
+            # Enforce topic length limit
+            max_topic_len = CONFIG.get('limits', 'max_topic_length', default=390)
+            if len(new_topic) > max_topic_len:
+                new_topic = new_topic[:max_topic_len]
+
             channel.topic = new_topic
             channel.topic_set_by = user.nickname
             channel.topic_set_at = int(time.time())
@@ -4094,22 +4201,22 @@ class pyIRCXServer:
             await user.send(self.get_reply("403", user, target=channel_name))
             return
 
-        if channel_name not in self.channels:
+        # Case-insensitive channel lookup
+        channel, chan_name = self.get_channel(channel_name)
+        if not channel:
             await user.send(self.get_reply("403", user, target=channel_name))
             return
-
-        channel = self.channels[channel_name]
 
         # Check permissions - must be channel owner/host or staff
         is_chanop = user.nickname in channel.owners or user.nickname in channel.hosts
         is_staff = user.is_high_staff()
         if not (is_chanop or is_staff):
-            await user.send(self.get_reply("482", user, target=channel_name))
+            await user.send(self.get_reply("482", user, target=chan_name))
             return
 
         # Check if transcript mode is enabled
         if not channel.modes.get('y', False):
-            await user.send(f":{self.servername} NOTICE {user.nickname} :{channel_name} does not have transcript mode (+y) enabled")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :{chan_name} does not have transcript mode (+y) enabled")
             return
 
         # Parse optional line count and offset
@@ -4153,40 +4260,49 @@ class pyIRCXServer:
         channel_name = params[0]
         message = params[1] if len(params) > 1 else ""
 
-        if channel_name not in self.channels:
+        # Case-insensitive channel lookup
+        channel, chan_name = self.get_channel(channel_name)
+        if not channel:
             await user.send(self.get_reply("403", user, target=channel_name))
             return
 
-        channel = self.channels[channel_name]
-
         if user.nickname in channel.members:
-            await user.send(f":{self.servername} 714 {user.nickname} {channel_name} :You are already on that channel")
+            await user.send(f":{self.servername} 714 {user.nickname} {chan_name} :You are already on that channel")
             return
 
         if not channel.modes.get('i'):
-            await user.send(f":{self.servername} 713 {user.nickname} {channel_name} :Channel is open")
+            await user.send(f":{self.servername} 713 {user.nickname} {chan_name} :Channel is open")
             return
 
         if channel.is_banned(user):
-            await user.send(self.get_reply("474", user, target=channel_name))
+            await user.send(self.get_reply("474", user, target=chan_name))
             return
+
+        # Channel mode +u: knock mode (knocking restricted - staff and ACCESS GRANT can bypass)
+        if channel.modes.get('u', False):
+            is_staff = user.is_staff()
+            access_grants = channel.get_access_grants(user)
+            has_access_grant = 'GRANT' in access_grants or 'OWNER' in access_grants or 'HOST' in access_grants or 'VOICE' in access_grants
+            if not is_staff and not has_access_grant:
+                await user.send(f":{self.servername} 716 {user.nickname} {chan_name} :User is in knock mode (+u)")
+                return
 
         now = time.time()
         last_knock = channel.knock_cooldowns.get(user.nickname, 0)
         if now - last_knock < 60:
-            await user.send(f":{self.servername} 712 {user.nickname} {channel_name} :Too many KNOCKs")
+            await user.send(f":{self.servername} 712 {user.nickname} {chan_name} :Too many KNOCKs")
             return
         channel.knock_cooldowns[user.nickname] = now
 
-        knock_msg = f":{self.servername} 710 {channel_name} {user.nickname} {user.prefix()} :has asked for an invite"
+        knock_msg = f":{self.servername} 710 {chan_name} {user.nickname} {user.prefix()} :has asked for an invite"
         if message:
-            knock_msg = f":{self.servername} 710 {channel_name} {user.nickname} {user.prefix()} :has asked for an invite ({message})"
+            knock_msg = f":{self.servername} 710 {chan_name} {user.nickname} {user.prefix()} :has asked for an invite ({message})"
 
         for nick in channel.members:
             if nick in channel.owners or nick in channel.hosts:
                 channel.members[nick].send(knock_msg)
 
-        await user.send(f":{self.servername} 711 {user.nickname} {channel_name} :Your KNOCK has been delivered")
+        await user.send(f":{self.servername} 711 {user.nickname} {chan_name} :Your KNOCK has been delivered")
 
     async def handle_prop(self, user, params):
         if not params:
@@ -4195,17 +4311,17 @@ class pyIRCXServer:
 
         channel_name = params[0]
 
-        if channel_name not in self.channels:
+        # Case-insensitive channel lookup
+        channel, chan_name = self.get_channel(channel_name)
+        if not channel:
             await user.send(self.get_reply("403", user, target=channel_name))
             return
 
-        channel = self.channels[channel_name]
-
         if len(params) == 1:
             for prop_name, prop_value in channel.props.items():
-                await user.send(self.get_reply("817", user, target=channel_name,
+                await user.send(self.get_reply("817", user, target=chan_name,
                                          prop=prop_name, value=prop_value))
-            await user.send(self.get_reply("818", user, target=channel_name))
+            await user.send(self.get_reply("818", user, target=chan_name))
             return
 
         prop_name = params[1]
@@ -4217,31 +4333,51 @@ class pyIRCXServer:
         if len(params) == 2:
             # Query mode - handle special properties
             if prop_upper == 'CREATION':
-                await user.send(self.get_reply("817", user, target=channel_name,
+                await user.send(self.get_reply("817", user, target=chan_name,
                                          prop='CREATION', value=str(channel.created_at)))
                 return
             elif prop_upper == 'ACCOUNT':
                 value = channel.account_uuid if channel.account_uuid else ""
-                await user.send(self.get_reply("817", user, target=channel_name,
+                await user.send(self.get_reply("817", user, target=chan_name,
                                          prop='ACCOUNT', value=value))
                 return
             elif prop_upper == 'TOPIC':
                 value = channel.topic or ""
-                await user.send(self.get_reply("817", user, target=channel_name,
+                await user.send(self.get_reply("817", user, target=chan_name,
                                          prop='TOPIC', value=value))
                 return
             elif prop_upper == 'ONJOIN':
                 value = channel.onjoin or ""
-                await user.send(self.get_reply("817", user, target=channel_name,
+                await user.send(self.get_reply("817", user, target=chan_name,
                                          prop='ONJOIN', value=value))
                 return
             elif prop_upper == 'ONPART':
                 value = channel.onpart or ""
-                await user.send(self.get_reply("817", user, target=channel_name,
+                await user.send(self.get_reply("817", user, target=chan_name,
                                          prop='ONPART', value=value))
                 return
+            elif prop_upper == 'MEMBERKEY':
+                value = channel.key or ""
+                await user.send(self.get_reply("817", user, target=chan_name,
+                                         prop='MEMBERKEY', value=value))
+                return
+            elif prop_upper == 'HOSTKEY':
+                value = channel.host_key or ""
+                await user.send(self.get_reply("817", user, target=chan_name,
+                                         prop='HOSTKEY', value=value))
+                return
+            elif prop_upper == 'OWNERKEY':
+                value = channel.owner_key or ""
+                await user.send(self.get_reply("817", user, target=chan_name,
+                                         prop='OWNERKEY', value=value))
+                return
+            elif prop_upper == 'VOICEKEY':
+                value = channel.voice_key or ""
+                await user.send(self.get_reply("817", user, target=chan_name,
+                                         prop='VOICEKEY', value=value))
+                return
             prop_value = channel.props.get(prop_name, "")
-            await user.send(self.get_reply("817", user, target=channel_name,
+            await user.send(self.get_reply("817", user, target=chan_name,
                                      prop=prop_name, value=prop_value))
             return
 
@@ -4253,13 +4389,17 @@ class pyIRCXServer:
         if not (user.nickname in channel.owners or
                 user.nickname in channel.hosts or
                 user.has_mode('a')):
-            await user.send(self.get_reply("482", user, target=channel_name))
+            await user.send(self.get_reply("482", user, target=chan_name))
             return
 
         prop_value = params[2] if len(params) > 2 else ""
 
         if prop_value:
             if prop_upper == 'TOPIC':
+                # Enforce topic length limit
+                max_topic_len = CONFIG.get('limits', 'max_topic_length', default=390)
+                if len(prop_value) > max_topic_len:
+                    prop_value = prop_value[:max_topic_len]
                 channel.topic = prop_value
             elif prop_upper == 'ONJOIN':
                 channel.onjoin = prop_value
@@ -4274,6 +4414,8 @@ class pyIRCXServer:
                 channel.host_key = prop_value
             elif prop_upper == 'OWNERKEY':
                 channel.owner_key = prop_value
+            elif prop_upper == 'VOICEKEY':
+                channel.voice_key = prop_value
         else:
             if prop_upper == 'TOPIC':
                 channel.topic = ""
@@ -4290,10 +4432,12 @@ class pyIRCXServer:
                 channel.host_key = None
             elif prop_upper == 'OWNERKEY':
                 channel.owner_key = None
+            elif prop_upper == 'VOICEKEY':
+                channel.voice_key = None
 
-        await user.send(self.get_reply("819", user, target=channel_name,
+        await user.send(self.get_reply("819", user, target=chan_name,
                                  prop=prop_name, value=prop_value))
-        logger.info(f"PROP {channel_name} {prop_name}={prop_value} by {user.nickname}")
+        logger.info(f"PROP {chan_name} {prop_name}={prop_value} by {user.nickname}")
 
     async def handle_invite(self, user, params):
         if len(params) < 2:
@@ -4318,33 +4462,35 @@ class pyIRCXServer:
             await user.send(self.get_reply("401", user, target=target_nick))
             return
 
-        if channel_name not in self.channels:
+        # Case-insensitive channel lookup
+        channel, chan_name = self.get_channel(channel_name)
+        if not channel:
             await user.send(self.get_reply("403", user, target=channel_name))
             return
 
-        channel = self.channels[channel_name]
-
         if user.nickname not in channel.members:
-            await user.send(self.get_reply("442", user, target=channel_name))
+            await user.send(self.get_reply("442", user, target=chan_name))
             return
 
-        # Channel mode +j: no invitations allowed (staff and services can bypass)
+        # Channel mode +j: no invitations allowed (staff, services, and ACCESS GRANT can bypass)
         if channel.modes.get('j', False):
             is_staff = user.is_staff()
             is_service = user.nickname in self.servicebots
-            if not is_staff and not is_service:
-                await user.send(f":{self.servername} NOTICE {user.nickname} :Invitations are not allowed in {channel_name} (+j)")
+            access_grants = channel.get_access_grants(user)
+            has_access_grant = 'GRANT' in access_grants or 'OWNER' in access_grants or 'HOST' in access_grants or 'VOICE' in access_grants
+            if not is_staff and not is_service and not has_access_grant:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Invitations are not allowed in {chan_name} (+j)")
                 return
 
         if channel.modes.get('i'):
             if not (user.nickname in channel.owners or
                     user.nickname in channel.hosts or
                     user.has_mode('a')):
-                await user.send(self.get_reply("482", user, target=channel_name))
+                await user.send(self.get_reply("482", user, target=chan_name))
                 return
 
         if target_nick in channel.members:
-            await user.send(f":{self.servername} 443 {user.nickname} {target_nick} {channel_name} :is already on channel")
+            await user.send(f":{self.servername} 443 {user.nickname} {target_nick} {chan_name} :is already on channel")
             return
 
         # ServiceBot invitation - ADMIN/SYSOP only, not GUIDE
@@ -4359,18 +4505,18 @@ class pyIRCXServer:
                 return
             # ServiceBot joins the channel automatically
             channel.members[target_nick] = bot
-            bot.channels.add(channel_name)
+            bot.channels.add(chan_name)
             # Services always get +q (owner)
             channel.owners.add(target_nick)
-            await channel.broadcast(f":{bot.prefix()} JOIN {channel_name}")
-            await channel.broadcast(f":{self.servername} MODE {channel_name} +q {target_nick}")
-            await user.send(self.get_reply("341", user, target=target_nick, channel=channel_name))
-            logger.info(f"ServiceBot {target_nick} joined {channel_name} via INVITE from {user.nickname} (granted +q)")
+            await channel.broadcast(f":{bot.prefix()} JOIN {chan_name}")
+            await channel.broadcast(f":{self.servername} MODE {chan_name} +q {target_nick}")
+            await user.send(self.get_reply("341", user, target=target_nick, channel=chan_name))
+            logger.info(f"ServiceBot {target_nick} joined {chan_name} via INVITE from {user.nickname} (granted +q)")
             return
 
-        target.invited_to.add(channel_name)
-        await user.send(self.get_reply("341", user, target=target_nick, channel=channel_name))
-        await target.send(f":{user.prefix()} INVITE {target_nick} :{channel_name}")
+        target.invited_to.add(chan_name)
+        await user.send(self.get_reply("341", user, target=target_nick, channel=chan_name))
+        await target.send(f":{user.prefix()} INVITE {target_nick} :{chan_name}")
 
     async def handle_access(self, user, params):
         """
@@ -4657,15 +4803,22 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :  a - Online ADMINs")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  o - Online SYSOPs")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  g - Online GUIDEs")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  i - Invisible users count")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  k - ACCESS DENY list")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  z - Gagged users")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  b - ServiceBot statistics")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  c - Configuration")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  d - Database info")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  d - Database statistics")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  f - Flood protection statistics")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  i - Invisible users count")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  k - Bans and access lists")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  l - Linking statistics")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  m - Message statistics")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  n - Network statistics")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  p - Peak usage statistics")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  t - SSL/TLS certificate status")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  v - Command usage statistics")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  w - Authenticated users count")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  x - IRCX users count")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  y - Anonymous users count")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  w - Authenticated users count")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  t - SSL/TLS certificate status")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  z - Gagged users")
             await user.send(f":{self.servername} NOTICE {user.nickname} :ADMIN only:")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  * - All statistics combined")
             await user.send(f":{self.servername} NOTICE {user.nickname} :=== End of STATS Help ===")
@@ -4698,12 +4851,12 @@ class pyIRCXServer:
             gagged = sum(1 for u in self.users.values() if u.has_mode('z') and not u.is_virtual)
 
             await user.send(f":{self.servername} NOTICE {user.nickname} :--- User Statistics ---")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Total users: {total_users}")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Invisible (+i): {invisible}")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :IRCX (+x): {ircx_users}")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Authenticated: {auth_users}")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Anonymous (~): {anon_users}")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Gagged (+z): {gagged}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Total users: {total_users}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Invisible (+i): {invisible}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  IRCX (+x): {ircx_users}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Authenticated: {auth_users}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Anonymous (~): {anon_users}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Gagged (+z): {gagged}")
 
             # Staff counts
             admins = sum(1 for u in self.users.values() if u.has_mode('a') and not u.is_virtual)
@@ -4711,9 +4864,9 @@ class pyIRCXServer:
             guides = sum(1 for u in self.users.values() if u.has_mode('g') and not u.is_virtual)
 
             await user.send(f":{self.servername} NOTICE {user.nickname} :--- Staff Online ---")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :ADMINs: {admins}")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :SYSOPs: {sysops}")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :GUIDEs: {guides}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  ADMINs: {admins}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  SYSOPs: {sysops}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  GUIDEs: {guides}")
 
             # Channel stats
             total_channels = len([c for c in self.channels.values() if not c.name.startswith('&')])
@@ -4721,30 +4874,103 @@ class pyIRCXServer:
             registered_channels = sum(1 for c in self.channels.values() if c.registered)
 
             await user.send(f":{self.servername} NOTICE {user.nickname} :--- Channel Statistics ---")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Global channels (#): {total_channels}")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Local channels (&): {local_channels}")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Registered: {registered_channels}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Global channels (#): {total_channels}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Local channels (&): {local_channels}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Registered: {registered_channels}")
 
             # Access lists
             deny_count = len(self.access_list['DENY'])
             grant_count = len(self.access_list['GRANT'])
 
             await user.send(f":{self.servername} NOTICE {user.nickname} :--- Access Lists ---")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :ACCESS DENY: {deny_count}")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :ACCESS GRANT: {grant_count}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  ACCESS DENY: {deny_count}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  ACCESS GRANT: {grant_count}")
 
             # Server stats
             await user.send(f":{self.servername} NOTICE {user.nickname} :--- Server Statistics ---")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Commands processed: {self.stats.get('commands_processed', 0)}")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Total connections: {self.stats.get('total_connections', 0)}")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Max users seen: {self.max_users_seen}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Commands processed: {self.stats.get('commands_processed', 0)}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Total connections: {self.stats.get('total_connections', 0)}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Max users seen: {self.max_users_seen}")
+
+            # Command usage (all commands)
+            if self.stats.get('command_usage'):
+                await user.send(f":{self.servername} NOTICE {user.nickname} :--- Command Usage ---")
+                sorted_cmds = sorted(self.stats['command_usage'].items(), key=lambda x: x[1], reverse=True)
+                for cmd, count in sorted_cmds:
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :  {cmd}: {count}")
+
+            # Peak usage
+            await user.send(f":{self.servername} NOTICE {user.nickname} :--- Peak Usage ---")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Peak users: {self.stats['peak_users']}")
+            if self.stats['peak_time']:
+                import datetime
+                peak_dt = datetime.datetime.fromtimestamp(self.stats['peak_time'])
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  Peak time: {peak_dt.strftime('%Y-%m-%d %H:%M:%S')}")
+
+            # Flood protection
+            await user.send(f":{self.servername} NOTICE {user.nickname} :--- Flood Protection ---")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Flood events: {self.stats['flood_events']}")
+            flood_msgs = CONFIG.get('security', 'flood_messages', default=5)
+            flood_window = CONFIG.get('security', 'flood_window', default=2.0)
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Threshold: {flood_msgs} msgs per {flood_window}s")
+
+            # Message statistics
+            await user.send(f":{self.servername} NOTICE {user.nickname} :--- Message Statistics ---")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Total messages: {self.stats['messages_sent']}")
+            if self.stats.get('messages_by_channel'):
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  Active channels by messages:")
+                sorted_channels = sorted(self.stats['messages_by_channel'].items(), key=lambda x: x[1], reverse=True)
+                for channel, count in sorted_channels:
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :    {channel}: {count}")
+
+            # ServiceBot statistics
+            if CONFIG.get('servicebot', 'enabled', default=True):
+                await user.send(f":{self.servername} NOTICE {user.nickname} :--- ServiceBot Statistics ---")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  Active bots: {len(self.servicebots)}")
+                if self.stats.get('servicebot_violations'):
+                    total_violations = sum(self.stats['servicebot_violations'].values())
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :  Total violations: {total_violations}")
+                    all_violations = sorted(self.stats['servicebot_violations'].items(), key=lambda x: x[1], reverse=True)
+                    for vtype, count in all_violations:
+                        await user.send(f":{self.servername} NOTICE {user.nickname} :    {vtype}: {count}")
+                if self.stats.get('servicebot_actions'):
+                    total_actions = sum(self.stats['servicebot_actions'].values())
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :  Total actions: {total_actions}")
+
+            # Ban statistics
+            await user.send(f":{self.servername} NOTICE {user.nickname} :--- Ban Statistics ---")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  ACCESS DENY: {len(self.access_list['DENY'])}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Server bans: {len(self.server_bans)}")
+
+            # Database statistics
+            try:
+                import os
+                import aiosqlite
+                db_path = CONFIG.get('database', 'path')
+                if os.path.exists(db_path):
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :--- Database Statistics ---")
+                    try:
+                        async with aiosqlite.connect(db_path) as db:
+                            async with db.execute("SELECT COUNT(*) FROM nicknames") as cursor:
+                                row = await cursor.fetchone()
+                                await user.send(f":{self.servername} NOTICE {user.nickname} :  Registered nicks: {row[0]}")
+                            async with db.execute("SELECT COUNT(*) FROM channels") as cursor:
+                                row = await cursor.fetchone()
+                                await user.send(f":{self.servername} NOTICE {user.nickname} :  Registered channels: {row[0]}")
+                            async with db.execute("SELECT COUNT(*) FROM messages") as cursor:
+                                row = await cursor.fetchone()
+                                await user.send(f":{self.servername} NOTICE {user.nickname} :  Offline messages: {row[0]}")
+                    except Exception:
+                        pass
+            except Exception:
+                pass
 
             # Configuration summary
             await user.send(f":{self.servername} NOTICE {user.nickname} :--- Configuration ---")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Server: {CONFIG.get('server', 'name')}")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Network: {CONFIG.get('server', 'network')}")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Version: {__version__} ({__version_label__})")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :DNSBL: {'enabled' if CONFIG.get('security', 'dnsbl', 'enabled', default=False) else 'disabled'}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Server: {CONFIG.get('server', 'name')}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Network: {CONFIG.get('server', 'network')}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Version: {__version__} ({__version_label__})")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  DNSBL: {'enabled' if CONFIG.get('security', 'dnsbl', 'enabled', default=False) else 'disabled'}")
 
             # SSL/TLS status
             if SSL_MANAGER:
@@ -4834,14 +5060,30 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :Invisible users: {count}")
 
         elif flag == 'k':
+            # Ban statistics - ACCESS DENY + server bans
+            await user.send(f":{self.servername} NOTICE {user.nickname} :--- Ban Statistics ---")
+
             # ACCESS DENY list
-            await user.send(f":{self.servername} NOTICE {user.nickname} :--- ACCESS DENY ---")
-            if not self.access_list['DENY']:
-                await user.send(f":{self.servername} NOTICE {user.nickname} :(empty)")
-            else:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :ACCESS DENY entries: {len(self.access_list['DENY'])}")
+            if self.access_list['DENY']:
                 for pattern, set_by, set_at, reason in self.access_list['DENY']:
                     reason_str = f" :{reason}" if reason else ""
-                    await user.send(f":{self.servername} NOTICE {user.nickname} :{pattern} (by {set_by}){reason_str}")
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :  {pattern} (by {set_by}){reason_str}")
+
+            # Server bans
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Server bans: {len(self.server_bans)}")
+            if self.server_bans:
+                for ip, (expires_at, reason, set_by) in list(self.server_bans.items()):
+                    if expires_at == 0:
+                        duration = "permanent"
+                    else:
+                        remaining = expires_at - int(time.time())
+                        if remaining > 0:
+                            duration = f"{remaining}s remaining"
+                        else:
+                            duration = "expired"
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :  {ip} ({duration}) by {set_by}")
+
             await user.send(f":{self.servername} NOTICE {user.nickname} :--- End ---")
 
         elif flag == 's':
@@ -4873,23 +5115,63 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :--- End ---")
 
         elif flag == 'd':
-            # Database info
-            await user.send(f":{self.servername} NOTICE {user.nickname} :--- Database ---")
+            # Database statistics
+            await user.send(f":{self.servername} NOTICE {user.nickname} :--- Database Statistics ---")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Path: {CONFIG.get('database', 'path')}")
             try:
                 import os
+                import aiosqlite
                 db_path = CONFIG.get('database', 'path')
                 if os.path.exists(db_path):
                     size = os.path.getsize(db_path)
-                    await user.send(f":{self.servername} NOTICE {user.nickname} :Size: {size} bytes")
-            except Exception:
-                pass
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :Size: {size:,} bytes ({size / 1024:.1f} KB)")
+
+                    # Query database for counts
+                    try:
+                        async with aiosqlite.connect(db_path) as db:
+                            # Registered nicknames
+                            async with db.execute("SELECT COUNT(*) FROM nicknames") as cursor:
+                                row = await cursor.fetchone()
+                                await user.send(f":{self.servername} NOTICE {user.nickname} :Registered nicks: {row[0]}")
+
+                            # Registered channels
+                            async with db.execute("SELECT COUNT(*) FROM channels") as cursor:
+                                row = await cursor.fetchone()
+                                await user.send(f":{self.servername} NOTICE {user.nickname} :Registered channels: {row[0]}")
+
+                            # Offline messages
+                            async with db.execute("SELECT COUNT(*) FROM messages") as cursor:
+                                row = await cursor.fetchone()
+                                await user.send(f":{self.servername} NOTICE {user.nickname} :Offline messages: {row[0]}")
+
+                            # News items
+                            async with db.execute("SELECT COUNT(*) FROM newsflash WHERE active = 1") as cursor:
+                                row = await cursor.fetchone()
+                                await user.send(f":{self.servername} NOTICE {user.nickname} :Active news: {row[0]}")
+                    except Exception as e:
+                        await user.send(f":{self.servername} NOTICE {user.nickname} :Database query error: {str(e)}")
+                else:
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :Database file not found")
+            except Exception as e:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Error: {str(e)}")
             await user.send(f":{self.servername} NOTICE {user.nickname} :--- End ---")
 
         elif flag == 'l':
-            # Links (placeholder)
-            await user.send(f":{self.servername} NOTICE {user.nickname} :--- Server Links ---")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :(No links configured)")
+            # Server linking statistics
+            await user.send(f":{self.servername} NOTICE {user.nickname} :--- Server Linking ---")
+            linking_enabled = CONFIG.get('linking', 'enabled', default=False)
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Linking: {'enabled' if linking_enabled else 'disabled'}")
+            if linking_enabled:
+                bind_host = CONFIG.get('linking', 'bind_host', default='0.0.0.0')
+                bind_port = CONFIG.get('linking', 'bind_port', default=7001)
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Bind: {bind_host}:{bind_port}")
+                links = CONFIG.get('linking', 'links', default=[])
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Configured links: {len(links)}")
+                if links:
+                    for link in links:
+                        await user.send(f":{self.servername} NOTICE {user.nickname} :  {link.get('name', 'unknown')}")
+                else:
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :(No links configured)")
             await user.send(f":{self.servername} NOTICE {user.nickname} :--- End ---")
 
         elif flag == 'y':
@@ -4941,6 +5223,121 @@ class pyIRCXServer:
             else:
                 await user.send(f":{self.servername} NOTICE {user.nickname} :SSL: not initialized")
             await user.send(f":{self.servername} NOTICE {user.nickname} :--- End ---")
+
+        elif flag == 'p':
+            # Peak usage statistics
+            await user.send(f":{self.servername} NOTICE {user.nickname} :--- Peak Usage ---")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Peak users: {self.stats['peak_users']}")
+            if self.stats['peak_time']:
+                import datetime
+                peak_dt = datetime.datetime.fromtimestamp(self.stats['peak_time'])
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Peak time: {peak_dt.strftime('%Y-%m-%d %H:%M:%S')}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Current users: {len([u for u in self.users.values() if not u.is_virtual])}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Max users (all time): {self.max_users_seen}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :--- End ---")
+
+        elif flag == 'f':
+            # Flood protection statistics
+            await user.send(f":{self.servername} NOTICE {user.nickname} :--- Flood Protection ---")
+            flood_enabled = CONFIG.get('security', 'enable_flood_protection', default=True)
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Enabled: {flood_enabled}")
+            if flood_enabled:
+                flood_msgs = CONFIG.get('security', 'flood_messages', default=5)
+                flood_window = CONFIG.get('security', 'flood_window', default=2.0)
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Threshold: {flood_msgs} messages per {flood_window}s")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Total flood events: {self.stats['flood_events']}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :--- End ---")
+
+        elif flag == 'm':
+            # Message statistics
+            await user.send(f":{self.servername} NOTICE {user.nickname} :--- Message Statistics ---")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Total messages: {self.stats['messages_sent']}")
+
+            # Most active channels (all)
+            if self.stats['messages_by_channel']:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Most active channels:")
+                sorted_channels = sorted(self.stats['messages_by_channel'].items(), key=lambda x: x[1], reverse=True)
+                for channel, count in sorted_channels:
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :  {channel}: {count}")
+            else:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :No message data available")
+
+            # Current channels
+            total_channels = len([c for c in self.channels.values() if not c.name.startswith('&')])
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Active channels: {total_channels}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :--- End ---")
+
+        elif flag == 'b':
+            # ServiceBot statistics
+            await user.send(f":{self.servername} NOTICE {user.nickname} :--- ServiceBot Statistics ---")
+            servicebot_enabled = CONFIG.get('servicebot', 'enabled', default=True)
+            await user.send(f":{self.servername} NOTICE {user.nickname} :ServiceBots enabled: {servicebot_enabled}")
+
+            if servicebot_enabled:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Active bots: {len(self.servicebots)}")
+
+                # Violations
+                if self.stats['servicebot_violations']:
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :Violations detected:")
+                    for violation_type, count in sorted(self.stats['servicebot_violations'].items(), key=lambda x: x[1], reverse=True):
+                        await user.send(f":{self.servername} NOTICE {user.nickname} :  {violation_type}: {count}")
+                else:
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :No violations detected")
+
+                # Actions taken
+                if self.stats['servicebot_actions']:
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :Actions taken:")
+                    for action, count in sorted(self.stats['servicebot_actions'].items(), key=lambda x: x[1], reverse=True):
+                        await user.send(f":{self.servername} NOTICE {user.nickname} :  {action}: {count}")
+
+                # Configuration
+                profanity_enabled = CONFIG.get('servicebot', 'profanity_filter', 'enabled', default=False)
+                malicious_enabled = CONFIG.get('servicebot', 'malicious_detection', 'enabled', default=False)
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Profanity filter: {'enabled' if profanity_enabled else 'disabled'}")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Malicious detection: {'enabled' if malicious_enabled else 'disabled'}")
+
+            await user.send(f":{self.servername} NOTICE {user.nickname} :--- End ---")
+
+        elif flag == 'n':
+            # Network statistics
+            await user.send(f":{self.servername} NOTICE {user.nickname} :--- Network Statistics ---")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Server: {CONFIG.get('server', 'name')}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Network: {CONFIG.get('server', 'network')}")
+
+            # Totals
+            total_users = len([u for u in self.users.values() if not u.is_virtual])
+            total_channels = len(self.channels)
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Users: {total_users}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Channels: {total_channels}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Services: {len([u for u in self.users.values() if u.is_virtual])}")
+
+            # Server version
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Version: {__version__}")
+
+            # Uptime
+            uptime_secs = int(time.time() - self.boot_time)
+            days = uptime_secs // 86400
+            hours = (uptime_secs % 86400) // 3600
+            mins = (uptime_secs % 3600) // 60
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Uptime: {days}d {hours}:{mins:02d}")
+
+            await user.send(f":{self.servername} NOTICE {user.nickname} :--- End ---")
+
+        elif flag == 'v':
+            # Command usage statistics (GUIDE+)
+            if not is_staff:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :STATS v requires staff privileges")
+            else:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :--- Command Usage Statistics ---")
+                if self.stats['command_usage']:
+                    # Sort by usage count (descending)
+                    sorted_cmds = sorted(self.stats['command_usage'].items(), key=lambda x: x[1], reverse=True)
+                    for cmd, count in sorted_cmds:
+                        await user.send(f":{self.servername} NOTICE {user.nickname} :{cmd}: {count}")
+                else:
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :No command usage data available")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Total commands: {self.stats['commands_processed']}")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :--- End ---")
 
         else:
             await user.send(f":{self.servername} NOTICE {user.nickname} :Unknown STATS flag: {flag}")
@@ -5407,6 +5804,159 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :Unknown subcommand: {subcmd}")
             await user.send(f":{self.servername} NOTICE {user.nickname} :STAFF subcommands: LIST, ADD, DEL, SET, PASS")
 
+    async def handle_help(self, user, params):
+        """Handle HELP command - show command help"""
+        topic = params[0].upper() if params else None
+        is_staff = user.is_staff()
+
+        if not topic:
+            # Help topics index
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== pyIRCX Help Topics ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Use /HELP <topic> for detailed information:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  COMMANDS - All available commands")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  CHANNEL - Channel management commands")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  REGISTER - Nickname and channel registration")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  IRCX - IRCX-specific commands")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  USERMODES - User mode flags")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  CHANMODES - Channel mode flags")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  SERVICES - Available services")
+            if is_staff:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  STAFF - Staff commands")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Example: /HELP COMMANDS")
+
+        elif topic == "COMMANDS":
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== All Commands ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Basic: NICK USER PASS QUIT PING PONG")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Messages: PRIVMSG NOTICE")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Channels: JOIN PART KICK INVITE TOPIC NAMES LIST")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Registration: REGISTER IDENTIFY UNREGISTER MFA (see /HELP REGISTER)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Info: WHO WHOIS WHOWAS ISON USERHOST LUSERS MOTD INFO TIME STATS LINKS")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Modes: MODE (see /HELP USERMODES and /HELP CHANMODES)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :IRCX: IRCX ACCESS PROP EVENT WHISPER DATA BROADCAST")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Utility: AWAY SILENCE HELP")
+            if is_staff:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Staff: KILL STAFF CONFIG (see /HELP STAFF)")
+
+        elif topic == "CHANNEL":
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== Channel Commands ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :JOIN #channel [key] - Join a channel")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :PART #channel [reason] - Leave a channel")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :TOPIC #channel [text] - View/set channel topic")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :NAMES #channel - List users in channel")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :LIST [pattern] - List all channels")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :INVITE nick #channel - Invite user to channel")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :KICK #channel nick [reason] - Remove user from channel")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :MODE #channel [modes] - View/change channel modes")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Channel ranks: . (owner), @ (host), + (voice)")
+
+        elif topic == "REGISTER":
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== Registration Commands ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Nickname Registration:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  REGISTER <account> <email|*> <password> - Register your nickname")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  IDENTIFY <account> <password> - Log into registered nickname")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  UNREGISTER <account> - Delete your registration")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  MFA ENABLE - Enable two-factor authentication")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  MFA DISABLE <code> - Disable two-factor authentication")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  MFA VERIFY <code> - Complete MFA login")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Channel Registration:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  REGISTER <#channel> [password] - Register a channel (owner only)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  UNREGISTER <#channel> - Unregister a channel (owner only)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Alternative: Use /MSG Registrar for NickServ-style interface")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Registered users get +r mode and can use locked channels")
+
+        elif topic == "IRCX":
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== IRCX Commands ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :IRCX - Enable IRCX mode")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :ACCESS #chan LIST [level] - List access entries")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :ACCESS #chan ADD level mask [reason] - Add access entry")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :ACCESS #chan DEL level mask - Remove access entry")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :ACCESS #chan CLEAR level - Clear access list")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :PROP #chan [prop [value]] - View/set channel properties")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :EVENT #chan message - Send event message to channel")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :WHISPER #chan nick :message - Private message in channel")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :DATA #chan id :data - Send structured data to channel")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Access levels: OWNER, HOST, VOICE, GRANT, DENY")
+
+        elif topic == "USERMODES":
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== User Modes ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :+i - Invisible (hidden from WHO *)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :+x - IRCX mode enabled")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :+r - Registered nickname (auto-set)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Staff modes (auto-set):")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :+a - Admin (highest privileges)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :+o - Sysop (operator)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :+g - Guide (helper)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :+s - Service (bots)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :+z - Gagged (cannot send messages)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Use: /MODE yournick +i (to set invisible)")
+
+        elif topic == "CHANMODES":
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== Channel Modes ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Standard modes:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :+i - Invite only (must be invited)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :+m - Moderated (only voiced+ can speak)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :+n - No external messages")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :+p - Private (hidden from WHOIS)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :+s - Secret (hidden from LIST)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :+t - Topic restricted (only hosts can change)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :+k <key> - Channel password required")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :+l <limit> - User limit")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :IRCX modes:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :+a - Auth-only (registered users only)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :+d - Clone-enabled (allows cloning)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :+e - Is-clone (this is a clone)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :+f - Strip formatting codes")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :+g - Guide-op (Guides get host)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :+h - Hidden (no JOIN/PART shown)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :+j - No invitations allowed")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :+r - Registered channel")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :+u - Auditorium (only hosts see users)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :+v - No avatar/profile data")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :+w - No whispers allowed")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :+y - Transcript logging enabled")
+
+        elif topic == "SERVICES":
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== Services ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :System - Service directory")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /MSG System")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Registrar - Nickname registration")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Commands: REGISTER IDENTIFY DROP INFO CHANNEL SET MFA")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /MSG Registrar HELP")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Messenger - Offline messages")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Commands: SEND READ DELETE COUNT")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /MSG Messenger HELP")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :NewsFlash - Network news")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Commands: LIST ADD DEL PUSH")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /MSG NewsFlash HELP")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :ServiceBot - Channel monitoring")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Commands: HELP STATUS")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /MSG ServiceBot01 HELP")
+
+        elif topic == "STAFF" and is_staff:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== Staff Commands ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :KILL Commands:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  KILL nick [reason] - Disconnect a user")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  KILL #channel [reason] - Destroy channel and kick all users")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  KILL pattern [reason] - Kill users by IP/hostmask (e.g., 192.168.1.*)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :STAFF Commands:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  STAFF LIST - List all staff accounts")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  STAFF ADD user level - Add staff account")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  STAFF DEL user - Remove staff account")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  STAFF SET user level - Change staff level")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  STAFF PASS user password - Change staff password")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Staff levels: ADMIN, SYSOP, GUIDE")
+            if user.is_admin():
+                await user.send(f":{self.servername} NOTICE {user.nickname} :ADMIN Commands:")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  CONFIG GET key - View config value")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  CONFIG SET key value - Update config")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  BROADCAST message - Send to all users")
+
+        else:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :No help available for: {topic}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Available topics: COMMANDS CHANNEL REGISTER IRCX USERMODES CHANMODES SERVICES")
+            if is_staff:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Staff topic: STAFF")
+
     async def handle_info(self, user):
         """Handle INFO command - return server information (RFC 2812)"""
         info_lines = [
@@ -5690,21 +6240,22 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :You must identify to a registered nickname first")
             return
 
-        if channel_name not in self.channels:
+        # Case-insensitive channel lookup
+        channel, chan_name = self.get_channel(channel_name)
+        if not channel:
             await user.send(f":{self.servername} NOTICE {user.nickname} :Channel {channel_name} does not exist")
             return
 
-        channel = self.channels[channel_name]
         if user.nickname not in channel.owners:
-            await user.send(f":{self.servername} NOTICE {user.nickname} :You must be a channel owner to register {channel_name}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :You must be a channel owner to register {chan_name}")
             return
 
         try:
             async with aiosqlite.connect(CONFIG.get('database', 'path')) as db:
                 async with db.execute("SELECT uuid FROM registered_channels WHERE channel_name = ?",
-                                     (channel_name,)) as cursor:
+                                     (chan_name,)) as cursor:
                     if await cursor.fetchone():
-                        await user.send(f":{self.servername} NOTICE {user.nickname} :Channel {channel_name} is already registered")
+                        await user.send(f":{self.servername} NOTICE {user.nickname} :Channel {chan_name} is already registered")
                         return
 
                 # For staff users, use their username; for regular users, use their nickname
@@ -5745,19 +6296,19 @@ class pyIRCXServer:
                 await db.execute("""INSERT INTO registered_channels
                     (uuid, channel_name, owner_uuid, registered_at, properties)
                     VALUES (?, ?, ?, ?, ?)""",
-                    (chan_uuid, channel_name, owner_uuid, now, properties_json))
+                    (chan_uuid, chan_name, owner_uuid, now, properties_json))
                 await db.commit()
 
                 channel.registered = True
                 channel.account_uuid = chan_uuid
                 channel.modes['r'] = True  # Set +r mode for registered channel
                 # Broadcast mode change to channel
-                await channel.broadcast(f":{user.prefix()} MODE {channel_name} +r")
+                await channel.broadcast(f":{user.prefix()} MODE {chan_name} +r")
                 if password:
                     channel.owner_key = password
 
-                await user.send(f":{self.servername} NOTICE {user.nickname} :Channel {channel_name} has been registered")
-                logger.info(f"REGISTER: {channel_name} registered by {user.nickname}")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Channel {chan_name} has been registered")
+                logger.info(f"REGISTER: {chan_name} registered by {user.nickname}")
 
         except Exception as e:
             logger.error(f"REGISTER channel error: {e}")
@@ -5793,20 +6344,20 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :You must identify first")
             return
 
-        if channel_name not in self.channels:
+        # Case-insensitive channel lookup
+        channel, chan_name = self.get_channel(channel_name)
+        if not channel:
             await user.send(f":{self.servername} NOTICE {user.nickname} :Channel {channel_name} does not exist")
             return
-
-        channel = self.channels[channel_name]
 
         try:
             async with aiosqlite.connect(CONFIG.get('database', 'path')) as db:
                 # Check if channel is registered
                 async with db.execute("SELECT owner_uuid FROM registered_channels WHERE channel_name = ?",
-                                     (channel_name,)) as cursor:
+                                     (chan_name,)) as cursor:
                     chan_row = await cursor.fetchone()
                     if not chan_row:
-                        await user.send(f":{self.servername} NOTICE {user.nickname} :Channel {channel_name} is not registered")
+                        await user.send(f":{self.servername} NOTICE {user.nickname} :Channel {chan_name} is not registered")
                         return
 
                 # ADMINs can unregister any channel without needing a registered_nicks entry
@@ -5832,19 +6383,19 @@ class pyIRCXServer:
 
                     # Verify ownership
                     if chan_row[0] != nick_row[0]:
-                        await user.send(f":{self.servername} NOTICE {user.nickname} :You are not the owner of {channel_name}")
+                        await user.send(f":{self.servername} NOTICE {user.nickname} :You are not the owner of {chan_name}")
                         return
 
-                await db.execute("DELETE FROM registered_channels WHERE channel_name = ?", (channel_name,))
+                await db.execute("DELETE FROM registered_channels WHERE channel_name = ?", (chan_name,))
                 await db.commit()
 
                 channel.registered = False
                 channel.account_uuid = None
                 channel.modes['r'] = False  # Remove +r mode
                 # Broadcast mode change to channel
-                await channel.broadcast(f":{user.prefix()} MODE {channel_name} -r")
-                await user.send(f":{self.servername} NOTICE {user.nickname} :Channel {channel_name} has been unregistered")
-                logger.info(f"UNREGISTER: {channel_name} unregistered by {user.nickname}")
+                await channel.broadcast(f":{user.prefix()} MODE {chan_name} -r")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Channel {chan_name} has been unregistered")
+                logger.info(f"UNREGISTER: {chan_name} unregistered by {user.nickname}")
 
         except Exception as e:
             logger.error(f"UNREGISTER channel error: {e}")
@@ -6759,7 +7310,27 @@ class pyIRCXServer:
 
         cmd = parts[0].upper()
 
-        if cmd == "REGISTER":
+        if cmd == "HELP":
+            await self._service_reply("Registrar", user, "=== Registrar Service Help ===")
+            await self._service_reply("Registrar", user, "Nickname Registration:")
+            await self._service_reply("Registrar", user, "  REGISTER <password> [email] - Register your current nickname")
+            await self._service_reply("Registrar", user, "  IDENTIFY <password> - Log into your registered nickname")
+            await self._service_reply("Registrar", user, "  DROP - Delete your nickname registration")
+            await self._service_reply("Registrar", user, "  INFO [nickname] - View registration info")
+            await self._service_reply("Registrar", user, "Channel Registration:")
+            await self._service_reply("Registrar", user, "  CHANNEL REGISTER <#channel> - Register a channel")
+            await self._service_reply("Registrar", user, "  CHANNEL DROP <#channel> - Unregister a channel")
+            await self._service_reply("Registrar", user, "  CHANNEL INFO <#channel> - View channel info")
+            await self._service_reply("Registrar", user, "Account Settings:")
+            await self._service_reply("Registrar", user, "  SET PASSWORD <newpass> - Change your password")
+            await self._service_reply("Registrar", user, "  SET EMAIL <email> - Change your email")
+            await self._service_reply("Registrar", user, "Two-Factor Authentication:")
+            await self._service_reply("Registrar", user, "  MFA ENABLE - Enable two-factor authentication")
+            await self._service_reply("Registrar", user, "  MFA VERIFY <code> - Complete MFA login")
+            await self._service_reply("Registrar", user, "  MFA DISABLE <code> - Disable two-factor authentication")
+            await self._service_reply("Registrar", user, "Alternative: Use direct commands REGISTER, IDENTIFY, UNREGISTER, MFA")
+
+        elif cmd == "REGISTER":
             # REGISTER <password> [email] -> REGISTER <nick> {*|email} <password>
             if len(parts) < 2:
                 await self.send_notice(user, "860", usage="REGISTER <password> [email]")
@@ -6947,22 +7518,23 @@ class pyIRCXServer:
             await self._service_reply("Registrar", user, "You must identify to a registered nickname first")
             return
 
-        if channel_name not in self.channels:
+        # Case-insensitive channel lookup
+        channel, chan_name = self.get_channel(channel_name)
+        if not channel:
             await self._service_reply("Registrar", user, f"Channel {channel_name} does not exist")
             return
 
-        channel = self.channels[channel_name]
         if user.nickname not in channel.owners:
-            await self._service_reply("Registrar", user, f"You must be a channel owner to register {channel_name}")
+            await self._service_reply("Registrar", user, f"You must be a channel owner to register {chan_name}")
             return
 
         try:
             async with aiosqlite.connect(CONFIG.get('database', 'path')) as db:
                 # Check if already registered
                 async with db.execute("SELECT uuid FROM registered_channels WHERE channel_name = ?",
-                                     (channel_name,)) as cursor:
+                                     (chan_name,)) as cursor:
                     if await cursor.fetchone():
-                        await self._service_reply("Registrar", user, f"Channel {channel_name} is already registered")
+                        await self._service_reply("Registrar", user, f"Channel {chan_name} is already registered")
                         return
 
                 # Get owner's UUID - for staff, use username; for regular users, use nickname
@@ -7001,16 +7573,16 @@ class pyIRCXServer:
                 await db.execute("""INSERT INTO registered_channels
                     (uuid, channel_name, owner_uuid, registered_at, last_used, properties)
                     VALUES (?, ?, ?, ?, ?, ?)""",
-                    (chan_uuid, channel_name, owner_uuid, now, now, properties_json))
+                    (chan_uuid, chan_name, owner_uuid, now, now, properties_json))
                 await db.commit()
 
                 channel.registered = True
                 channel.account_uuid = chan_uuid
                 channel.modes['r'] = True  # Set +r mode for registered channel
                 # Broadcast mode change to channel
-                await channel.broadcast(f":Registrar!registrar@{self.servername} MODE {channel_name} +r")
-                await self._service_reply("Registrar", user, f"Channel {channel_name} has been registered (UUID: {chan_uuid})")
-                logger.info(f"Registrar: {channel_name} registered by {user.nickname}")
+                await channel.broadcast(f":Registrar!registrar@{self.servername} MODE {chan_name} +r")
+                await self._service_reply("Registrar", user, f"Channel {chan_name} has been registered (UUID: {chan_uuid})")
+                logger.info(f"Registrar: {chan_name} registered by {user.nickname}")
 
         except Exception as e:
             logger.error(f"Registrar channel register error: {e}")
@@ -7290,12 +7862,22 @@ class pyIRCXServer:
         """Handle messages to Messenger service"""
         parts = text.strip().split(None, 2)
         if not parts:
-            await self._service_reply("Messenger", user, "Commands: SEND <nick> <message>, READ, DELETE <id>, COUNT")
+            await self._service_reply("Messenger", user, "Commands: SEND <nick> <message>, READ, DELETE <id>, COUNT, HELP")
             return
 
         cmd = parts[0].upper()
 
-        if cmd == "SEND":
+        if cmd in ["HELP", "COMMANDS"]:
+            await self._service_reply("Messenger", user, "Messenger - Offline Message Service")
+            await self._service_reply("Messenger", user, "Commands:")
+            await self._service_reply("Messenger", user, "  SEND <nick> <message> - Send a message to an offline user")
+            await self._service_reply("Messenger", user, "  READ - Read your offline messages")
+            await self._service_reply("Messenger", user, "  DELETE <id> - Delete a specific message")
+            await self._service_reply("Messenger", user, "  COUNT - Show count of unread messages")
+            if user.is_admin():
+                await self._service_reply("Messenger", user, "  PUSH <message> - (ADMIN) Send message to all users")
+
+        elif cmd == "SEND":
             if len(parts) < 3:
                 await self._service_reply("Messenger", user, "Usage: SEND <nick> <message>")
                 return
@@ -7464,13 +8046,23 @@ class pyIRCXServer:
         """Handle messages to NewsFlash service"""
         parts = text.strip().split(None, 1)
         if not parts:
-            await self._service_reply("NewsFlash", user, "Commands: LIST, ADD <message> (staff), DEL <id> (staff), PUSH <message> (admin)")
+            await self._service_reply("NewsFlash", user, "Commands: LIST, ADD <message> (staff), DEL <id> (staff), PUSH <message> (admin), HELP")
             return
 
         cmd = parts[0].upper()
         is_staff = user.is_staff()
 
-        if cmd == "LIST":
+        if cmd in ["HELP", "COMMANDS"]:
+            await self._service_reply("NewsFlash", user, "NewsFlash - Network News Service")
+            await self._service_reply("NewsFlash", user, "Commands:")
+            await self._service_reply("NewsFlash", user, "  LIST - View all active news messages")
+            if is_staff:
+                await self._service_reply("NewsFlash", user, "  ADD <message> - (STAFF) Add a news message")
+                await self._service_reply("NewsFlash", user, "  DEL <id> - (STAFF) Delete a news message")
+            if user.is_admin():
+                await self._service_reply("NewsFlash", user, "  PUSH <message> - (ADMIN) Send immediate notice to all users")
+
+        elif cmd == "LIST":
             await self._newsflash_list(user)
 
         elif cmd == "ADD" and is_staff:
@@ -7558,6 +8150,68 @@ class pyIRCXServer:
                 count += 1
         await self._service_reply("NewsFlash", user, f"News pushed to {count} user(s)")
         logger.info(f"NewsFlash: Push by {user.nickname}: {message}")
+
+    async def _handle_servicebot_msg(self, user, text, botname):
+        """Handle messages to ServiceBot"""
+        cmd = text.strip().upper()
+
+        if cmd in ["HELP", "COMMANDS", ""]:
+            await self._service_reply(botname, user, "=== ServiceBot - Channel Monitoring Service ===")
+            await self._service_reply(botname, user, "I automatically monitor channels for problematic behavior and take action.")
+            await self._service_reply(botname, user, "")
+            await self._service_reply(botname, user, "Monitoring Features:")
+            if CONFIG.get('servicebot', 'profanity_filter', 'enabled', default=False):
+                action = CONFIG.get('servicebot', 'profanity_filter', 'action', default='warn')
+                await self._service_reply(botname, user, f"  Profanity Filter: Enabled (Action: {action})")
+            else:
+                await self._service_reply(botname, user, "  Profanity Filter: Disabled")
+            if CONFIG.get('servicebot', 'malicious_detection', 'enabled', default=False):
+                flood_action = CONFIG.get('servicebot', 'malicious_detection', 'flood_action', default='gag')
+                caps_action = CONFIG.get('servicebot', 'malicious_detection', 'caps_action', default='warn')
+                url_action = CONFIG.get('servicebot', 'malicious_detection', 'url_spam_action', default='warn')
+                repeat_action = CONFIG.get('servicebot', 'malicious_detection', 'repeat_action', default='warn')
+                await self._service_reply(botname, user, f"  Flood Protection: Enabled (Action: {flood_action})")
+                await self._service_reply(botname, user, f"  CAPS Detection: Enabled (Action: {caps_action})")
+                await self._service_reply(botname, user, f"  URL Spam Detection: Enabled (Action: {url_action})")
+                await self._service_reply(botname, user, f"  Repeat Message Detection: Enabled (Action: {repeat_action})")
+            else:
+                await self._service_reply(botname, user, "  Malicious Detection: Disabled")
+            await self._service_reply(botname, user, "")
+            await self._service_reply(botname, user, "Actions: warn (warning), gag (mute user), kick (remove from channel)")
+            await self._service_reply(botname, user, "")
+            await self._service_reply(botname, user, "Commands:")
+            await self._service_reply(botname, user, "  HELP - Show this help message")
+            await self._service_reply(botname, user, "  STATUS - View this bot's status and channels")
+            await self._service_reply(botname, user, "")
+            await self._service_reply(botname, user, "To invite me to a channel: /INVITE " + botname + " #channel (SYSOP+ only)")
+            await self._service_reply(botname, user, "ServiceBots can monitor up to 10 channels simultaneously.")
+
+        elif cmd == "STATUS":
+            await self._service_reply(botname, user, f"=== {botname} Status ===")
+            bot = self.servicebots.get(botname)
+            if bot:
+                channels = list(bot.channels)
+                max_channels = getattr(bot, 'max_channels', 10)
+                await self._service_reply(botname, user, f"Active in {len(channels)}/{max_channels} channels")
+                if channels:
+                    await self._service_reply(botname, user, "Monitoring: " + ", ".join(channels))
+                else:
+                    await self._service_reply(botname, user, "Not currently monitoring any channels")
+            if CONFIG.get('servicebot', 'enabled', default=False):
+                await self._service_reply(botname, user, "")
+                await self._service_reply(botname, user, "Detection Status:")
+                if CONFIG.get('servicebot', 'profanity_filter', 'enabled', default=False):
+                    action = CONFIG.get('servicebot', 'profanity_filter', 'action', default='warn')
+                    await self._service_reply(botname, user, f"  Profanity filter: Enabled ({action})")
+                if CONFIG.get('servicebot', 'malicious_detection', 'enabled', default=False):
+                    flood_action = CONFIG.get('servicebot', 'malicious_detection', 'flood_action', default='gag')
+                    await self._service_reply(botname, user, f"  Flood protection: Enabled ({flood_action})")
+            else:
+                await self._service_reply(botname, user, "")
+                await self._service_reply(botname, user, "Monitoring: Globally Disabled")
+
+        else:
+            await self._service_reply(botname, user, f"Unknown command: {cmd}. Try HELP for available commands.")
 
     async def send_newsflash_on_connect(self, user):
         """Send a random newsflash message to a user on connect"""
@@ -7708,8 +8362,8 @@ class pyIRCXServer:
             await user.send(self.get_reply("441", user, target=target_nick, channel=chan_name))
             return
         target = channel.members[target_nick]
-        # Cannot kick services
-        if target.is_service():
+        # Cannot kick services unless you're admin/sysop
+        if target.is_service() and not user.is_high_staff():
             await user.send(self.get_reply("821", user, target=target_nick))
             return
         msg = f":{user.prefix()} KICK {chan_name} {target_nick} :{reason}"
@@ -7797,12 +8451,19 @@ class pyIRCXServer:
                     await user.send(f":{self.servername} 368 {user.nickname} {chan_name} :End of channel ban list")
                     return
 
-                if not (user.nickname in channel.owners or user.nickname in channel.hosts or user.has_mode('a')):
+                if not (user.nickname in channel.owners or user.nickname in channel.hosts or user.is_high_staff() or user.has_mode('s')):
                     await user.send(self.get_reply("482", user, target=chan_name))
                     return
                 await self.apply_channel_modes(user, channel, mode_str, mode_params)
 
     async def apply_channel_modes(self, user, channel, mode_str, mode_params):
+        # Enforce MODES limit (max mode changes per command)
+        max_modes = CONFIG.get('limits', 'max_modes_per_command', default=6)
+        mode_count = sum(1 for c in mode_str if c not in '+-')
+        if mode_count > max_modes:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Too many mode changes (max {max_modes} per command)")
+            return
+
         adding, param_idx = True, 0
         for char in mode_str:
             if char == '+':
@@ -8298,13 +8959,19 @@ class ServerManager:
                 return_when=asyncio.FIRST_COMPLETED
             )
 
-            # Cancel pending tasks
+            # Cancel pending tasks with timeout
             for task in pending:
                 task.cancel()
+
+            # Wait for all tasks to cancel with timeout
+            if pending:
                 try:
-                    await task
-                except asyncio.CancelledError:
-                    pass
+                    await asyncio.wait_for(
+                        asyncio.gather(*pending, return_exceptions=True),
+                        timeout=2.0
+                    )
+                except asyncio.TimeoutError:
+                    logger.warning("Timeout cancelling background tasks, forcing")
 
         except asyncio.CancelledError:
             pass
@@ -8419,43 +9086,77 @@ class ServerManager:
                 logger.error(f"Status dump error: {e}")
 
     async def shutdown(self):
-        """Graceful shutdown."""
+        """Graceful shutdown with timeout."""
         logger.info("Initiating graceful shutdown...")
 
-        # Shutdown link manager if active
-        if self.link_manager:
-            try:
-                await self.link_manager.shutdown()
-                logger.info("Link manager shutdown complete")
-            except Exception as e:
-                logger.error(f"Error shutting down link manager: {e}")
-
-        # Removed: save_channels - channel state persists on registration changes, not on shutdown
-
-        # Close all TCP servers (plain + SSL)
-        all_servers = self.tcp_servers + self.ssl_servers
-        for srv in all_servers:
-            srv.close()
-
-        # Wait for servers to close
-        for srv in all_servers:
-            try:
-                await asyncio.wait_for(srv.wait_closed(), timeout=5.0)
-            except asyncio.TimeoutError:
-                logger.warning("Timeout waiting for server to close")
-
-        # Disconnect all clients gracefully
-        if self.server:
-            for user in list(self.server.users.values()):
-                if not user.is_virtual:
+        try:
+            # Overall shutdown timeout of 10 seconds
+            async with asyncio.timeout(10):
+                # Shutdown link manager if active
+                if self.link_manager:
                     try:
-                        await user.send(f":{self.server.servername} NOTICE * :Server shutting down")
-                        if user.writer:
-                            user.writer.close()
-                    except Exception:
-                        pass
+                        await asyncio.wait_for(self.link_manager.shutdown(), timeout=2.0)
+                        logger.info("Link manager shutdown complete")
+                    except (Exception, asyncio.TimeoutError) as e:
+                        logger.warning(f"Link manager shutdown: {e}")
+
+                # Close all TCP servers (plain + SSL) immediately
+                all_servers = self.tcp_servers + self.ssl_servers
+                for srv in all_servers:
+                    srv.close()
+
+                # Wait for servers to close with shorter timeout
+                for srv in all_servers:
+                    try:
+                        await asyncio.wait_for(srv.wait_closed(), timeout=2.0)
+                    except asyncio.TimeoutError:
+                        logger.warning("Timeout waiting for server to close, forcing")
+
+                # Disconnect all clients concurrently with timeout
+                if self.server:
+                    disconnect_tasks = []
+                    for user in list(self.server.users.values()):
+                        if not user.is_virtual and user.writer:
+                            disconnect_tasks.append(self._disconnect_user(user))
+
+                    if disconnect_tasks:
+                        try:
+                            await asyncio.wait_for(
+                                asyncio.gather(*disconnect_tasks, return_exceptions=True),
+                                timeout=3.0
+                            )
+                        except asyncio.TimeoutError:
+                            logger.warning("Timeout disconnecting clients, forcing")
+
+                # Close database pool
+                if self.server and hasattr(self.server, 'db_pool'):
+                    try:
+                        await asyncio.wait_for(self.server.db_pool.close(), timeout=2.0)
+                        logger.info("Database pool closed")
+                    except (Exception, asyncio.TimeoutError) as e:
+                        logger.warning(f"Database pool close: {e}")
+
+        except asyncio.TimeoutError:
+            logger.warning("Shutdown timeout exceeded, forcing exit")
+        except Exception as e:
+            logger.error(f"Shutdown error: {e}")
 
         logger.info("Shutdown complete")
+
+    async def _disconnect_user(self, user):
+        """Disconnect a single user with timeout."""
+        try:
+            await asyncio.wait_for(
+                user.send(f":{self.server.servername} NOTICE * :Server shutting down"),
+                timeout=0.5
+            )
+        except:
+            pass
+        try:
+            user.writer.close()
+            await asyncio.wait_for(user.writer.wait_closed(), timeout=0.5)
+        except:
+            pass
 
     def handle_signal(self, sig):
         """Handle Unix signals."""

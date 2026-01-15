@@ -4,7 +4,7 @@
 
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.1.2-brightgreen.svg)](#)
+[![Version](https://img.shields.io/badge/version-1.1.5-brightgreen.svg)](#)
 [![Tests](https://img.shields.io/badge/tests-54%20passing-brightgreen.svg)](#testing)
 
 ---
@@ -24,6 +24,25 @@ If you remember the days of **Microsoft Comic Chat**, chat rooms with real nicks
 ---
 
 ## Recent Updates
+
+### Version 1.1.5 (January 2026)
+**VOICEKEY Feature & IRC Protocol Compliance**
+
+- **Channel Mode +g (guide-op)** — Auto-grant owner (+q) to guides when they join
+  - Settable by channel owners, hosts, services, admins, or sysops
+  - Works on registered and dynamic channels
+- **VOICEKEY Property** — Auto-grant voice (+v) on join with password
+  - Similar to OWNERKEY/HOSTKEY, completes the privilege key trio
+  - Integrated into web admin channel edit modal
+  - Case-insensitive key matching for all channel keys
+- **Case-Sensitivity Fixes** — Fixed 7 critical handlers (PROP, TRANSCRIPT, KNOCK, INVITE, REGISTER, DROP, Registrar)
+- **ACCESS GRANT Bypasses** — Users with ACCESS GRANT can now bypass mode +j (no-invitations) and +u (knock-mode)
+- **IRC Protocol Compliance** — Numerics 004/005 now IRCv3-compliant
+  - CHANMODES formatted as A,B,C,D: `,k,l,adefghijmnprstuwxyz`
+  - Added TOPICLEN parameter (390 chars), enforced in TOPIC and PROP commands
+  - Added missing mode +l (limit) to channel modes
+- **WebChat Improvements** — Service bot detection (🤖), button icons, connection info display, key prompting on join
+- **MODE Permissions** — Services can now set channel modes
 
 ### Version 1.1.2 (January 2026)
 **Channel Operations & Database Architecture Improvements**

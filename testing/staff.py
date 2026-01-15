@@ -34,19 +34,19 @@ from typing import List
 # ==============================================================================
 ADMIN_CONFIG = {
     "username": "admin",
-    "password": "password",
+    "password": "testpass",
     "level": "ADMIN"
 }
 
 SYSOP_CONFIG = {
     "username": "sysop",
-    "password": "password",
+    "password": "testpass",
     "level": "SYSOP"
 }
 
 GUIDE_CONFIG = {
     "username": "guide",
-    "password": "password",
+    "password": "testpass",
     "level": "GUIDE"
 }
 

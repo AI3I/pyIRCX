@@ -5,6 +5,82 @@ All notable changes to pyIRCX will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.5] - 2026-01-14
+
+### Added
+- **Channel Mode +g (guide-op)**: New channel mode to auto-grant owner to guides
+  - When channel has mode +g, any user with guide mode (+g usermode) automatically receives owner (+q) on join
+  - Can be set on registered or dynamic channels
+  - Settable by: channel owners, hosts, services, admins, or sysops
+  - Usage: `MODE #channel +g` to enable, `MODE #channel -g` to disable
+- **VOICEKEY Property**: New channel property for granting voice (+v) on join
+  - Similar to OWNERKEY and HOSTKEY, but grants +v instead of +q/+o
+  - Works with registered and dynamic channels
+  - Set via: `PROP #channel VOICEKEY password`
+  - Join with: `JOIN #channel password` to automatically receive +v
+  - Case-insensitive key matching
+  - Integrated into web admin channel edit modal
+  - API support: `edit-channel` command now accepts voicekey parameter
+- **WebChat Service Detection**: Robot emoji (🤖) for service bots (+s mode)
+  - Services sorted first in user list (before ADMIN)
+  - Detects 's' flag in WHO replies (352 numeric)
+- **WebChat Button Icons**: Added emoji icons to all buttons
+  - ➕ Join, ➖ Leave, 👥 Users, ⚙️ Properties, 📤 Send, 🔌 Connect
+- **WebChat Join with Key**: Join button now prompts for optional channel key
+  - First prompt: channel name
+  - Second prompt: channel key (leave empty if none)
+- **WebChat Connection Info**: Now shows server information during connection
+  - Displays 004 numeric (server version, user modes, channel modes)
+  - Displays 005 numeric (ISUPPORT features)
+  - Shows all unhandled numerics in status window with [NNN] prefix
+
+### Fixed
+- **Case-Sensitive Channel Lookups**: Fixed 7 critical handlers that failed when channel names used different case
+  - PROP: Query/set properties now works regardless of #Lobby vs #lobby
+  - TRANSCRIPT: Transcript operations now case-insensitive
+  - KNOCK: Knocking on channels now case-insensitive
+  - INVITE: Inviting users now case-insensitive
+  - REGISTER: Channel registration now case-insensitive
+  - DROP (UNREGISTER): Channel unregistration now case-insensitive
+  - Registrar service: Automatic registration now case-insensitive
+- **Case-Sensitive Key Matching**: All channel keys now case-insensitive
+  - MEMBERKEY: `/JOIN #channel MyPassword` matches "mypassword"
+  - OWNERKEY: Case-insensitive matching for +q grant
+  - HOSTKEY: Case-insensitive matching for +o grant
+  - VOICEKEY: Case-insensitive matching for +v grant
+- **ACCESS GRANT Mode Bypasses**: Users with ACCESS GRANT can now bypass restricted modes
+  - Mode +j (no-invitations): ACCESS GRANT users can send INVITE despite +j
+  - Mode +u (knock-mode): ACCESS GRANT users can KNOCK despite +u restrictions
+  - Previously only staff and services could bypass these modes
+
+### Changed
+- **Property Names**: Already case-insensitive (VOICEKEY = voicekey = VoiceKey)
+- **Web Admin API**: Updated edit-channel to accept 11 parameters (added voicekey)
+- **Web Admin Key Order**: Reordered channel key fields for logical privilege hierarchy
+  - New order: Member Key → Voice Key → Host Key → Owner Key
+- **IRC Numerics (004/005)**: Fixed channel modes to IRCv3 standard format
+  - Added missing 'l' (limit) mode to channel mode list
+  - Added new 'g' (guide-op) mode to channel mode list
+  - CHANMODES now properly formatted as A,B,C,D: `,k,l,adefghijmnprstuwxyz`
+    - A = list modes (empty - we use ACCESS for bans)
+    - B = always parameter: k (key)
+    - C = parameter on set only: l (limit)
+    - D = no parameters: all others (including new +g)
+  - Added standard IRC parameters for better protocol compliance:
+    - TOPICLEN=390 (max topic length, enforced in TOPIC and PROP commands)
+    - MAXNICKLEN (max nickname length)
+    - CASEMAPPING=rfc1459 (standard IRC case mapping)
+    - STATUSMSG=.@+ (messages to status groups: . owner, @ host, + voice)
+    - MODES=6 (max mode changes per command, now enforced)
+- **MODE Permissions**: Services can now set channel modes (previously only owners, hosts, and admins)
+- **MODE Enforcement**: Maximum modes per command now enforced (default 6, configurable in limits.max_modes_per_command)
+- **Shutdown Performance**: Significantly improved startup/shutdown/restart times
+  - Added overall 10-second shutdown timeout (prevents hanging)
+  - Client disconnections now concurrent instead of sequential
+  - Database pool properly closes during shutdown
+  - Background task cancellation with 2-second timeout
+  - Individual operations have sub-timeouts (link manager: 2s, servers: 2s, clients: 3s, database: 2s)
+
 ## [1.1.4] - 2026-01-14
 
 ### Fixed - CRITICAL
