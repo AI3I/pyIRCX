@@ -4,7 +4,7 @@
 
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.1.5-brightgreen.svg)](#)
+[![Version](https://img.shields.io/badge/version-1.1.6-brightgreen.svg)](#)
 [![Tests](https://img.shields.io/badge/tests-243%20passing-brightgreen.svg)](#testing)
 
 ---
@@ -25,7 +25,7 @@ If you remember the days of **Microsoft Comic Chat**, chat rooms with real nicks
 
 ## Recent Updates
 
-### Version 1.1.5 (January 2026)
+### Version 1.1.6 (January 2026)
 **Critical Bug Fixes & Test Harness**
 
 - **CRITICAL: JOIN Race Condition Fix** — Fixed race condition causing multiple users to receive owner mode (+q)
@@ -859,7 +859,7 @@ GNU General Public License v3.0 — See [LICENSE](LICENSE) for details.
 <p align="center">
   <i>Bringing back the chat rooms of yesterday, with the technology of today.</i>
   <br><br>
-  <b>pyIRCX 1.1.5</b> — The production-ready IRCX server for distributed networks
+  <b>pyIRCX 1.1.6</b> — The production-ready IRCX server for distributed networks
   <br><br>
   ⭐ <b>Star this project on GitHub if you find it useful!</b> ⭐
 </p>
