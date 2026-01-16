@@ -20,6 +20,7 @@ None in this release.
 - **Other Service Aliases**: OperServ, HelpServ, InfoServ, BotServ, HostServ, StatServ, Global, ALIS, Services
   - All provide helpful information directing users to active services
   - Maintains compatibility with traditional IRC client configurations
+  - Proper CamelCase formatting for service names (OperServ not Operserv)
 
 ### Apache/httpd Multi-Distribution Setup Script
 - **`setup_apache.sh`**: Comprehensive Apache/httpd configuration for all supported distributions
@@ -48,7 +49,8 @@ None in this release.
 ## 📋 All Changes from v1.1.7
 
 1. **Service Alias Routing**: Added case-insensitive routing for traditional IRC service names (NickServ, ChanServ, MemoServ, etc.) to maintain compatibility with classic IRC networks
-2. **Apache Setup Script**: Created comprehensive `setup_apache.sh` for automated Apache/httpd configuration across all supported Linux distributions
+2. **Service Name Formatting**: Fixed service name capitalization to use proper CamelCase (OperServ, HelpServ, etc.)
+3. **Apache Setup Script**: Created comprehensive `setup_apache.sh` for automated Apache/httpd configuration across all supported Linux distributions
 
 ---
 
