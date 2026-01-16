@@ -9190,12 +9190,14 @@ class ServerManager:
                 user.send(f":{self.server.servername} NOTICE * :Server shutting down"),
                 timeout=0.5
             )
-        except:
+        except Exception:
+            # Ignore errors during shutdown notification (connection may already be closed)
             pass
         try:
             user.writer.close()
             await asyncio.wait_for(user.writer.wait_closed(), timeout=0.5)
-        except:
+        except Exception:
+            # Ignore errors during connection close (best effort cleanup)
             pass
 
     def handle_signal(self, sig):
