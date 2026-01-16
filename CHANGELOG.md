@@ -5,6 +5,24 @@ All notable changes to pyIRCX will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.9] - 2026-01-16
+
+### Added
+- **Traditional IRC Service Alias Routing**: Case-insensitive routing for classic IRC service names
+  - `NickServ` → Routes to Registrar (nickname registration/authentication)
+  - `ChanServ` → Routes to Registrar (channel registration/management)
+  - `MemoServ` → Routes to Messenger (offline messages)
+  - `OperServ`, `HelpServ`, `InfoServ`, `BotServ`, `HostServ`, `StatServ`, `Global`, `ALIS`, `Services` → Provide help information directing users to active services
+  - Maintains compatibility with traditional IRC client configurations
+- **Apache/httpd Multi-Distribution Setup Script**: `setup_apache.sh`
+  - Auto-detects distribution (RHEL, Fedora, CentOS, Rocky, Alma, Amazon Linux, Debian, Ubuntu)
+  - Configures Apache for both WebAdmin and WebChat
+  - Handles SELinux contexts automatically on RHEL-based systems
+  - Sets proper permissions (apache:pyircx group membership)
+  - Installs and configures PHP and required modules
+  - Tests configuration before applying
+  - Provides clear success/error messages with troubleshooting steps
+
 ## [1.1.7] - 2026-01-16
 
 ### Added

@@ -4,7 +4,7 @@
 
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.1.7-brightgreen.svg)](#)
+[![Version](https://img.shields.io/badge/version-1.1.9-brightgreen.svg)](#)
 [![Tests](https://img.shields.io/badge/tests-243%20passing-brightgreen.svg)](#testing)
 
 ---
@@ -23,13 +23,13 @@ If you remember the days of **Microsoft Comic Chat**, chat rooms with real nicks
 
 > **Active Development:** pyIRCX is under active development with frequent updates, enhancements, and bug fixes. New features, security improvements, and performance optimizations are released regularly. See [CHANGELOG.md](CHANGELOG.md) for detailed release notes and version history.
 
-**Current Version:** 1.1.7
+**Current Version:** 1.1.9
 
 **Latest Releases:**
+- **v1.1.9** (January 16, 2026) - Traditional IRC service aliases (NickServ/ChanServ/MemoServ), Apache/httpd multi-distro setup
 - **v1.1.7** (January 16, 2026) - Documentation updates, SELinux hardening, WebChat configuration system, MOTD editor fixes
 - **v1.1.6** (January 16, 2026) - Web admin security & permissions (CSRF protection, SELinux contexts)
 - **v1.1.5** (January 15, 2026) - Critical bug fixes, test harness, STATS/HELP systems, VOICEKEY
-- **v1.1.4** (January 14, 2026) - Critical async bug fix in Channel.broadcast()
 
 For complete version history, see [CHANGELOG.md](CHANGELOG.md)
 
