@@ -3481,8 +3481,6 @@ class pyIRCXServer:
             mode = 'a' if level == "ADMIN" else 'o' if level == "SYSOP" else 'g'
             user.set_mode(mode, True)
             user.set_mode('r', True)  # Set registered mode
-            if level == "ADMIN":
-                user.set_mode('o', True)
             await user.send(f":{user.nickname} MODE {user.nickname} :+{mode}r")
             # Dynamic role name for 381
             role = "administrator" if level == "ADMIN" else "operator" if level == "SYSOP" else "guide"
