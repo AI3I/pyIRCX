@@ -1,4 +1,31 @@
 <!DOCTYPE html>
+<!--
+    pyIRCX WebChat - Browser-based IRC/IRCX Client
+
+    Configuration Parameters:
+    ========================
+
+    WebSocket Connection (Line ~352):
+        const WS_URL = ...
+        - Auto-configures based on protocol (HTTP/HTTPS)
+        - HTTP:  ws://hostname:8765 (direct WebSocket connection)
+        - HTTPS: wss://hostname/ws (via reverse proxy)
+        - Port 8765 matches pyircx-webchat.service default
+
+    Default Channel (Line ~184):
+        <input type="text" id="loginChannel" value="#pyIRCX">
+        - Change "#pyIRCX" to your preferred default channel
+
+    Performance Tuning (Line ~356, ~501):
+        const WHO_THROTTLE_MS = 2000;  // Minimum ms between WHO requests
+        const CMD_DELAY = 600;         // Delay between queued commands (ms)
+
+    For WebSocket gateway configuration, see:
+        /etc/pyircx/webchat.conf (gateway service config)
+
+    Copyright (C) 2026 pyIRCX Project
+    License: GPL-3.0
+-->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -175,13 +202,14 @@
 
         @media (max-width: 768px) { .channel-list, .user-list { display: none; } }
     </style>
+    <script src="config.js"></script>
 </head>
 <body>
     <div class="modal-overlay" id="loginModal">
         <div class="modal">
             <h2>Connect to pyIRCX</h2>
             <div class="form-group"><label>Nickname</label><input type="text" id="loginNick" maxlength="30" autocomplete="off"></div>
-            <div class="form-group"><label>Channel</label><input type="text" id="loginChannel" value="#lobby"></div>
+            <div class="form-group"><label>Channel</label><input type="text" id="loginChannel" value="#pyIRCX"></div>
             <div class="form-group"><label>Password (staff)</label><input type="password" id="loginPassword"></div>
             <button id="connectBtn">🔌 Connect</button>
             <div class="error-message" id="loginError"></div>
@@ -349,11 +377,15 @@
     <div id="contextMenu" style="display: none; position: fixed; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 8px; box-shadow: var(--shadow-lg); padding: 4px; z-index: 2000; min-width: 200px;"></div>
 
 <script>
-const WS_URL = window.location.protocol === 'https:' ? `wss://${window.location.host}/ws` : `ws://${window.location.hostname}:8765`;
+// Load configuration (from config.js)
+const WS_URL = getWebSocketUrl();
+const WHO_THROTTLE_MS = WEBCHAT_CONFIG.whoThrottleMs;
+const CMD_DELAY = WEBCHAT_CONFIG.commandDelayMs;
+const staffEmoji = WEBCHAT_CONFIG.staffEmoji;
+
 let ws = null, currentNick = '', currentChannel = '', channels = {}, myModes = new Set(), isIRCX = false, pendingJoinChannel = '';
 const staffUsers = new Map(); // Track server staff: nick -> 'ADMIN'|'SYSOP'|'GUIDE'
 const lastWhoTime = new Map(); // Track last WHO time per channel to throttle requests
-const WHO_THROTTLE_MS = 2000; // Minimum 2 seconds between WHO requests for the same channel
 
 // User settings
 const settings = {
@@ -369,9 +401,6 @@ const escapeHtml = t => { const d = document.createElement('div'); d.textContent
 const nickColor = n => 'nick-' + (Math.abs([...n].reduce((h,c) => c.charCodeAt(0) + ((h << 5) - h), 0)) % 8);
 const ts = () => new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: !settings.use24HourTime });
 const isChannel = n => n && (n[0] === '#' || n[0] === '&');
-
-// Staff emoji mapping for PM windows
-const staffEmoji = { 'SERVICE': '🤖', 'ADMIN': '👑', 'SYSOP': '🏅', 'GUIDE': '🔰' };
 
 // Check if user is ignored
 const isIgnored = nick => ignoredUsers.has(nick.toLowerCase());
@@ -498,7 +527,6 @@ function highlightNick(text) {
 // Command queue for throttling - prevents "Too fast" errors
 const cmdQueue = [];
 let cmdTimer = null;
-const CMD_DELAY = 600; // ms between commands
 
 function queueCmd(cmd) {
     if (ws && ws.readyState === 1) {
@@ -1899,6 +1927,12 @@ function handleAutocomplete(e) {
     words[words.length - 1] = match + (words.length === 1 && !match.startsWith('/') ? ': ' : ' ');
     input.value = words.join(' ') + input.value.substring(input.selectionStart);
     input.selectionStart = input.selectionEnd = words.join(' ').length;
+}
+
+// Set default values from config
+$('loginChannel').value = WEBCHAT_CONFIG.defaultChannel;
+if (WEBCHAT_CONFIG.defaultNick) {
+    $('loginNick').value = WEBCHAT_CONFIG.defaultNick;
 }
 
 // Event listeners

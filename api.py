@@ -81,12 +81,8 @@ def get_motd():
             if isinstance(motd, str):
                 return {"motd": [motd]}
             return {"motd": motd}
-        # Return default MOTD if not configured
-        return {"motd": [
-            "Welcome to the IRCX Network",
-            "Please be respectful of other users.",
-            "Type /help for available commands."
-        ]}
+        # Return empty MOTD if not configured (default should be in config file)
+        return {"motd": []}
     except Exception as e:
         return {"error": str(e)}
 
@@ -105,11 +101,11 @@ def set_motd(motd_lines):
                 if isinstance(parsed, list):
                     motd_lines = parsed
                 else:
-                    # Split on newlines
-                    motd_lines = [line.strip() for line in motd_lines.split('\n') if line.strip()]
+                    # Split on newlines (preserve empty lines for spacing)
+                    motd_lines = [line.rstrip() for line in motd_lines.split('\n')]
             except json.JSONDecodeError:
-                # Not JSON, split on newlines
-                motd_lines = [line.strip() for line in motd_lines.split('\n') if line.strip()]
+                # Not JSON, split on newlines (preserve empty lines for spacing)
+                motd_lines = [line.rstrip() for line in motd_lines.split('\n')]
 
         config['server']['motd'] = motd_lines
         return save_config(config)
@@ -2134,6 +2130,8 @@ def main():
     # Configuration
     elif command == "config":
         result = get_server_config()
+    elif command == "get-config":
+        result = {"config": load_config()}
     elif command == "full-config":
         result = get_full_config()
     elif command == "set-config":

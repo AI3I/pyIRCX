@@ -2144,14 +2144,22 @@ console.log("=== admin.js LOADING ===");
         });
     }
 
-    function saveConfigForm() {
+    async function saveConfigForm() {
         if (!currentConfig) {
             showToast('Error', 'Configuration not loaded', 'error');
             return;
         }
 
-        // Build config object from form
-        const newConfig = JSON.parse(JSON.stringify(currentConfig)); // Deep clone
+        // Reload config from file to get latest MOTD and other changes
+        const latestConfigRes = await callAPI('get-config');
+        if (latestConfigRes.error) {
+            showToast('Error', 'Failed to load current config: ' + latestConfigRes.error, 'error');
+            return;
+        }
+        const latestConfig = latestConfigRes.config || currentConfig;
+
+        // Build config object from form, starting with latest config to preserve MOTD
+        const newConfig = JSON.parse(JSON.stringify(latestConfig)); // Deep clone
 
         // Ensure all required sections exist
         newConfig.server = newConfig.server || {};

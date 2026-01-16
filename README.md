@@ -4,7 +4,7 @@
 
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.1.6-brightgreen.svg)](#)
+[![Version](https://img.shields.io/badge/version-1.1.7-brightgreen.svg)](#)
 [![Tests](https://img.shields.io/badge/tests-243%20passing-brightgreen.svg)](#testing)
 
 ---
@@ -21,171 +21,17 @@ If you remember the days of **Microsoft Comic Chat**, chat rooms with real nicks
 
 > **Comic Chat Compatible!** pyIRCX works with Microsoft Comic Chat (V2.5), the iconic IRC client that displayed conversations as comic strips. Run it natively or in a VM - pyIRCX speaks the same IRCX protocol.
 
----
+> **Active Development:** pyIRCX is under active development with frequent updates, enhancements, and bug fixes. New features, security improvements, and performance optimizations are released regularly. See [CHANGELOG.md](CHANGELOG.md) for detailed release notes and version history.
 
-## Recent Updates
+**Current Version:** 1.1.7
 
-### Version 1.1.6 (January 16, 2026)
-**Web Admin Security & Permission Fixes**
+**Latest Releases:**
+- **v1.1.7** (January 16, 2026) - Documentation updates, SELinux hardening, WebChat configuration system, MOTD editor fixes
+- **v1.1.6** (January 16, 2026) - Web admin security & permissions (CSRF protection, SELinux contexts)
+- **v1.1.5** (January 15, 2026) - Critical bug fixes, test harness, STATS/HELP systems, VOICEKEY
+- **v1.1.4** (January 14, 2026) - Critical async bug fix in Channel.broadcast()
 
-- **CSRF Token Protection** — Implemented comprehensive CSRF token validation across all web admin API endpoints
-- **Secure Session Handling** — Fixed session cookie security to work with both HTTP and HTTPS deployments
-- **Stdin Password Input** — Added `test-staff-login-stdin` API command for secure password handling
-- **SELinux Context Hardening** — Extended httpd_sys_rw_content_t contexts to cover `/etc/pyircx` directory
-- **HTTP/HTTPS Auto-Detection** — Web admin automatically adapts session security based on protocol
-- **Null-Safe Form Handling** — Configuration editor handles missing form fields gracefully with safe getter/setter functions
-- **Permission Fixes** — All installation, upgrade, and repair scripts now properly configure web admin permissions (775/664)
-- **Bug Fixes** — Fixed web admin login errors, CSRF validation failures, permission denied errors, and configuration save crashes
-- **Database Pool** — Increased default pool_size from 5 to 10 connections for better concurrency with web admin
-- **PHP-FPM Restart** — Scripts now automatically restart PHP-FPM after adding apache to pyircx group
-
-### Version 1.1.5 (January 15, 2026)
-**Critical Bug Fixes, Test Harness & Server Statistics**
-
-- **CRITICAL: JOIN Race Condition Fix** — Fixed race condition causing multiple users to receive owner mode (+q)
-  - Added channel_creation_lock to prevent concurrent channel creation
-  - Resolves broadcast failures, KICK errors, and MODE issues
-- **VOICEKEY Feature** — Auto-grant voice (+v) on join with password
-  - Similar to OWNERKEY/HOSTKEY, completes the privilege key trio
-  - Integrated into web admin channel edit modal
-  - Case-insensitive key matching for all channel keys
-- **Comprehensive Test Harness** — 243 tests across 8 suites (100% passing)
-  - 28 new core command tests (JOIN/PART/QUIT/MODE/TOPIC/KICK/etc.)
-  - 16 new STATS system tests
-  - 15 new HELP system tests
-  - Automated markdown logging system
-- **8 New STATS Flags** — Enhanced server monitoring and diagnostics
-  - `STATS p` - Peak usage statistics
-  - `STATS f` - Flood protection monitoring
-  - `STATS m` - Message statistics and most active channels
-  - `STATS b` - ServiceBot violation tracking
-  - `STATS n` - Network information summary
-  - `STATS v` - Command usage statistics (staff only)
-  - Enhanced `STATS k/d/l` - Improved ban and access control listings
-- **Complete HELP System** — Comprehensive in-server documentation
-  - New HELP REGISTER topic covering nickname/channel registration
-  - Enhanced service HELP commands (Registrar, ServiceBot, Messenger, NewsFlash)
-  - All commands, modes, and IRCX features documented
-- **Channel Mode +g (guide-op)** — Auto-grant owner (+q) to guides when they join
-- **Case-Sensitivity Fixes** — Fixed 7 critical handlers (PROP, TRANSCRIPT, KNOCK, INVITE, REGISTER, DROP, Registrar)
-- **ACCESS GRANT Bypasses** — Users with ACCESS GRANT can now bypass mode +j (no-invitations) and +u (knock-mode)
-- **IRC Protocol Compliance** — Numerics 004/005 now IRCv3-compliant
-- **WebChat Improvements** — Service bot detection (🤖), emoji picker, search functionality, button icons, connection info display, normalized sound effects
-
-### Version 1.1.4 (January 14, 2026)
-**Critical Async Bug Fix**
-
-- **CRITICAL: Channel Broadcast Bug** — Fixed catastrophic async bug in Channel.broadcast()
-  - Tasks were being awaited immediately instead of collected for concurrent execution
-  - Caused "An asyncio.Future, a coroutine or an awaitable is required" errors
-  - All multi-user channel operations were broken (JOIN/PART/messages)
-  - **Action Required:** Immediate upgrade recommended for all v1.1.3 and earlier installations
-
-### Version 1.1.3 (January 14, 2026)
-**Security Hardening & Code Quality**
-
-- **Error Handling Specificity** — Replaced all bare `except:` clauses with specific exception types
-  - Improved error handling in 17 locations across codebase
-  - Better exception specificity prevents masking unexpected errors
-- **Server Link Password Security** — Implemented bcrypt authentication for server-to-server links
-  - Server link passwords now use bcrypt hashing instead of plaintext
-  - Backwards compatible with plaintext fallback
-  - Added `utils/hash_link_password.py` utility
-- **Configuration Security** — Added config file permission validation on startup
-  - Warns if `/etc/pyircx/pyircx_config.json` is world-readable/writable
-- **Database Connection Pooling** — Increased default pool size from 5 to 10 connections
-  - Added pool saturation monitoring and warnings
-
-### Version 1.1.2 (January 12, 2026)
-**Channel Operations & Database Architecture Improvements**
-
-- **Channel Unlock Fix** — Services can now set/unset MODE +z (locked mode) for web admin
-- **Database Migration** — Migrated from `reg_chans` to `registered_channels` with JSON properties column
-  - Channels are now dynamic by default (created on-demand, lost when empty)
-  - Registered channels persist full state (owners, hosts, voices, ACCESS, topic, keys, modes)
-  - All channel properties stored as JSON for flexibility
-- **API Updates** — Migrated api.py to use new database schema (8 functions updated)
-- **Configuration Cleanup** — Removed static modes section from config template (now hardcoded)
-- **Mode Consistency Fixes** — User modes now consistently `agiorsxz`, channel modes fully documented
-- **STATS s Fix** — Now correctly shows virtual services (System, Registrar, etc.)
-- **Channel +r Consistency** — Synchronized channel.registered flag with channel.modes['r']
-- **UNREGISTER Improvements** — Now properly removes +r mode and broadcasts change
-- **MODE -r Support** — High staff can use MODE -r to unregister channels directly
-- **Database Permissions** — Apache user added to pyircx group for web admin write access
-- **Removed** — DEFAULT configuration block, legacy channel persistence, migrate_1.0_to_1.1.sh script
-
-### Version 1.1.1 (January 2026)
-**Bug Fixes & UI Standardization**
-
-- **Kill/Lock Buttons** — Added KILL and LOCK buttons for channel management in web admin
-- **User Management** — Added KILL_USER and BAN_USER admin command handlers
-- **Security Settings** — Changed 'Auth' labels to 'Authenticated' for clarity
-- **ServiceBot Configuration** — Added configuration and user management features
-
-### Version 1.1.0 (January 11, 2026)
-**Web Administration Panel & IRC Protocol Fixes**
-
-- **Web Admin Panel** — Standalone PHP-based admin interface replacing Cockpit
-  - Session-based authentication with IRC staff accounts
-  - Service control via polkit (passwordless start/stop/restart)
-  - Real-time log viewer with journalctl integration
-  - User and channel management with search and pagination
-  - Staff profile management (email, real name)
-  - Access control with expiration support
-  - Mailbox message system
-- **SELinux Policies** — Production-ready security policies for RHEL/Fedora/CentOS
-- **Polkit Authorization** — Secure service management without sudo
-- **Database Migration** — Automatic schema upgrade from v1.0.x
-- **IRC Protocol Fixes** — Fixed user mode +s invisibility, JOIN/MODE logic, WHO command
-- **Numeric Compliance** — Fixed colon placement in numerous IRC numerics for RFC compliance
-- **Staff Profiles** — Email and real name fields for staff accounts
-- **Access Expiration** — Timeout field for temporary channel access rules
-- **Enhanced API** — New commands for staff login, mailbox messages, pagination, and search
-- **Comprehensive Tests** — Added test suites for access control and ServiceBot
-
-### Version 1.0.5 (January 2026)
-**WebChat Browser Client & WEBIRC Support**
-
-- **WebChat Client** — Full-featured web-based IRC client with modern UI
-  - WebSocket-to-IRC gateway for browser access
-  - Dark mode toggle with localStorage persistence
-  - Staff user detection and icons (ADMIN/SYSOP/GUIDE)
-  - Channel owner/host/voice icons
-  - Full IRCX command support (PROP, ACCESS, WHISPER, LISTX)
-- **WEBIRC Protocol** — Forward real client IPs through web gateway
-- **SSL Improvements** — Fixed ssl-cert group creation on Fedora/RHEL
-- **Service Management** — Install script now auto-enables services
-- **366 Numeric Fix** — Fixed NAMES reply format
-
-### Version 1.0.4 (January 2026)
-**License Migration to GPLv3**
-
-- **Open Source Forever** — Migrated from MIT to GNU General Public License v3.0
-- **Enhanced Protections** — GPLv3 ensures derivatives remain open source with patent protection
-- **Updated Copyright** — Standardized to "pyIRCX Project" across all source files
-- **Comprehensive Headers** — All Python files now include full GPLv3 license headers
-- **Documentation Updates** — All references and badges updated to reflect GPLv3
-
-### Version 1.0.3 (January 2026)
-**Cockpit Module & Security Fixes**
-
-- **Staff Management** — Full CRUD interface for managing ADMIN/SYSOP/GUIDE accounts (via Cockpit)
-- **Enhanced Statistics** — Detailed server stats with staff breakdowns and access rule counts
-- **Channel Modes Display** — Active channels now show modes (+nt, +mnst, etc.)
-- **Mode Security Fix** — Prevented manual setting of +r (registered) mode on channels
-- **UI Improvements** — Reorganized dashboard with better information hierarchy
-- **Note:** Cockpit module replaced with Web Administration Panel in v1.1.0
-
-### Version 1.0.0 (January 2026)
-**Server-to-Server Linking**
-
-pyIRCX now supports **distributed chat networks** with server-to-server linking:
-
-- **Server linking protocol** with password authentication
-- **State synchronization** - users and channels sync across servers
-- **Message routing** - seamless communication across the network
-- **Netsplit handling** - graceful recovery from server disconnections
-- **Admin commands** - CONNECT, SQUIT, LINKS for network management
+For complete version history, see [CHANGELOG.md](CHANGELOG.md)
 
 ---
 

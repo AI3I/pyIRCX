@@ -65,15 +65,61 @@ www-data ALL=(ALL) NOPASSWD: /usr/bin/systemctl start pyircx.service, /usr/bin/s
 
 Save and exit.
 
-### 4. Test permissions
+### 4. Configure SELinux (if enabled)
+
+If your system uses SELinux (RHEL, Fedora, CentOS), configure security contexts:
 
 ```bash
-sudo -u www-data systemctl is-active pyircx.service
+# Set SELinux contexts for web admin files
+sudo semanage fcontext -a -t httpd_sys_rw_content_t "/var/www/html/webadmin(/.*)?" 2>/dev/null || true
+sudo restorecon -Rv /var/www/html/webadmin 2>/dev/null || true
+
+# Set SELinux contexts for config directory
+sudo semanage fcontext -a -t httpd_sys_rw_content_t "/etc/pyircx(/.*)?" 2>/dev/null || true
+sudo restorecon -Rv /etc/pyircx 2>/dev/null || true
 ```
 
-Should return `active`, `inactive`, or `failed` without asking for a password.
+These contexts allow the web server to read and write configuration files while maintaining security isolation.
 
-### 5. Access the interface
+### 5. Configure permissions
+
+Add the web server user to the pyircx group:
+
+```bash
+# For Apache (Fedora/RHEL)
+sudo usermod -a -G pyircx apache
+sudo systemctl restart php-fpm
+
+# For Apache (Debian/Ubuntu)
+sudo usermod -a -G pyircx www-data
+sudo systemctl restart php-fpm
+```
+
+Set proper directory and file permissions:
+
+```bash
+# Set directory permissions (group write enabled)
+sudo chmod 775 /opt/pyircx
+sudo chmod 775 /etc/pyircx
+
+# Set config file permissions (group write enabled)
+sudo chmod 664 /etc/pyircx/pyircx_config.json
+sudo chmod 664 /opt/pyircx/pyircx.db
+```
+
+### 6. Test permissions
+
+```bash
+# Test systemctl access
+sudo -u apache systemctl is-active pyircx.service
+
+# Test file write access
+sudo -u apache test -w /etc/pyircx/pyircx_config.json && echo "Config writable" || echo "Config not writable"
+```
+
+Should return `active`, `inactive`, or `failed` without asking for a password, and config should be writable.
+
+### 7. Access the interface
 
 Open your browser to:
 
@@ -128,19 +174,53 @@ location /webadmin/ {
 
 ## Security Recommendations
 
-1. **Add authentication**: Use HTTP Basic Auth (shown above) or implement PHP session-based auth
-2. **Use HTTPS**: Configure SSL/TLS certificate
-3. **Restrict access**: Use firewall rules or web server IP restrictions
-4. **Limit sudo**: The sudoers entry is already restrictive, but audit it regularly
-5. **Keep PHP updated**: Ensure PHP and web server are patched
+1. **Session Authentication**: Web admin uses IRC staff account authentication with CSRF protection (v1.1.6+)
+2. **Use HTTPS**: Configure SSL/TLS certificate for encrypted connections
+3. **Restrict access**: Use firewall rules or web server IP restrictions to limit admin panel access
+4. **SELinux Enforcement**: Keep SELinux enabled for mandatory access control (recommended on RHEL/Fedora/CentOS)
+5. **Group Permissions**: Web admin uses group-based permissions (775/664) instead of world-writable files
+6. **Limit sudo/polkit**: Service control uses polkit authorization (passwordless but restricted to pyircx.service)
+7. **Keep updated**: Ensure PHP, web server, and pyIRCX are kept up to date with security patches
 
 ## Troubleshooting
 
 ### "Permission denied" errors
 
-Check file permissions:
+Check file permissions and group membership:
 ```bash
-sudo chown -R www-data:www-data /var/www/html/webadmin/
+# Check ownership
+sudo chown -R apache:apache /var/www/html/webadmin/
+sudo chown pyircx:pyircx /etc/pyircx/pyircx_config.json
+
+# Check permissions
+sudo chmod 775 /etc/pyircx
+sudo chmod 664 /etc/pyircx/pyircx_config.json
+
+# Verify web server user is in pyircx group
+groups apache
+
+# If not in group, add and restart PHP-FPM
+sudo usermod -a -G pyircx apache
+sudo systemctl restart php-fpm
+```
+
+### SELinux denials
+
+If you see "Permission denied" on SELinux systems, check audit logs:
+```bash
+# Check for SELinux denials
+sudo ausearch -m avc -ts recent
+
+# Verify SELinux contexts
+ls -Z /etc/pyircx/
+ls -Z /var/www/html/webadmin/
+
+# Expected contexts:
+# httpd_sys_rw_content_t for both directories
+
+# Restore contexts if incorrect
+sudo restorecon -Rv /etc/pyircx
+sudo restorecon -Rv /var/www/html/webadmin
 ```
 
 ### Service control doesn't work

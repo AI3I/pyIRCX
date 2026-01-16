@@ -22,6 +22,15 @@ Your web admin is now live and fully functional, replacing the old Cockpit inter
 - ✅ **Pure JavaScript** - No jQuery, no external dependencies
 - ✅ **Mobile responsive** - Sidebar collapses on mobile devices
 
+### Security Features (v1.1.6+)
+- ✅ **CSRF Token Protection** - All API endpoints protected against cross-site request forgery
+- ✅ **Secure Session Handling** - HttpOnly, SameSite=Strict cookies with HTTP/HTTPS auto-detection
+- ✅ **Stdin Password Auth** - Passwords never exposed in process lists
+- ✅ **SELinux Hardening** - Proper security contexts for web server access
+- ✅ **Group Permissions** - No world-writable files (775/664 permissions)
+- ✅ **Staff-Only Access** - Authentication required with IRC ADMIN account
+- ✅ **Null-Safe Forms** - Graceful handling of missing form fields
+
 ## Features
 
 ### Dashboard Page

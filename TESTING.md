@@ -4,12 +4,95 @@ This guide explains how to run the comprehensive test suites for pyIRCX.
 
 ## Test Overview
 
-pyIRCX includes **54 comprehensive tests** covering all major functionality:
+pyIRCX includes **243 comprehensive tests** covering all major functionality:
 
-- **50 User/IRC Tests** - IRC and IRCX protocol compliance
-- **4 Server Linking Tests** - Server-to-server linking functionality
+- **206 Core IRC/IRCX Tests** (5 suites) - IRC protocol, commands, modes, access control
+- **44 v1.1.5 Feature Tests** (3 suites) - STATS, HELP, and Services enhancements
+- **All suites automated with Markdown logging**
 
-**Current Status: 54/54 tests passing (100%)**
+**Current Status: 243/243 tests passing (100%)**
+
+## Test Suites
+
+### Core IRC/IRCX (5 suites, 206 tests)
+
+1. **testing/users.py** - 115 tests
+   - IRC protocol basics (NICK/USER/PING/PONG)
+   - IRCX extensions (ISIRCX/WHISPER/LISTX/PROP)
+   - User modes (+i/+w/+s/+o/+r/+x)
+   - Channel operations
+   - Error handling
+
+2. **testing/commands.py** - 28 tests
+   - **JOIN** (4 tests): basic, owner mode, multiple users, channel key
+   - **PART** (2 tests): basic, broadcast
+   - **QUIT** (2 tests): disconnect, broadcast
+   - **INVITE** (2 tests): basic, invite-only channel (+i)
+   - **MODE** (5 tests): user query, channel query, set mode, grant voice, permissions
+   - **TOPIC** (3 tests): query, set, clear
+   - **KICK** (2 tests): basic, non-op cannot kick
+   - **PRIVMSG/NOTICE** (3 tests): channel message, private message, notice
+   - **LIST** (1 test): channel listing
+   - **NAMES** (1 test): member listing
+   - **WHO** (2 tests): channel query, user query
+   - **WHOIS** (1 test): user info
+   - **PING** (1 test): ping/pong
+   - **MOTD** (1 test): message of the day
+
+3. **testing/staff.py** - 39 tests
+   - Staff authentication (STAFF LOGIN/LOGOUT)
+   - Privilege levels (ADMIN/SYSOP/GUIDE)
+   - Staff management commands (ADD/DEL/PASS/LEVEL/LIST)
+   - Permission enforcement
+
+4. **testing/links.py** - 4 tests
+   - Server linking (LINKS/CONNECT/SQUIT)
+   - Network topology
+
+5. **testing/access.py** - 10 tests
+   - ACCESS command (OWNER/HOST/VOICE/DENY)
+   - Server-level access (GRANT/DENY)
+   - Wildcard patterns
+   - Service protection
+
+### v1.1.5 Features (3 suites, 44 tests)
+
+6. **testing/stats.py** - 16 tests
+   - STATS p (peak usage)
+   - STATS f (flood protection)
+   - STATS m (message statistics)
+   - STATS b (ServiceBot violations)
+   - STATS n (network information)
+   - STATS v (command usage, staff-only)
+   - STATS k (ban statistics, no limits)
+   - STATS * (comprehensive report, admin-only)
+
+7. **testing/help.py** - 15 tests
+   - HELP main menu
+   - HELP REGISTER (new topic for v1.1.5)
+   - HELP COMMANDS (with Registration category)
+   - HELP CHANNEL, IRCX, USERMODES, CHANMODES, SERVICES
+   - HELP STAFF (privilege-restricted)
+
+8. **testing/services.py** - 13 tests
+   - Registrar HELP command
+   - ServiceBot HELP/STATUS commands
+   - ServiceBot case-insensitive routing fix
+   - Messenger/NewsFlash regression tests
+
+## Test Coverage Matrix
+
+| Category | Tests | Coverage |
+|----------|-------|----------|
+| IRC Protocol | 115 | Core IRC/IRCX commands, modes, errors |
+| Core Commands | 28 | JOIN/PART/QUIT/INVITE/MODE/TOPIC/KICK/PRIVMSG/WHO/etc |
+| Staff System | 39 | Authentication, privileges, staff commands |
+| Server Linking | 4 | Network topology, server-to-server |
+| Access Control | 10 | Channel/server access lists, permissions |
+| STATS (v1.1.5) | 16 | All new STATS flags, no-limit fixes |
+| HELP (v1.1.5) | 15 | HELP REGISTER, all topics |
+| Services (v1.1.5) | 13 | Registrar/ServiceBot improvements |
+| **TOTAL** | **243** | **Comprehensive** |
 
 ## Prerequisites
 
@@ -22,8 +105,25 @@ pyIRCX includes **54 comprehensive tests** covering all major functionality:
 All dependencies are already included in pyIRCX:
 - `asyncio` - Async I/O (built-in)
 - `ssl` - SSL/TLS support (built-in)
+- `bcrypt` - Password hashing
+- `aiosqlite` - Async SQLite
 
 No additional packages required for testing.
+
+### Test Account Setup (Required)
+
+Tests require staff accounts in the database. Run this once before testing:
+
+```bash
+sudo python3 testing/setup_test_accounts.py
+```
+
+This creates three test accounts:
+- `admin/testpass` (ADMIN level)
+- `sysop/testpass` (SYSOP level)
+- `guide/testpass` (GUIDE level)
+
+**Security Note:** These are test accounts only. Delete or change passwords on production servers.
 
 ## Quick Start
 
@@ -38,9 +138,10 @@ Run all tests with a single command:
 This script will:
 1. Check if the server is running
 2. Start a temporary test server if needed
-3. Run all test suites
-4. Display results summary
-5. Clean up test server
+3. Run all 8 test suites (243 tests)
+4. Generate Markdown report with results
+5. Display results summary
+6. Clean up test server
 
 ### Option 2: Manual Testing
 
@@ -61,14 +162,19 @@ python3 pyircx.py --config pyircx_config.json
 In a separate terminal, run the tests:
 
 ```bash
-# Run all User/IRC protocol tests (50 tests)
-python3 pyIRCX_test_users.py
+cd testing
 
-# Run server linking tests (4 tests)
-python3 pyIRCX_test_links.py
+# Core IRC/IRCX
+python3 users.py          # 115 tests
+python3 commands.py       # 28 tests
+python3 staff.py          # 39 tests
+python3 links.py          # 4 tests
+python3 access.py         # 10 tests
 
-# Run staff authentication tests (optional)
-python3 pyIRCX_test_staff.py
+# v1.1.5 Features
+python3 stats.py          # 16 tests
+python3 help.py           # 15 tests
+python3 services.py       # 13 tests
 ```
 
 #### Step 3: Review Results
@@ -77,79 +183,61 @@ Tests output results in real-time:
 - ✅ `PASSED` - Test succeeded
 - ❌ `FAILED` - Test failed (includes error details)
 
-## Test Suites
+## Test Logging
 
-### 1. User/IRC Protocol Tests (`pyIRCX_test_users.py`)
+Each test run creates a timestamped Markdown report:
 
-**Tests: 50 | Duration: ~30 seconds**
+- **Report Location:** `testing/logs/test_run_<epoch>.md`
+- **Latest Symlink:** `testing/logs/latest.md`
 
-Covers all IRC and IRCX protocol features:
+**Log Contents:**
+- Test environment details (hostname, Python version, pyIRCX version)
+- Pass/fail status for each suite with duration
+- Error output for failures (expandable details)
+- Summary table with success rate
+- Full test coverage breakdown
 
-**Core IRC Protocol:**
-- Basic connection and registration
-- NICK/USER commands
-- Nick collision handling
-- PING/PONG keepalive
-- MOTD display
-- VERSION command
+**View Latest Report:**
+```bash
+cat testing/logs/latest.md
 
-**Channel Operations:**
-- JOIN/PART commands
-- Channel modes (+m, +s, +p, +n, +t, +i, +k, +l)
-- Owner (.), Host (@), Voice (+) privileges
-- TOPIC command
-- WHO/WHOIS commands
-- PRIVMSG/NOTICE to users and channels
-- KICK command
+# Or with markdown rendering:
+glow testing/logs/latest.md
+```
 
-**IRCX Extensions:**
-- IRCX protocol negotiation
-- ISIRCX command
-- ACCESS command (OWNER, HOST, VOICE, GRANT, DENY)
-- PROP command (channel properties)
-- WHISPER command (private channel messages)
-- LISTX command (extended channel listing)
-- Clone channels (+d mode)
+## Test Implementation Details
 
-**Services:**
-- Built-in service bots (System, Registrar, Messenger)
-- Nickname registration
-- Channel registration
-- Offline messaging
+### Staff Authentication System
 
-**Advanced Features:**
-- IRCv3 capabilities (CAP LS/REQ/ACK/END)
-- SASL authentication
-- Multi-prefix support
-- User modes (+i, +w, +s, +o)
-- Away status (AWAY command)
+Tests use three methods for authentication:
 
-### 2. Server Linking Tests (`pyIRCX_test_links.py`)
+```python
+# Method 1: Auto-auth during connection
+await client.connect("TestNick", staff_account="admin")
 
-**Tests: 4 | Duration: ~5 seconds**
+# Method 2: PASS command before registration
+await client.send_raw("PASS testpass")
+await client.send_raw("NICK admin")
+await client.send_raw("USER admin 0 * :Test Admin")
 
-Tests server-to-server linking functionality:
+# Method 3: IDENTIFY after connection
+await client.connect("SomeNick")
+await client.send_raw("IDENTIFY admin testpass")
+```
 
-- LINKS command (single server)
-- LINKS command (linked servers)
-- CONNECT command permission check
-- SQUIT command permission check
+### Critical Bugs Verified Fixed
 
-**Note:** Full linking tests require two server instances. Basic tests verify commands work correctly on a single server.
+1. **QUIT not disconnecting** (v1.1.4)
+   - ✅ Verified: test_quit_basic checks connection closes
+   - ✅ Tests: test_quit_broadcast verifies QUIT messages sent
 
-### 3. Staff Authentication Tests (`pyIRCX_test_staff.py`)
+2. **Channel.broadcast() async bug** (v1.1.4)
+   - ✅ Verified: All multi-user tests (JOIN/PART/MODE/TOPIC/KICK)
+   - ✅ No hanging or timeout issues
 
-**Tests: Variable | Duration: ~10 seconds**
-
-Tests staff authentication system:
-
-- STAFF LOGIN command
-- STAFF LOGOUT command
-- STAFF LIST command
-- STAFF ADD/DEL commands (ADMIN only)
-- STAFF PASS command (password changes)
-- STAFF LEVEL command (privilege changes)
-- Permission level enforcement
+3. **ServiceBot case-insensitive routing** (v1.1.5)
+   - ✅ Verified: test_servicebot_help_lowercase
+   - ✅ Tests: Uppercase/lowercase/mixedcase routing
 
 ## Interpreting Test Results
 
@@ -170,8 +258,8 @@ TEST: Basic Connection
 ======================================================================
 SUMMARY
 ======================================================================
-Total tests run: 50
-Passed: 50
+Total tests run: 243
+Passed: 243
 Failed: 0
 
 ✅ All tests passed!
@@ -190,8 +278,9 @@ Buffer contents: [...]
 Common failure reasons:
 - Server not running on localhost:6667
 - Server configuration issues
-- Network connectivity problems
+- Test accounts not created (run setup_test_accounts.py)
 - Database errors
+- Network connectivity problems
 
 ## Troubleshooting
 
@@ -213,6 +302,19 @@ sudo systemctl start pyircx
 python3 pyircx.py
 ```
 
+### Test Fails: "Auth failed for user admin"
+
+**Problem:** Test accounts not created in database
+
+**Solution:**
+```bash
+# Create test accounts
+sudo python3 testing/setup_test_accounts.py
+
+# Verify accounts exist
+sqlite3 /opt/pyircx/pyircx.db "SELECT username, level FROM users WHERE username IN ('admin','sysop','guide')"
+```
+
 ### Test Fails: Database Errors
 
 **Problem:** Database file is locked or permissions issue
@@ -223,10 +325,11 @@ python3 pyircx.py
 sudo systemctl stop pyircx
 
 # Check database permissions
-ls -la pyircx.db
+ls -la /opt/pyircx/pyircx.db
 
 # If needed, fix permissions
 sudo chown pyircx:pyircx /opt/pyircx/pyircx.db
+sudo chmod 664 /opt/pyircx/pyircx.db
 ```
 
 ### Test Timeouts
@@ -279,6 +382,7 @@ async def test_something():
 3. **Appropriate delays** - Allow server time to process (0.2-0.5s usually sufficient)
 4. **Check both success and failure** - Test that invalid input is properly rejected
 5. **Isolate tests** - Each test should be independent
+6. **Use staff_account parameter** - For tests requiring privileges
 
 ## Continuous Integration
 
@@ -301,6 +405,9 @@ jobs:
       - name: Install dependencies
         run: |
           pip install bcrypt aiosqlite pyotp
+      - name: Setup test accounts
+        run: |
+          sudo python3 testing/setup_test_accounts.py
       - name: Run tests
         run: |
           ./run_tests.sh
@@ -315,7 +422,7 @@ For performance/load testing:
 for i in {1..100}; do
   python3 -c "
 import asyncio
-from pyIRCX_test_users import IRCTestClient
+from testing.users import IRCTestClient
 
 async def connect():
     client = IRCTestClient('perf_test')
@@ -342,6 +449,25 @@ Future test additions:
 - Stress testing (rapid connect/disconnect)
 - Fuzzing (malformed protocol messages)
 - Security testing (authentication bypass attempts)
+- WebSocket gateway tests
+- Flood protection tests
+
+## Test Isolation
+
+### Database Considerations
+- Tests create channels like #testjoin, #topictest, etc.
+- Dynamic channels are cleaned up automatically when empty
+- Registered channels may persist
+- Consider database backup before extensive testing
+
+### Test Account Security
+- Test accounts use simple password "testpass"
+- **Production servers should NOT use these accounts**
+- Delete or change passwords after testing:
+  ```bash
+  sqlite3 /opt/pyircx/pyircx.db "DELETE FROM users WHERE username IN ('admin','sysop','guide')"
+  ```
+- Consider using separate test database with `--db` flag
 
 ## Contributing Tests
 
@@ -350,15 +476,17 @@ When contributing new features:
 1. Add tests for new functionality
 2. Ensure existing tests still pass
 3. Update this documentation
-4. Add test results to TEST_RESULTS.md
+4. Run full test suite before submitting PR
+5. Include test results in PR description
 
 ## Support
 
 If tests fail unexpectedly:
 
-1. Check [TEST_RESULTS.md](TEST_RESULTS.md) for known issues
+1. Check `testing/logs/latest.md` for detailed results
 2. Review server logs: `journalctl -u pyircx -f`
-3. Open an issue on GitHub with:
+3. Verify test accounts exist in database
+4. Open an issue on GitHub with:
    - Test output
    - Server logs
    - System information (OS, Python version)
@@ -366,5 +494,7 @@ If tests fail unexpectedly:
 
 ---
 
-**Last Updated:** 2026-01-02
-**Test Suite Version:** 1.0.5
+**Last Updated:** 2026-01-16
+**Test Suite Version:** 1.1.7
+**pyIRCX Version:** 1.1.7
+**Total Tests:** 243 across 8 suites

@@ -2,7 +2,15 @@
   "server": {
     "name": "irc.local",
     "network": "IRCX Network",
-    "staff_login_message": "Welcome to the staff team."
+    "staff_login_message": "Welcome to the staff team.",
+    "motd": [
+      "Welcome to pyIRCX - Modern IRC/IRCX Server",
+      "",
+      "Please be respectful of other users.",
+      "Type /help for available commands.",
+      "",
+      "Enjoy your stay!"
+    ]
   },
   "network": {
     "listen_addr": "0.0.0.0",

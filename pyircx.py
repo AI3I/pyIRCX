@@ -22,9 +22,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
 # Version info - updated with each release
-__version__ = "1.1.6"
+__version__ = "1.1.7"
 __version_label__ = "pyIRCX"
-__created__ = "Fri Jan 16 10:42:45 AM EST 2026"
+__created__ = "Fri Jan 16 12:17:30 PM EST 2026"
 
 import asyncio
 import aiosqlite
@@ -5988,16 +5988,16 @@ class pyIRCXServer:
     async def handle_motd(self, user):
         """Handle MOTD command - display message of the day"""
         await user.send(self.get_reply("375", user))
-        # Read MOTD from config or file
-        motd_lines = CONFIG.get('server', 'motd', default=[
-            "Welcome to the IRCX Network",
-            "Please be respectful of other users.",
-            "Type /help for available commands."
-        ])
+        # Read MOTD from config (no hardcoded default - should be in config file)
+        motd_lines = CONFIG.get('server', 'motd', default=[])
         if isinstance(motd_lines, str):
             motd_lines = [motd_lines]
         for line in motd_lines:
-            await user.send(self.get_reply("372", user, text=line))
+            # Send blank lines as just a space to preserve spacing
+            if not line or line.strip() == '':
+                await user.send(self.get_reply("372", user, text=" "))
+            else:
+                await user.send(self.get_reply("372", user, text=line))
         await user.send(self.get_reply("376", user))
 
     async def handle_lusers(self, user):

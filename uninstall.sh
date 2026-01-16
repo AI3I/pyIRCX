@@ -106,6 +106,21 @@ fi
 systemctl daemon-reload
 echo -e "${GREEN}✓ Systemd reloaded${NC}"
 
+# Remove SELinux file contexts
+if command -v semanage &> /dev/null; then
+    echo ""
+    echo -e "${YELLOW}Removing SELinux file contexts...${NC}"
+
+    # Remove contexts for all pyIRCX directories
+    semanage fcontext -d "/opt/pyircx(/.*)?" 2>/dev/null || true
+    semanage fcontext -d "/etc/pyircx(/.*)?" 2>/dev/null || true
+    semanage fcontext -d "/etc/pyircx/webchat\.conf" 2>/dev/null || true
+    semanage fcontext -d "/var/www/html/webadmin(/.*)?" 2>/dev/null || true
+    semanage fcontext -d "/var/www/html/webchat(/.*)?" 2>/dev/null || true
+
+    echo -e "${GREEN}✓ SELinux file contexts removed${NC}"
+fi
+
 # Remove installation directory
 echo ""
 echo -e "${YELLOW}Installation directory: $INSTALL_DIR${NC}"

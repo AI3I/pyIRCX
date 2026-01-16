@@ -3,7 +3,7 @@
 # pyIRCX Upgrade Script
 #
 # Intelligently upgrades an existing installation to the latest version
-# Version 1.1.6 - Web Admin & Permission Fixes
+# Version 1.1.7 - Documentation, SELinux, WebChat Config
 #
 set -e
 
@@ -23,7 +23,7 @@ SERVICE_GROUP="pyircx"
 
 echo ""
 echo "========================================"
-echo "  pyIRCX Upgrade Script v1.1.6"
+echo "  pyIRCX Upgrade Script v1.1.7"
 echo "========================================"
 echo ""
 
@@ -393,20 +393,32 @@ if [ $NEEDS_SELINUX -eq 1 ] && command -v semodule &> /dev/null; then
     fi
 fi
 
-# Configure SELinux file contexts for /opt/pyircx and /etc/pyircx (allow Apache write access)
+# Configure SELinux file contexts (comprehensive configuration)
 if command -v semanage &> /dev/null && command -v restorecon &> /dev/null; then
     echo ""
     echo -e "${BLUE}Configuring SELinux file contexts...${NC}"
 
-    # Set contexts for database and directories
-    semanage fcontext -a -t httpd_sys_rw_content_t "/opt/pyircx/pyircx\.db" 2>/dev/null || true
+    # /opt/pyircx - Main installation (read-write for web admin API)
     semanage fcontext -a -t httpd_sys_rw_content_t "/opt/pyircx(/.*)?" 2>/dev/null || true
-    semanage fcontext -a -t httpd_sys_rw_content_t "/etc/pyircx(/.*)?" 2>/dev/null || true
-    semanage fcontext -a -t httpd_sys_rw_content_t "/etc/pyircx/pyircx_config\.json" 2>/dev/null || true
 
-    # Apply contexts
+    # /etc/pyircx - Configuration directory (read-write for web admin config editor)
+    semanage fcontext -a -t httpd_sys_rw_content_t "/etc/pyircx(/.*)?" 2>/dev/null || true
+
+    # /etc/pyircx/webchat.conf - SystemD environment file (needs etc_t for systemd)
+    semanage fcontext -a -t etc_t "/etc/pyircx/webchat\.conf" 2>/dev/null || true
+
+    # /var/www/html/webadmin - Web admin panel (read-write for API operations)
+    semanage fcontext -a -t httpd_sys_rw_content_t "/var/www/html/webadmin(/.*)?" 2>/dev/null || true
+
+    # /var/www/html/webchat - WebChat frontend (read-only static content)
+    semanage fcontext -a -t httpd_sys_content_t "/var/www/html/webchat(/.*)?" 2>/dev/null || true
+
+    # Apply all contexts
     restorecon -Rv /opt/pyircx 2>/dev/null || true
     restorecon -Rv /etc/pyircx 2>/dev/null || true
+    [ -d "/var/www/html/webadmin" ] && restorecon -Rv /var/www/html/webadmin 2>/dev/null || true
+    [ -d "/var/www/html/webchat" ] && restorecon -Rv /var/www/html/webchat 2>/dev/null || true
+
     echo -e "${GREEN}✓ SELinux file contexts configured${NC}"
 fi
 
@@ -451,7 +463,7 @@ if [ $NEEDS_APACHE_SETUP -eq 1 ]; then
             echo -e "${GREEN}✓ Set group write permissions on /etc/pyircx${NC}"
 
             # Ensure config file is group writable for web admin MOTD editor
-            chmod 664 /etc/pyircx/pyircx_config.json 2>/dev/null || true
+            chmod 660 /etc/pyircx/pyircx_config.json 2>/dev/null || true
             echo -e "${GREEN}✓ Set group write permissions on config file${NC}"
         fi
 
@@ -508,7 +520,10 @@ if [ $NEEDS_WEBCHAT_UPDATE -eq 1 ] && [ -d "$SCRIPT_DIR/webchat" ]; then
     # Update frontend (HTML)
     if [ -d "/var/www/html/webchat" ]; then
         cp "$SCRIPT_DIR/webchat/index.html" /var/www/html/webchat/
+        cp "$SCRIPT_DIR/webchat/config.js" /var/www/html/webchat/
         cp "$SCRIPT_DIR/webchat/favicon.svg" /var/www/html/webchat/ 2>/dev/null || true
+        chmod 644 /var/www/html/webchat/index.html
+        chmod 644 /var/www/html/webchat/config.js
         echo -e "${GREEN}✓ WebChat frontend updated${NC}"
     fi
 
@@ -538,8 +553,8 @@ chown -R "$SERVICE_USER:$SERVICE_GROUP" "$CONFIG_DIR"
 chmod 775 "$INSTALL_DIR"  # Group needs write for SQLite journal files
 chmod 775 "$CONFIG_DIR"  # Group needs write for web admin config edits
 chmod 750 "$INSTALL_DIR/transcripts" 2>/dev/null || true
-chmod 664 "$INSTALL_DIR/pyircx.db" 2>/dev/null || true
-chmod 664 "$CONFIG_DIR/pyircx_config.json" 2>/dev/null || true  # Config group writable (for web admin)
+chmod 660 "$INSTALL_DIR/pyircx.db" 2>/dev/null || true
+chmod 660 "$CONFIG_DIR/pyircx_config.json" 2>/dev/null || true  # Config group writable (for web admin)
 chmod 755 "$INSTALL_DIR/pyircx.py"
 chmod 755 "$INSTALL_DIR/api.py" 2>/dev/null || true
 chmod 755 "$INSTALL_DIR/linking.py" 2>/dev/null || true
@@ -581,7 +596,7 @@ if [ $SERVICE_WAS_RUNNING -eq 1 ]; then
         echo -e "${GREEN}✓ Service restarted successfully${NC}"
         # Fix database permissions after service creates/accesses it
         sleep 1
-        chmod 664 "$INSTALL_DIR/pyircx.db" 2>/dev/null || true
+        chmod 660 "$INSTALL_DIR/pyircx.db" 2>/dev/null || true
         chmod 775 "$INSTALL_DIR" 2>/dev/null || true
     else
         echo -e "${RED}✗ Service failed to start${NC}"
@@ -637,4 +652,4 @@ echo "  systemctl start pyircx    - Start server"
 echo "  systemctl restart pyircx  - Restart server"
 echo "  journalctl -u pyircx -f   - View logs"
 echo ""
-echo -e "${GREEN}pyIRCX v1.1.6 - All done!${NC}"
+echo -e "${GREEN}pyIRCX v1.1.7 - All done!${NC}"

@@ -227,8 +227,8 @@ set_permissions() {
     chmod 775 "$INSTALL_DIR"  # Group needs write for SQLite journal files
     chmod 775 "$CONFIG_DIR"  # Group needs write for web admin config edits
     chmod 750 "$INSTALL_DIR/transcripts"  # Keep transcripts private
-    chmod 664 "$INSTALL_DIR/pyircx.db" 2>/dev/null || true  # Database group writable
-    chmod 664 "$CONFIG_DIR/pyircx_config.json" 2>/dev/null || true  # Config group writable (for web admin)
+    chmod 660 "$INSTALL_DIR/pyircx.db" 2>/dev/null || true  # Database group writable
+    chmod 660 "$CONFIG_DIR/pyircx_config.json" 2>/dev/null || true  # Config group writable (for web admin)
     chmod 755 "$INSTALL_DIR/pyircx.py"
     chmod 755 "$INSTALL_DIR/api.py" 2>/dev/null || true
     chmod 755 "$INSTALL_DIR/linking.py" 2>/dev/null || true
@@ -367,19 +367,31 @@ install_selinux() {
 
     cd - > /dev/null
 
-    # Configure file contexts for /opt/pyircx and /etc/pyircx (allow Apache write access)
+    # Configure SELinux file contexts (comprehensive configuration)
     if command -v semanage &> /dev/null && command -v restorecon &> /dev/null; then
         echo -e "${YELLOW}Configuring SELinux file contexts...${NC}"
 
-        # Set contexts for database and directories
-        semanage fcontext -a -t httpd_sys_rw_content_t "/opt/pyircx/pyircx\.db" 2>/dev/null || true
+        # /opt/pyircx - Main installation (read-write for web admin API)
         semanage fcontext -a -t httpd_sys_rw_content_t "/opt/pyircx(/.*)?" 2>/dev/null || true
-        semanage fcontext -a -t httpd_sys_rw_content_t "/etc/pyircx(/.*)?" 2>/dev/null || true
-        semanage fcontext -a -t httpd_sys_rw_content_t "/etc/pyircx/pyircx_config\.json" 2>/dev/null || true
 
-        # Apply contexts
+        # /etc/pyircx - Configuration directory (read-write for web admin config editor)
+        semanage fcontext -a -t httpd_sys_rw_content_t "/etc/pyircx(/.*)?" 2>/dev/null || true
+
+        # /etc/pyircx/webchat.conf - SystemD environment file (needs etc_t for systemd)
+        semanage fcontext -a -t etc_t "/etc/pyircx/webchat\.conf" 2>/dev/null || true
+
+        # /var/www/html/webadmin - Web admin panel (read-write for API operations)
+        semanage fcontext -a -t httpd_sys_rw_content_t "/var/www/html/webadmin(/.*)?" 2>/dev/null || true
+
+        # /var/www/html/webchat - WebChat frontend (read-only static content)
+        semanage fcontext -a -t httpd_sys_content_t "/var/www/html/webchat(/.*)?" 2>/dev/null || true
+
+        # Apply all contexts
         restorecon -Rv /opt/pyircx 2>/dev/null || true
         restorecon -Rv /etc/pyircx 2>/dev/null || true
+        [ -d "/var/www/html/webadmin" ] && restorecon -Rv /var/www/html/webadmin 2>/dev/null || true
+        [ -d "/var/www/html/webchat" ] && restorecon -Rv /var/www/html/webchat 2>/dev/null || true
+
         echo -e "${GREEN}✓ SELinux file contexts configured${NC}"
     fi
 
@@ -436,7 +448,7 @@ install_systemd() {
 
     # Fix database permissions after service creates it
     if systemctl is-active --quiet pyircx; then
-        chmod 664 "$INSTALL_DIR/pyircx.db" 2>/dev/null || true
+        chmod 660 "$INSTALL_DIR/pyircx.db" 2>/dev/null || true
         chmod 775 "$INSTALL_DIR" 2>/dev/null || true
     fi
 
@@ -475,8 +487,10 @@ install_webchat() {
 
         # Frontend files go to /var/www/html/webchat
         cp "$SCRIPT_DIR/webchat/index.html" "$WEBCHAT_WEB_DIR/"
+        cp "$SCRIPT_DIR/webchat/config.js" "$WEBCHAT_WEB_DIR/"
         cp "$SCRIPT_DIR/webchat/favicon.svg" "$WEBCHAT_WEB_DIR/" 2>/dev/null || true
         chmod 644 "$WEBCHAT_WEB_DIR/index.html"
+        chmod 644 "$WEBCHAT_WEB_DIR/config.js"
         chmod 644 "$WEBCHAT_WEB_DIR/favicon.svg" 2>/dev/null || true
     else
         echo -e "${RED}WebChat files not found in $SCRIPT_DIR/webchat${NC}"

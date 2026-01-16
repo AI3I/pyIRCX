@@ -90,27 +90,39 @@ await db.execute("SELECT * FROM users WHERE username = ?", (username,))
 python3 cleanup_users.py
 ```
 
-### 2. Cockpit Web Admin
+### 2. Web Administration Panel
 
-**Risk Level: MEDIUM**
+**Risk Level: LOW** (v1.1.6+)
+
+**Security Features (v1.1.6):**
+- ✅ CSRF token protection on all API endpoints
+- ✅ Session-based authentication with IRC staff accounts
+- ✅ Secure cookie handling (HTTP/HTTPS auto-detection)
+- ✅ Stdin password input (no password exposure in process lists)
+- ✅ SELinux context isolation (httpd_sys_rw_content_t)
+- ✅ Group-based permissions (775/664, no world-writable files)
+- ✅ PolicyKit for service control (passwordless with authorization)
+- ✅ Proper file permissions and ownership
 
 **Considerations:**
-- Runs on port 9090 (HTTPS)
-- Requires system authentication (PAM)
-- Uses PolicyKit for privilege escalation
-- API exposes read-only database queries
+- Runs on Apache/nginx (standard HTTP/HTTPS ports)
+- Requires IRC staff account authentication (ADMIN level)
+- Uses polkit for privilege escalation (service control only)
+- API provides full server management capabilities
 
 **Mitigation:**
-- ✅ No passwords exposed in API
-- ✅ Read-only database access
-- ✅ System-level authentication required
-- ✅ HTTPS by default
-- ✅ Optional installation (not required)
+- ✅ CSRF validation prevents cross-site attacks
+- ✅ Session cookies with HttpOnly, SameSite=Strict
+- ✅ No passwords stored in plaintext or process lists
+- ✅ SELinux mandatory access control
+- ✅ Staff-only access (no public registration)
 
 **Recommendation:**
-- Use firewall to restrict port 9090 access
-- Keep Cockpit updated
-- Use strong system passwords
+- Use HTTPS in production (auto-detects and adapts)
+- Use firewall to restrict web admin access to trusted IPs
+- Change default staff passwords immediately
+- Keep Apache/PHP updated
+- Monitor `/var/log/httpd/` for suspicious activity
 
 ### 3. Server Linking Authentication
 

@@ -900,7 +900,7 @@ Type /help for available commands."></textarea>
     <!-- Additional modals (staff, config, etc.) would go here - keeping this concise -->
     <!-- The full version would include all modals from the original code -->
 
-    <script src="admin.js?v=1768258256"></script>
+    <script src="admin.js?v=1768583329"></script>
     <!-- Modal: Edit Configuration -->
     <div id="modal-edit-config" class="modal" style="display: none;">
         <div class="modal-dialog modal-xl">

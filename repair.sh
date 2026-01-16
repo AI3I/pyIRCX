@@ -283,6 +283,14 @@ if [ -d "$INSTALL_DIR/webchat" ]; then
         ((WEBCHAT_ISSUES++))
     fi
 
+    # Check config.js
+    if [ -f "/var/www/html/webchat/config.js" ]; then
+        echo -e "${GREEN}✓${NC} config.js exists"
+    else
+        echo -e "${YELLOW}⚠${NC} config.js missing ${YELLOW}(FIXABLE)${NC}"
+        ((WEBCHAT_ISSUES++))
+    fi
+
     # Check webchat config
     if [ -f "$CONFIG_DIR/webchat.conf" ]; then
         echo -e "${GREEN}✓${NC} webchat.conf exists"
@@ -424,8 +432,8 @@ if [[ ! $REPLY =~ ^[Nn]$ ]]; then
         chmod 775 "$INSTALL_DIR" 2>/dev/null || true  # Group needs write for SQLite journal files
         chmod 775 "$CONFIG_DIR" 2>/dev/null || true  # Group needs write for web admin config edits
         chmod 750 "$INSTALL_DIR/transcripts" 2>/dev/null || true  # Keep transcripts private
-        chmod 664 "$INSTALL_DIR/pyircx.db" 2>/dev/null || true  # Database group writable
-        chmod 664 "$CONFIG_DIR/pyircx_config.json" 2>/dev/null || true  # Config group writable (for web admin)
+        chmod 660 "$INSTALL_DIR/pyircx.db" 2>/dev/null || true  # Database group writable
+        chmod 660 "$CONFIG_DIR/pyircx_config.json" 2>/dev/null || true  # Config group writable (for web admin)
         chmod 755 "$INSTALL_DIR/pyircx.py" 2>/dev/null || true
         chmod 755 "$INSTALL_DIR/api.py" 2>/dev/null || true
         chmod 755 "$INSTALL_DIR/linking.py" 2>/dev/null || true
@@ -454,14 +462,32 @@ if [[ ! $REPLY =~ ^[Nn]$ ]]; then
             fi
         fi
 
-        # Fix SELinux contexts if enabled
+        # Fix SELinux contexts if enabled (comprehensive configuration)
         if command -v getenforce &>/dev/null && [ "$(getenforce)" != "Disabled" ]; then
             if command -v semanage &> /dev/null && command -v restorecon &> /dev/null; then
                 echo -e "${YELLOW}Fixing SELinux contexts...${NC}"
+
+                # /opt/pyircx - Main installation (read-write for web admin API)
                 semanage fcontext -a -t httpd_sys_rw_content_t "/opt/pyircx(/.*)?" 2>/dev/null || true
+
+                # /etc/pyircx - Configuration directory (read-write for web admin config editor)
                 semanage fcontext -a -t httpd_sys_rw_content_t "/etc/pyircx(/.*)?" 2>/dev/null || true
+
+                # /etc/pyircx/webchat.conf - SystemD environment file (needs etc_t for systemd)
+                semanage fcontext -a -t etc_t "/etc/pyircx/webchat\.conf" 2>/dev/null || true
+
+                # /var/www/html/webadmin - Web admin panel (read-write for API operations)
+                semanage fcontext -a -t httpd_sys_rw_content_t "/var/www/html/webadmin(/.*)?" 2>/dev/null || true
+
+                # /var/www/html/webchat - WebChat frontend (read-only static content)
+                semanage fcontext -a -t httpd_sys_content_t "/var/www/html/webchat(/.*)?" 2>/dev/null || true
+
+                # Apply all contexts
                 restorecon -Rv /opt/pyircx 2>/dev/null || true
                 restorecon -Rv /etc/pyircx 2>/dev/null || true
+                [ -d "/var/www/html/webadmin" ] && restorecon -Rv /var/www/html/webadmin 2>/dev/null || true
+                [ -d "/var/www/html/webchat" ] && restorecon -Rv /var/www/html/webchat 2>/dev/null || true
+
                 echo -e "${GREEN}✓ SELinux contexts fixed${NC}"
             fi
         fi

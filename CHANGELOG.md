@@ -5,7 +5,79 @@ All notable changes to pyIRCX will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.1.5] - 2026-01-14
+## [1.1.7] - 2026-01-16
+
+### Added
+- **WebChat Configuration System**: Externalized webchat settings to `config.js`
+  - Default channel, WebSocket URL, performance tuning parameters now configurable
+  - Easy customization without editing HTML
+  - Comprehensive inline documentation of all parameters
+- **SELINUX.md**: Comprehensive SELinux reference documentation
+  - Complete context requirements for all directories
+  - Quick reference table and setup script
+  - Troubleshooting guide with common issues
+- **Merged TESTING.md**: Consolidated all testing documentation
+  - Merged TESTING_v1.1.5.md and TESTING_UPDATES.md
+  - Comprehensive guide covering all 243 tests across 8 suites
+  - Test account setup, CI/CD integration, troubleshooting
+
+### Fixed
+- **MOTD Editor**: Preserves blank lines for proper formatting
+  - Changed from `if line.strip()` to preserve empty lines
+  - MOTD now displays with proper spacing in IRC clients
+- **MOTD Configuration Save**: Fixed "Save Configuration" overwriting MOTD with stale cached version
+  - saveConfigForm() now reloads config from file before saving
+  - Added get-config command to api.py
+  - Added cache-busting version parameter to force browser reload
+- **Hardcoded Defaults**: Removed hardcoded MOTD defaults from code
+  - Removed from api.py and pyircx.py
+  - Added default MOTD to pyircx_config.json template
+  - All defaults now properly in config file
+- **WebChat Default Channel**: Changed from #lobby to #pyIRCX
+- **SELinux Contexts**: Comprehensive configuration across all installation scripts
+  - install.sh, upgrade.sh, repair.sh now handle all pyIRCX directories
+  - webadmin requires httpd_sys_rw_content_t (not httpd_sys_content_t)
+  - webchat.conf requires etc_t context for systemd environment files
+- **Script References**: All bash scripts now properly install and update config.js
+
+### Changed
+- **Documentation Reorganization**: Simplified README.md to reference CHANGELOG.md
+  - Removed duplicate version history from README.md
+  - CHANGELOG.md is now single source of truth for releases
+- **Test Documentation**: Renamed TESTHARNESS_v1.1.5.md to TESTHARNESS.md
+
+### Documentation
+- **CONFIG.md**: Updated pool_size default (5 → 10)
+- **SECURITY.md**: Documented v1.1.6 web admin security features
+- **webadmin/README.md**: Added v1.1.6 security features section
+- **webadmin/INSTALL.md**: Added comprehensive SELinux and permissions setup
+
+## [1.1.6] - 2026-01-16
+
+### Security
+- **CSRF Token Protection**: Comprehensive CSRF token validation across all web admin API endpoints
+- **Secure Session Handling**: Fixed session cookie security to work with both HTTP and HTTPS deployments
+- **Stdin Password Input**: Added `test-staff-login-stdin` API command for secure password handling
+- **SELinux Context Hardening**: Extended httpd_sys_rw_content_t contexts to cover `/etc/pyircx` directory
+
+### Added
+- **HTTP/HTTPS Auto-Detection**: Web admin automatically adapts session security based on protocol
+- **Null-Safe Form Handling**: Configuration editor handles missing form fields gracefully with safe getter/setter functions
+- **PHP-FPM Restart**: Scripts now automatically restart PHP-FPM after adding apache to pyircx group
+
+### Fixed
+- **Web Admin Login**: Fixed "Invalid username or password" error on new installations
+- **CSRF Validation**: Fixed CSRF token validation failures on service control and configuration save operations
+- **Permission Denied**: Fixed permission denied errors when web admin tried to save configuration files
+- **Configuration Save**: Fixed configuration save crashes due to missing nested object properties
+- **Session Cookies**: Fixed session cookies not being set on HTTP-only deployments
+
+### Changed
+- **Database Pool**: Increased default pool_size from 5 to 10 connections for better concurrency
+- **Installation Scripts**: All installation, upgrade, and repair scripts now properly configure web admin permissions (775/664)
+- **Group Permissions**: Web server now uses group permissions instead of requiring world-writable files
+
+## [1.1.5] - 2026-01-15
 
 ### Added
 - **Channel Mode +g (guide-op)**: New channel mode to auto-grant owner to guides
@@ -115,6 +187,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **WebChat Favicon**: Blue SVG favicon with # symbol for IRC theme
 - **Enhanced Debug Logging**: Added traceback logging for client errors in debug mode
 
+## [1.1.3] - 2026-01-14
+
+### Security
+- **Error Handling Specificity**: Replaced all bare `except:` clauses with specific exception types
+  - Improved error handling in 17 locations across codebase
+  - Better exception specificity prevents masking unexpected errors
+  - Examples: Database migrations use `except aiosqlite.OperationalError`, file operations use `except (FileNotFoundError, PermissionError, IOError)`
+- **Server Link Password Security**: Implemented bcrypt authentication for server-to-server links
+  - Server link passwords now use bcrypt hashing instead of plaintext
+  - Backwards compatible with plaintext fallback
+  - Added `utils/hash_link_password.py` utility for generating bcrypt hashes
+- **Configuration Security**: Added config file permission validation on startup
+  - Warns if `/etc/pyircx/pyircx_config.json` is world-readable/writable
+  - Logs security warning with remediation instructions
+
+### Changed
+- **Database Connection Pooling**: Increased default pool size from 5 to 10 connections
+  - Added pool saturation monitoring and warnings
+  - Helps identify when pool size needs adjustment under load
+
 ## [1.1.2] - 2026-01-12
 
 ### Fixed
@@ -150,6 +242,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Configuration should be provided by installation script only
 - **Legacy Channel Persistence**: Removed load_channels(), save_channels(), periodic_save()
   - Channel state now persists via database for registered channels only
+
+## [1.1.1] - 2026-01-12
+
+### Added
+- **Web Admin Channel Mode Control**: SET_CHANNEL_MODE admin command handler
+  - Allows web admin to set channel modes directly
+  - Used by Lock/Unlock buttons in web admin
+  - Applies modes using System user
+- **Web Admin Topic Editor**: SET_CHANNEL_TOPIC admin command handler
+  - Fixes broken topic editing from web admin
+  - Sets channel topic using System user
+- **Register/Unlock Functions**: Added channel registration and unlocking features to web admin
+
+### Fixed
+- **Topic Editing**: Fixed topic editor not working from web admin
+- **Modal Data Loading**: Fixed 3 critical bugs in web admin modal data handling
+- **Button Styling**: Standardized all web admin buttons with emoji icons
+
+### Changed
+- **Test File Naming**: Renamed test_*.py → pyIRCX_test_*.py for consistency
+- **Config Generation**: Added generate_default_config.py utility
 
 ## [1.1.0] - 2026-01-11
 
