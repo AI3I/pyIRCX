@@ -3515,10 +3515,19 @@ class pyIRCXServer:
             return
 
         # Other service aliases - provide help information
-        other_services = ['operserv', 'helpserv', 'infoserv', 'botserv',
-                         'hostserv', 'statserv', 'global', 'alis', 'services']
+        other_services = {
+            'operserv': 'OperServ',
+            'helpserv': 'HelpServ',
+            'infoserv': 'InfoServ',
+            'botserv': 'BotServ',
+            'hostserv': 'HostServ',
+            'statserv': 'StatServ',
+            'global': 'Global',
+            'alis': 'ALIS',
+            'services': 'Services'
+        }
         if target.lower() in other_services:
-            service_name = target.capitalize()
+            service_name = other_services[target.lower()]
             await self._service_reply(service_name, user, f"pyIRCX {service_name} Service")
             await self._service_reply(service_name, user, "This service is currently implemented as an alias.")
             await self._service_reply(service_name, user, "Available services:")
