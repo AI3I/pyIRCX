@@ -130,12 +130,12 @@
         .message .nick { font-weight: 700; margin-right: 6px; cursor: pointer; }
         .message .nick:hover { text-decoration: underline; }
         .message.action { font-style: italic; color: var(--text-secondary); background: var(--bg-secondary); padding: 6px 12px; border-radius: 6px; display: inline-block; }
-        .message.system { color: var(--text-muted); font-family: 'SF Mono', 'Consolas', monospace; font-size: 14px; }
+        .message.system { color: var(--text-muted); font-family: 'SF Mono', 'Consolas', monospace; font-size: 14px; white-space: pre-wrap; }
         .message.error { color: var(--danger); font-family: 'SF Mono', 'Consolas', monospace; font-size: 14px; background: #fef2f2; padding: 6px 12px; border-radius: 6px; border-left: 3px solid var(--danger); }
         .message.notice { color: #7c3aed; background: #f5f3ff; padding: 6px 12px; border-radius: 6px; }
         .message.whisper { color: #0d9488; background: #f0fdfa; padding: 6px 12px; border-radius: 6px; border-left: 3px solid #14b8a6; }
         .message.event { color: var(--text-muted); font-size: 14px; font-style: italic; }
-        .message.motd { color: var(--text-secondary); font-family: 'SF Mono', 'Consolas', monospace; font-size: 14px; }
+        .message.motd { color: var(--text-secondary); font-family: 'SF Mono', 'Consolas', monospace; font-size: 14px; white-space: pre-wrap; }
         .nick-0{color:#dc2626}.nick-1{color:#2563eb}.nick-2{color:#16a34a}.nick-3{color:#9333ea}.nick-4{color:#ea580c}.nick-5{color:#0d9488}.nick-6{color:#475569}.nick-7{color:#db2777}
 
         /* Input Area */
@@ -216,7 +216,7 @@
         </div>
     </div>
     <div class="header">
-        <h1>pyIRCX WebChat</h1>
+        <h1>pyIRCX WebChat <span style="font-size: 12px; opacity: 0.6; font-weight: 400; margin-left: 8px;">v1.2.0</span></h1>
         <div class="header-status">
             <div style="display:flex;align-items:center;gap:5px"><div class="status-dot" id="statusDot"></div><span id="statusText">Disconnected</span></div>
             <span id="currentNick"></span>

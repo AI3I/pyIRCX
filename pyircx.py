@@ -22,9 +22,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
 # Version info - updated with each release
-__version__ = "1.1.9"
+__version__ = "1.2.0"
 __version_label__ = "pyIRCX"
-__created__ = "Fri Jan 16 01:54:04 PM EST 2026"
+__created__ = "Fri Jan 16 03:17:30 PM EST 2026"
 
 import asyncio
 import aiosqlite
@@ -1298,22 +1298,35 @@ class ServiceBotMonitor:
     def check_profanity(self, text):
         """
         Check if text contains profanity.
-        Returns (contains_profanity, matched_word) tuple.
+        Supports both exact words and regex patterns.
+        Returns (contains_profanity, matched_word/pattern) tuple.
         """
         if not CONFIG.get('servicebot', 'profanity_filter', 'enabled', default=True):
             return False, None
 
         words = CONFIG.get('servicebot', 'profanity_filter', 'words', default=[])
+        patterns = CONFIG.get('servicebot', 'profanity_filter', 'patterns', default=[])
         case_sensitive = CONFIG.get('servicebot', 'profanity_filter', 'case_sensitive', default=False)
 
         check_text = text if case_sensitive else text.lower()
 
+        # Check exact words with word boundaries
         for word in words:
             check_word = word if case_sensitive else word.lower()
             # Word boundary matching to avoid false positives
             pattern = r'\b' + re.escape(check_word) + r'\b'
             if re.search(pattern, check_text, re.IGNORECASE if not case_sensitive else 0):
                 return True, word
+
+        # Check regex patterns (more flexible)
+        for pattern_str in patterns:
+            try:
+                flags = 0 if case_sensitive else re.IGNORECASE
+                if re.search(pattern_str, text, flags):
+                    return True, f"pattern:{pattern_str}"
+            except re.error:
+                # Invalid regex pattern - skip it
+                continue
 
         return False, None
 
@@ -1709,7 +1722,7 @@ class Channel:
 # RESPONSE TABLE
 # ==============================================================================
 RESPONSES = {
-    "001": "Welcome to the {network}, {nick}",
+    "001": "Welcome to the {network}, {nick}!",
     "002": "Your host is {servername}, running version {version_label} {version}",
     "003": "This server was created {created_date}",
     "004": "{servername} {version_label} {version} {usermodes} {chanmodes}",
@@ -1717,7 +1730,7 @@ RESPONSES = {
     "219": "{flag} :End of /STATS report",
     "221": "+{modes}",
     "251": "There are {users} users and {invisible} invisible on {server_count} servers",
-    "252": "{ops} :staff and services online",
+    "252": "There are {ops} staff and service(s) online",
     "253": "{unknown} :unknown connection(s)",
     "254": "{channels} :channels formed",
     "255": "I have {users} clients and {server_count} servers",
@@ -1752,7 +1765,7 @@ RESPONSES = {
     "351": "{version} {servername} :{version_label}",
     "352": "{channel} {ident} {host} {servername} {target} {flags} :0 {real}",
     "353": "= {channel} :{names}",
-    "366": "{channel} :End of /NAMES list.",
+    "366": "{channel} :End of /NAMES list",
     "367": "{channel} {mask}",
     "368": "{channel} :End of channel ban list",
     "369": "{target} :End of WHOWAS",
@@ -1765,33 +1778,33 @@ RESPONSES = {
     "381": "You are now an IRC {role}",
     "386": "{staff_login_message}",
     "391": ":Local time is {time}",
-    "401": "{target} :No such nick/channel",
+    "401": "{target} :No such nickname or channel",
     "403": "{target} :No such channel",
-    "404": "{channel} :Cannot send to channel",
+    "404": "{channel} :Cannot send to channel (check channel modes or your permissions)",
     "407": "{target} :Too many recipients",
     "421": "{command} :Unknown command",
-    "432": "{target} :Erroneous nickname",
+    "432": "{target} :Invalid nickname",
     "433": "{target} :Nickname is already in use",
     "441": "{target} {channel} :They aren't on that channel",
     "442": "{target} :You're not on that channel",
     "443": "{target} {channel} :is already on channel",
-    "451": "You have not registered",
-    "461": "{command} :Not enough parameters",
+    "451": "You have not registered (use NICK and USER commands)",
+    "461": "{command} :Not enough parameters. See /HELP {command} for usage.",
     "462": "You may not reregister",
     "468": ":Invalid username",
     "471": "{target} :Cannot join channel (+l)",
     "473": "{target} :Cannot join channel (+i)",
     "474": "{target} :Cannot join channel (+b)",
     "475": "{target} :Cannot join channel (+k)",
-    "481": "Permission Denied - You're not an IRC operator",
-    "482": "{target} :You're not a channel owner or host",
+    "481": "Permission denied: You're not an IRC operator",
+    "482": "{target} :You're not a channel owner or host (+q or +o required)",
     "696": "{target} {mode} :You must specify a parameter for the {mode} mode",
     "710": "{channel} {nick} {host} :has asked for an invite",
-    "711": "{target} :Your KNOCK has been delivered",
-    "712": "{target} :Too many KNOCKs",
+    "711": "{target} :Your knock request has been sent",
+    "712": "{target} :Too many knock requests. Please wait before trying again.",
     "713": "{target} :Channel is open",
     "714": "{target} :You are already on that channel",
-    "716": "{target} :User is in knock mode (+u)",
+    "716": "{target} :You cannot knock on this channel (+u mode)",
     "800": "1 0 * 512 *",
     "804": "Authentication successful",
     "805": "{target} :Access list",
@@ -1810,11 +1823,11 @@ RESPONSES = {
     "824": "{target} :Cannot gag services",
     "825": "{target} :Cannot add services to access deny list",
     # IRCX Rate Limiting (830-839)
-    "830": ":Rate limited - please wait",
-    "831": ":WHO command rate limited",
+    "830": ":You are being rate limited. Please wait before trying again.",
+    "831": ":WHO command rate limited. Please wait before trying again.",
     "832": ":WHISPER rate limited (5 second cooldown)",
-    "833": ":LIST command rate limited",
-    "834": ":Too fast - flood protection triggered",
+    "833": ":LIST command rate limited. Please wait before trying again.",
+    "834": ":Sending too fast. Flood protection triggered. Please slow down.",
     "835": ":Please wait {seconds} seconds before changing nickname",
     # IRCX Channel Restrictions (840-849)
     "840": "{channel} :Cannot send to channel",
@@ -1825,14 +1838,14 @@ RESPONSES = {
     "845": "{channel} :Transcript mode not enabled (+y)",
     "846": "{channel} :{prop} is read-only",
     "847": "{target} :ServiceBot has reached max channels ({max})",
-    "848": ":Only ADMINs and SYSOPs can invite ServiceBots",
+    "848": ":Only admins and sysops can invite ServiceBots",
     # IRCX Access Control (850-859)
     "850": ":Invalid access level - valid: {levels}",
     "851": "{mask} :Mask already in {level} list",
     "852": "{mask} :Mask not found in {level} list",
-    "853": ":Cannot remove owner-added entry",
-    "854": "{target} :ACCESS {level} added - {mask}",
-    "855": "{target} :ACCESS {level} removed - {mask}",
+    "853": ":Cannot remove owner-added entry (you are not the channel owner)",
+    "854": "{target} :ACCESS {level} added: {mask}",
+    "855": "{target} :ACCESS {level} removed: {mask}",
     "856": "{target} :Cleared {count} {level} entries",
     "857": ":Only channel owners can clear access lists",
     "858": ":Cannot delete your own staff account",
@@ -1842,8 +1855,8 @@ RESPONSES = {
     "861": ":Invalid path. Use: section.key (e.g., limits.max_users)",
     "862": ":Invalid level. Use: {levels}",
     "863": ":Invalid username: {error}",
-    "864": ":Invalid password",
-    "865": ":Invalid MFA code",
+    "864": ":Invalid password (minimum 8 characters, must include letters and numbers)",
+    "865": ":Invalid MFA code. Please enter the 6-digit code from your authenticator app.",
     "866": ":Invalid message ID",
     "867": ":Invalid channel name",
     "868": ":Invalid nickname",
@@ -1857,7 +1870,7 @@ RESPONSES = {
     "875": ":Nickname {nick} has been dropped",
     "876": ":You are now identified as {nick}",
     "877": ":Password accepted. MFA is enabled - please verify with: MFA VERIFY <code>",
-    "878": ":MFA enabled. Save this secret: {secret}. Scan QR or enter manually.",
+    "878": ":MFA enabled. Save this secret: {secret}. Scan the QR code or enter manually in your authenticator app.",
     "879": ":MFA has been disabled",
     # IRCX Staff Management (880-889)
     "880": ":Staff account {username} created with level {level}",
@@ -1882,16 +1895,16 @@ RESPONSES = {
     "898": ":Link operation in progress",
     "899": ":Link timeout - operation aborted",
     # IRCX Database/System (900-909)
-    "900": ":Registration failed - please try again later",
+    "900": ":Registration failed. Please try again later. If the problem persists, contact an administrator.",
     "901": ":Identification failed - please try again later",
     "902": ":Drop failed - please try again later",
-    "903": ":Database error - please try again later",
+    "903": ":Database error. Please try again later. If the problem persists, contact an administrator.",
     "904": ":System error - please contact an administrator",
-    "905": ":Operation failed - please try again",
-    "906": ":Channel registration failed",
+    "905": ":Operation failed. Please try again. If the problem persists, contact an administrator.",
+    "906": ":Channel registration failed. The channel may already be registered or you may not be the owner.",
     "907": ":Channel drop failed",
     "908": ":Info lookup failed",
-    "909": ":Memo operation failed",
+    "909": ":Memo operation failed. Please check your parameters and try again.",
     # IRCX Service Messages (910-919)
     "910": ":Commands: {commands}",
     "911": ":Unknown command: {cmd}. Try: {suggestions}",
@@ -1928,14 +1941,14 @@ SERVER_MESSAGES = {
     "ungag_global": "{target} has been globally ungagged (-z)",
 
     # WHO/LIST restrictions
-    "who_requires_staff": "WHO * requires SYSOP or ADMIN privileges. Use a pattern like *nick* instead.",
-    "who_truncated": "WHO results truncated at {limit}",
+    "who_requires_staff": "WHO * requires SYSOP or ADMIN privileges. Try using a pattern like *nick* or *@host* instead",
+    "who_truncated": "WHO results truncated at {limit} entries. Use a more specific pattern for complete results.",
 
     # Message handling
     "message_truncated": "Message truncated to {max} characters",
-    "system_no_messages": "System does not accept messages. Use /HELP for available services.",
-    "mfa_pending": "MFA verification pending. Use: PRIVMSG Registrar :MFA VERIFY <code>",
-    "access_denied": "Access denied{reason}",
+    "system_no_messages": "The System service does not accept direct messages. Use /HELP for available services, or /msg Registrar for help.",
+    "mfa_pending": "MFA verification pending. Send your 6-digit code: /msg Registrar MFA VERIFY <code>",
+    "access_denied": "Access denied: {reason}",
 
     # Transcript
     "transcript_header": "=== Transcript for {channel} ({count} lines) ===",
@@ -1972,7 +1985,7 @@ SERVER_MESSAGES = {
     "messenger_list_item": "  [{id}] From {from} at {time}: {preview}",
     "messenger_read_header": "Memo {id} from {from} at {time}:",
     "messenger_read_body": "  {message}",
-    "messenger_user_offline": "{target} is offline - message queued",
+    "messenger_user_offline": "{target} is offline. Your message has been queued for delivery.",
     "messenger_user_online": "{target} is online",
     "messenger_push_sent": "Message pushed to {count} user(s)",
 
@@ -2658,6 +2671,12 @@ class pyIRCXServer:
             self.servicebots[bot_name] = bot
         logger.info(f"{bot_count} ServiceBots created")
 
+        # Create ServiceBot dispatcher - virtual user that routes to available bots
+        servicebot_dispatcher = self._create_virtual_service('ServiceBot', 'ServiceBot', "ServiceBot Pool Dispatcher")
+        self.channels["#System"].members[servicebot_dispatcher.nickname] = servicebot_dispatcher
+        self.channels["#System"].owners.add(servicebot_dispatcher.nickname)
+        logger.info("ServiceBot dispatcher created")
+
         # Initialize DNSBL and connection security checkers
         global DNSBL_CHECKER, PROXY_DETECTOR, CONNECTION_SCORER
         DNSBL_CHECKER = DNSBLChecker()
@@ -2944,7 +2963,15 @@ class pyIRCXServer:
 
         try:
             while True:
-                line = await reader.readline()
+                # Add timeout to prevent ghost connections from dead clients
+                # Clients should send data (including PING/PONG) regularly
+                client_timeout = CONFIG.get('limits', 'client_timeout', default=300)
+                try:
+                    line = await asyncio.wait_for(reader.readline(), timeout=float(client_timeout))
+                except asyncio.TimeoutError:
+                    logger.info(f"Client timeout (no data for {client_timeout}s): {user.nickname} ({user.ip})")
+                    break
+
                 if not line:
                     break
                 raw = line.decode('utf-8', errors='replace').strip()
@@ -2979,13 +3006,34 @@ class pyIRCXServer:
         if len(parts) > 1:
             params.append(parts[1])
 
+        # Command aliases for convenience
+        COMMAND_ALIASES = {
+            'J': 'JOIN',
+            'P': 'PART',
+            'W': 'WHOIS',
+            'M': 'MSG',
+            'N': 'NICK',
+            'Q': 'QUIT',
+            'T': 'TOPIC',
+            'K': 'KICK',
+            'I': 'INVITE',
+            'L': 'LIST',
+            'WW': 'WHOWAS',
+            'WH': 'WHISPER',
+        }
+
+        # Map alias to full command
+        if cmd in COMMAND_ALIASES:
+            cmd = COMMAND_ALIASES[cmd]
+
         user.last_activity = int(time.time())
         self.stats['commands_processed'] += 1
 
-        # Track individual command usage
-        if cmd not in self.stats['command_usage']:
-            self.stats['command_usage'][cmd] = 0
-        self.stats['command_usage'][cmd] += 1
+        # Track individual command usage (only valid ASCII commands to avoid garbage in stats)
+        if cmd.isascii() and cmd.isalnum():
+            if cmd not in self.stats['command_usage']:
+                self.stats['command_usage'][cmd] = 0
+            self.stats['command_usage'][cmd] += 1
 
         # Flood protection - only apply to message commands (PRIVMSG, NOTICE, WHISPER, BROADCAST)
         # Only services are exempt
@@ -3115,6 +3163,8 @@ class pyIRCXServer:
             await self.handle_config(user, params)
         elif cmd == "STAFF":
             await self.handle_staff(user, params)
+        elif cmd == "PROFANITY":
+            await self.handle_profanity(user, params)
         elif cmd == "CONNECT":
             await self.handle_connect(user, params)
         elif cmd == "SQUIT":
@@ -4533,7 +4583,38 @@ class pyIRCXServer:
             await user.send(f":{self.servername} 443 {user.nickname} {target_nick} {chan_name} :is already on channel")
             return
 
-        # ServiceBot invitation - ADMIN/SYSOP only, not GUIDE
+        # ServiceBot dispatcher - pick available bot from pool
+        if target_nick == "ServiceBot":
+            if not (user.is_admin() or user.is_sysop()):
+                await user.send(self.get_reply("848", user))
+                return
+
+            # Find first available ServiceBot
+            available_bot = None
+            for bot_name in sorted(self.servicebots.keys()):  # Sort to get ServiceBot01, 02, etc. in order
+                bot = self.servicebots[bot_name]
+                max_chans = getattr(bot, 'max_channels', 10)
+                if len(bot.channels) < max_chans:
+                    available_bot = (bot_name, bot)
+                    break
+
+            if not available_bot:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :All ServiceBots are at maximum capacity. Try /INVITE ServiceBotXX #channel directly.")
+                return
+
+            bot_name, bot = available_bot
+            # Auto-join the available bot
+            channel.members[bot_name] = bot
+            bot.channels.add(chan_name)
+            # Services always get +q (owner)
+            channel.owners.add(bot_name)
+            await channel.broadcast(f":{bot.prefix()} JOIN {chan_name}")
+            await channel.broadcast(f":{self.servername} MODE {chan_name} +q {bot_name}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Dispatched {bot_name} to {chan_name}")
+            logger.info(f"ServiceBot dispatcher assigned {bot_name} to {chan_name} via INVITE from {user.nickname}")
+            return
+
+        # ServiceBot invitation - ADMIN/SYSOP only, not GUIDE (specific bot)
         if target_nick in self.servicebots:
             if not (user.is_admin() or user.is_sysop()):
                 await user.send(self.get_reply("848", user))
@@ -4983,27 +5064,32 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :  Server bans: {len(self.server_bans)}")
 
             # Database statistics
+            await user.send(f":{self.servername} NOTICE {user.nickname} :--- Database Statistics ---")
             try:
                 import os
                 import aiosqlite
-                db_path = CONFIG.get('database', 'path')
+                db_path = CONFIG.get('database', 'path', default='pyircx.db')
                 if os.path.exists(db_path):
-                    await user.send(f":{self.servername} NOTICE {user.nickname} :--- Database Statistics ---")
+                    size = os.path.getsize(db_path)
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :  Path: {db_path}")
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :  Size: {size:,} bytes ({size / 1024:.1f} KB)")
                     try:
                         async with aiosqlite.connect(db_path) as db:
-                            async with db.execute("SELECT COUNT(*) FROM nicknames") as cursor:
+                            async with db.execute("SELECT COUNT(*) FROM registered_nicks") as cursor:
                                 row = await cursor.fetchone()
                                 await user.send(f":{self.servername} NOTICE {user.nickname} :  Registered nicks: {row[0]}")
-                            async with db.execute("SELECT COUNT(*) FROM channels") as cursor:
+                            async with db.execute("SELECT COUNT(*) FROM registered_channels") as cursor:
                                 row = await cursor.fetchone()
                                 await user.send(f":{self.servername} NOTICE {user.nickname} :  Registered channels: {row[0]}")
-                            async with db.execute("SELECT COUNT(*) FROM messages") as cursor:
+                            async with db.execute("SELECT COUNT(*) FROM mailbox") as cursor:
                                 row = await cursor.fetchone()
                                 await user.send(f":{self.servername} NOTICE {user.nickname} :  Offline messages: {row[0]}")
-                    except Exception:
-                        pass
-            except Exception:
-                pass
+                    except Exception as e:
+                        await user.send(f":{self.servername} NOTICE {user.nickname} :  Database query error: {str(e)}")
+                else:
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :  Database file not found: {db_path}")
+            except Exception as e:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  Error: {str(e)}")
 
             # Configuration summary
             await user.send(f":{self.servername} NOTICE {user.nickname} :--- Configuration ---")
@@ -5072,27 +5158,42 @@ class pyIRCXServer:
 
         if flag == 'a':
             # Online ADMINs
-            await user.send(f":{self.servername} NOTICE {user.nickname} :--- Online ADMINs ---")
-            for u in self.users.values():
-                if u.has_mode('a') and not u.is_virtual:
-                    await user.send(f":{self.servername} NOTICE {user.nickname} :{u.nickname}!{u.username}@{u.host}")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :--- End ---")
+            admins = [u for u in self.users.values() if u.has_mode('a') and not u.is_virtual]
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== Online ADMINs ({len(admins)}) ===")
+            if not admins:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :No ADMINs currently online")
+            else:
+                for u in admins:
+                    idle_time = int(time.time() - u.last_activity)
+                    idle_str = f"{idle_time // 60}m" if idle_time > 60 else f"{idle_time}s"
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :  {u.nickname}!{u.username}@{u.host} (idle: {idle_str})")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== End of ADMINs ===")
 
         elif flag == 'o':
             # Online SYSOPs
-            await user.send(f":{self.servername} NOTICE {user.nickname} :--- Online SYSOPs ---")
-            for u in self.users.values():
-                if u.has_mode('o') and not u.has_mode('a') and not u.is_virtual:
-                    await user.send(f":{self.servername} NOTICE {user.nickname} :{u.nickname}!{u.username}@{u.host}")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :--- End ---")
+            sysops = [u for u in self.users.values() if u.has_mode('o') and not u.has_mode('a') and not u.is_virtual]
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== Online SYSOPs ({len(sysops)}) ===")
+            if not sysops:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :No SYSOPs currently online")
+            else:
+                for u in sysops:
+                    idle_time = int(time.time() - u.last_activity)
+                    idle_str = f"{idle_time // 60}m" if idle_time > 60 else f"{idle_time}s"
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :  {u.nickname}!{u.username}@{u.host} (idle: {idle_str})")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== End of SYSOPs ===")
 
         elif flag == 'g':
             # Online GUIDEs
-            await user.send(f":{self.servername} NOTICE {user.nickname} :--- Online GUIDEs ---")
-            for u in self.users.values():
-                if u.has_mode('g') and not u.is_virtual:
-                    await user.send(f":{self.servername} NOTICE {user.nickname} :{u.nickname}!{u.username}@{u.host}")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :--- End ---")
+            guides = [u for u in self.users.values() if u.has_mode('g') and not u.is_virtual]
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== Online GUIDEs ({len(guides)}) ===")
+            if not guides:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :No GUIDEs currently online")
+            else:
+                for u in guides:
+                    idle_time = int(time.time() - u.last_activity)
+                    idle_str = f"{idle_time // 60}m" if idle_time > 60 else f"{idle_time}s"
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :  {u.nickname}!{u.username}@{u.host} (idle: {idle_str})")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== End of GUIDEs ===")
 
         elif flag == 'i':
             # Invisible users count
@@ -5147,11 +5248,11 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :--- Configuration ---")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Server: {CONFIG.get('server', 'name')}")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Network: {CONFIG.get('server', 'network')}")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Version: {CONFIG.get('server', 'version')}")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Max Users: {CONFIG.get('limits', 'max_users')}")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :User Modes: {CONFIG.get('modes', 'user')}")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Chan Modes: {CONFIG.get('modes', 'channel')}")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Flood Protection: {CONFIG.get('security', 'enable_flood_protection')}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Version: {__version__} ({__version_label__})")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Max Users: {CONFIG.get('limits', 'max_users', default=1000)}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :User Modes: {CONFIG.get('modes', 'user', default='agiorsxz')}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Chan Modes: {CONFIG.get('modes', 'channel', default='adefghijklmnprstuwxyz')}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Flood Protection: {CONFIG.get('security', 'enable_flood_protection', default=True)}")
             await user.send(f":{self.servername} NOTICE {user.nickname} :--- End ---")
 
         elif flag == 'd':
@@ -5170,17 +5271,17 @@ class pyIRCXServer:
                     try:
                         async with aiosqlite.connect(db_path) as db:
                             # Registered nicknames
-                            async with db.execute("SELECT COUNT(*) FROM nicknames") as cursor:
+                            async with db.execute("SELECT COUNT(*) FROM registered_nicks") as cursor:
                                 row = await cursor.fetchone()
                                 await user.send(f":{self.servername} NOTICE {user.nickname} :Registered nicks: {row[0]}")
 
                             # Registered channels
-                            async with db.execute("SELECT COUNT(*) FROM channels") as cursor:
+                            async with db.execute("SELECT COUNT(*) FROM registered_channels") as cursor:
                                 row = await cursor.fetchone()
                                 await user.send(f":{self.servername} NOTICE {user.nickname} :Registered channels: {row[0]}")
 
                             # Offline messages
-                            async with db.execute("SELECT COUNT(*) FROM messages") as cursor:
+                            async with db.execute("SELECT COUNT(*) FROM mailbox") as cursor:
                                 row = await cursor.fetchone()
                                 await user.send(f":{self.servername} NOTICE {user.nickname} :Offline messages: {row[0]}")
 
@@ -5646,7 +5747,7 @@ class pyIRCXServer:
                     async with db.execute("SELECT username, level FROM users ORDER BY level, username") as cursor:
                         rows = await cursor.fetchall()
 
-                await user.send(f":{self.servername} NOTICE {user.nickname} :--- Staff Accounts ---")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :=== Staff Accounts ({len(rows)}) ===")
                 if not rows:
                     await user.send(f":{self.servername} NOTICE {user.nickname} :No staff accounts configured")
                 else:
@@ -5656,13 +5757,29 @@ class pyIRCXServer:
                     guides = [r[0] for r in rows if r[1] == 'GUIDE']
 
                     if admins:
-                        await user.send(f":{self.servername} NOTICE {user.nickname} :ADMIN: {', '.join(admins)}")
+                        await user.send(f":{self.servername} NOTICE {user.nickname} :")
+                        await user.send(f":{self.servername} NOTICE {user.nickname} :ADMIN ({len(admins)}):")
+                        for admin in admins:
+                            # Check if online
+                            online_user = next((u for u in self.users.values() if u.username.lstrip('~') == admin and u.has_mode('a')), None)
+                            status = " [ONLINE]" if online_user else ""
+                            await user.send(f":{self.servername} NOTICE {user.nickname} :  {admin}{status}")
                     if sysops:
-                        await user.send(f":{self.servername} NOTICE {user.nickname} :SYSOP: {', '.join(sysops)}")
+                        await user.send(f":{self.servername} NOTICE {user.nickname} :")
+                        await user.send(f":{self.servername} NOTICE {user.nickname} :SYSOP ({len(sysops)}):")
+                        for sysop in sysops:
+                            online_user = next((u for u in self.users.values() if u.username.lstrip('~') == sysop and u.has_mode('o')), None)
+                            status = " [ONLINE]" if online_user else ""
+                            await user.send(f":{self.servername} NOTICE {user.nickname} :  {sysop}{status}")
                     if guides:
-                        await user.send(f":{self.servername} NOTICE {user.nickname} :GUIDE: {', '.join(guides)}")
+                        await user.send(f":{self.servername} NOTICE {user.nickname} :")
+                        await user.send(f":{self.servername} NOTICE {user.nickname} :GUIDE ({len(guides)}):")
+                        for guide in guides:
+                            online_user = next((u for u in self.users.values() if u.username.lstrip('~') == guide and u.has_mode('g')), None)
+                            status = " [ONLINE]" if online_user else ""
+                            await user.send(f":{self.servername} NOTICE {user.nickname} :  {guide}{status}")
 
-                await user.send(f":{self.servername} NOTICE {user.nickname} :--- End ({len(rows)} accounts) ---")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :=== End of Staff Accounts ===")
             except Exception as e:
                 logger.error(f"STAFF LIST error: {e}")
                 await user.send(self.get_reply("884", user))
@@ -5710,7 +5827,12 @@ class pyIRCXServer:
                                     (username, password_hash, level))
                     await db.commit()
 
-                await user.send(f":{self.servername} NOTICE {user.nickname} :Staff account '{username}' created with level {level}")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :=== SUCCESS ===")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Staff account created:")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  Username: {username}")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  Level: {level}")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  Created by: {user.nickname}")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :The account will be active on next login.")
                 logger.info(f"STAFF: {user.nickname} added staff account '{username}' ({level})")
                 await self.log_staff(user.nickname, "STAFF ADD", username, f"Level: {level}")
 
@@ -5748,7 +5870,11 @@ class pyIRCXServer:
                     await db.execute("DELETE FROM users WHERE username = ?", (username,))
                     await db.commit()
 
-                await user.send(f":{self.servername} NOTICE {user.nickname} :Staff account '{username}' ({old_level}) deleted")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :=== SUCCESS ===")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Staff account deleted:")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  Username: {username}")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  Level: {old_level}")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  Deleted by: {user.nickname}")
                 logger.info(f"STAFF: {user.nickname} deleted staff account '{username}' ({old_level})")
                 await self.log_staff(user.nickname, "STAFF DEL", username, f"Was: {old_level}")
 
@@ -5790,7 +5916,13 @@ class pyIRCXServer:
                     await db.execute("UPDATE users SET level = ? WHERE username = ?", (new_level, username))
                     await db.commit()
 
-                await user.send(f":{self.servername} NOTICE {user.nickname} :Staff account '{username}' changed from {old_level} to {new_level}")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :=== SUCCESS ===")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Staff level changed:")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  Username: {username}")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  Previous: {old_level}")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  New level: {new_level}")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  Changed by: {user.nickname}")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Change will take effect on next login.")
                 logger.info(f"STAFF: {user.nickname} changed '{username}' level from {old_level} to {new_level}")
                 await self.log_staff(user.nickname, "STAFF SET", username, f"{old_level} -> {new_level}")
 
@@ -5831,7 +5963,14 @@ class pyIRCXServer:
                                     (password_hash, username))
                     await db.commit()
 
-                await user.send(f":{self.servername} NOTICE {user.nickname} :Password changed for staff account '{username}'")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :=== SUCCESS ===")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Staff password changed:")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  Username: {username}")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  Changed by: {user.nickname}")
+                if is_self:
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :Your password has been updated.")
+                else:
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :Password updated. User must login with new credentials.")
                 logger.info(f"STAFF: {user.nickname} changed password for '{username}'")
                 if not is_self:
                     await self.log_staff(user.nickname, "STAFF PASS", username, "Password changed")
@@ -5843,6 +5982,164 @@ class pyIRCXServer:
         else:
             await user.send(f":{self.servername} NOTICE {user.nickname} :Unknown subcommand: {subcmd}")
             await user.send(f":{self.servername} NOTICE {user.nickname} :STAFF subcommands: LIST, ADD, DEL, SET, PASS")
+
+    async def handle_profanity(self, user, params):
+        """
+        PROFANITY command - Manage profanity filter (ADMIN only).
+
+        Subcommands:
+          PROFANITY LIST                    - Show current words and patterns
+          PROFANITY ADD WORD <word>         - Add a word to filter
+          PROFANITY ADD PATTERN <pattern>   - Add a regex pattern
+          PROFANITY DEL WORD <word>         - Remove a word
+          PROFANITY DEL PATTERN <pattern>   - Remove a pattern
+          PROFANITY ENABLE                  - Enable profanity filter
+          PROFANITY DISABLE                 - Disable profanity filter
+          PROFANITY TEST <text>             - Test if text would be caught
+        """
+        if not user.is_admin():
+            await user.send(f":{self.servername} NOTICE {user.nickname} :PROFANITY command requires ADMIN privileges")
+            return
+
+        if not params:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :PROFANITY subcommands: LIST, ADD, DEL, ENABLE, DISABLE, TEST")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Examples: PROFANITY LIST, PROFANITY ADD WORD badword, PROFANITY ADD PATTERN (bad|terrible)")
+            return
+
+        subcmd = params[0].upper()
+
+        if subcmd == "LIST":
+            # Show current filter configuration
+            enabled = CONFIG.get('servicebot', 'profanity_filter', 'enabled', default=False)
+            words = CONFIG.get('servicebot', 'profanity_filter', 'words', default=[])
+            patterns = CONFIG.get('servicebot', 'profanity_filter', 'patterns', default=[])
+            case_sensitive = CONFIG.get('servicebot', 'profanity_filter', 'case_sensitive', default=False)
+            action = CONFIG.get('servicebot', 'profanity_filter', 'action', default='warn')
+
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== Profanity Filter Configuration ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Status: {'Enabled' if enabled else 'Disabled'}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Action: {action} (warn/gag/kick)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Case Sensitive: {'Yes' if case_sensitive else 'No'}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :")
+
+            if words:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Filtered Words ({len(words)}):")
+                for word in words:
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :  - {word}")
+            else:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Filtered Words: (none)")
+
+            await user.send(f":{self.servername} NOTICE {user.nickname} :")
+
+            if patterns:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Regex Patterns ({len(patterns)}):")
+                for pattern in patterns:
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :  - {pattern}")
+            else:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Regex Patterns: (none)")
+
+        elif subcmd == "ADD":
+            if len(params) < 3:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: PROFANITY ADD WORD <word> or PROFANITY ADD PATTERN <pattern>")
+                return
+
+            add_type = params[1].upper()
+            value = ' '.join(params[2:])
+
+            if add_type == "WORD":
+                current_words = CONFIG.get('servicebot', 'profanity_filter', 'words', default=[])
+                if value in current_words:
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :Word '{value}' is already in the filter")
+                    return
+                current_words.append(value)
+                CONFIG.set('servicebot', 'profanity_filter', 'words', current_words)
+                await CONFIG.save()
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Added word '{value}' to profanity filter")
+                logger.info(f"PROFANITY: {user.nickname} added word '{value}'")
+
+            elif add_type == "PATTERN":
+                # Validate regex
+                try:
+                    re.compile(value)
+                except re.error as e:
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :Invalid regex pattern: {e}")
+                    return
+
+                current_patterns = CONFIG.get('servicebot', 'profanity_filter', 'patterns', default=[])
+                if value in current_patterns:
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :Pattern '{value}' is already in the filter")
+                    return
+                current_patterns.append(value)
+                CONFIG.set('servicebot', 'profanity_filter', 'patterns', current_patterns)
+                await CONFIG.save()
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Added pattern '{value}' to profanity filter")
+                logger.info(f"PROFANITY: {user.nickname} added pattern '{value}'")
+
+            else:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Unknown type '{add_type}'. Use WORD or PATTERN")
+
+        elif subcmd == "DEL":
+            if len(params) < 3:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: PROFANITY DEL WORD <word> or PROFANITY DEL PATTERN <pattern>")
+                return
+
+            del_type = params[1].upper()
+            value = ' '.join(params[2:])
+
+            if del_type == "WORD":
+                current_words = CONFIG.get('servicebot', 'profanity_filter', 'words', default=[])
+                if value not in current_words:
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :Word '{value}' is not in the filter")
+                    return
+                current_words.remove(value)
+                CONFIG.set('servicebot', 'profanity_filter', 'words', current_words)
+                await CONFIG.save()
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Removed word '{value}' from profanity filter")
+                logger.info(f"PROFANITY: {user.nickname} removed word '{value}'")
+
+            elif del_type == "PATTERN":
+                current_patterns = CONFIG.get('servicebot', 'profanity_filter', 'patterns', default=[])
+                if value not in current_patterns:
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :Pattern '{value}' is not in the filter")
+                    return
+                current_patterns.remove(value)
+                CONFIG.set('servicebot', 'profanity_filter', 'patterns', current_patterns)
+                await CONFIG.save()
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Removed pattern '{value}' from profanity filter")
+                logger.info(f"PROFANITY: {user.nickname} removed pattern '{value}'")
+
+            else:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Unknown type '{del_type}'. Use WORD or PATTERN")
+
+        elif subcmd == "ENABLE":
+            CONFIG.set('servicebot', 'profanity_filter', 'enabled', True)
+            await CONFIG.save()
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Profanity filter enabled")
+            logger.info(f"PROFANITY: {user.nickname} enabled profanity filter")
+
+        elif subcmd == "DISABLE":
+            CONFIG.set('servicebot', 'profanity_filter', 'enabled', False)
+            await CONFIG.save()
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Profanity filter disabled")
+            logger.info(f"PROFANITY: {user.nickname} disabled profanity filter")
+
+        elif subcmd == "TEST":
+            if len(params) < 2:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: PROFANITY TEST <text>")
+                return
+
+            test_text = ' '.join(params[1:])
+            monitor = ServiceBotMonitor()
+            has_profanity, matched = monitor.check_profanity(test_text)
+
+            if has_profanity:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :TEST RESULT: Would be caught - matched: {matched}")
+            else:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :TEST RESULT: Would NOT be caught")
+
+        else:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Unknown subcommand: {subcmd}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Available: LIST, ADD, DEL, ENABLE, DISABLE, TEST")
 
     async def handle_help(self, user, params):
         """Handle HELP command - show command help"""
@@ -5867,15 +6164,16 @@ class pyIRCXServer:
         elif topic == "COMMANDS":
             await user.send(f":{self.servername} NOTICE {user.nickname} :=== All Commands ===")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Basic: NICK USER PASS QUIT PING PONG")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Messages: PRIVMSG NOTICE")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Channels: JOIN PART KICK INVITE TOPIC NAMES LIST")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Registration: REGISTER IDENTIFY UNREGISTER MFA (see /HELP REGISTER)")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Info: WHO WHOIS WHOWAS ISON USERHOST LUSERS MOTD INFO TIME STATS LINKS")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Modes: MODE (see /HELP USERMODES and /HELP CHANMODES)")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :IRCX: IRCX ACCESS PROP EVENT WHISPER DATA BROADCAST")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Utility: AWAY SILENCE HELP")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Messages: PRIVMSG MSG NOTICE")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Channels: JOIN PART KICK INVITE TOPIC NAMES LIST MODE")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Registration: REGISTER IDENTIFY UNREGISTER CHGPASS MFA (see /HELP REGISTER)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :User Info: WHO WHOIS WHOWAS ISON USERHOST AWAY")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Server Info: LUSERS MOTD INFO TIME VERSION STATS LINKS ADMIN")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :IRCX: IRCX ACCESS PROP EVENT WHISPER KNOCK TRANSCRIPT DATA")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Utility: SILENCE WATCH HELP")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Type /HELP <command> for details (e.g., /HELP WHOWAS)")
             if is_staff:
-                await user.send(f":{self.servername} NOTICE {user.nickname} :Staff: KILL STAFF CONFIG (see /HELP STAFF)")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Staff: KILL STAFF CONFIG PROFANITY (see /HELP STAFF)")
 
         elif topic == "CHANNEL":
             await user.send(f":{self.servername} NOTICE {user.nickname} :=== Channel Commands ===")
@@ -5923,37 +6221,47 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :+x - IRCX mode enabled")
             await user.send(f":{self.servername} NOTICE {user.nickname} :+r - Registered nickname (auto-set)")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Staff modes (auto-set):")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :+a - Admin (highest privileges)")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :+o - Sysop (operator)")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :+g - Guide (helper)")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :+s - Service (bots)")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :+z - Gagged (cannot send messages)")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Use: /MODE yournick +i (to set invisible)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  +a - ADMIN (administrator, highest privileges)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  +o - SYSOP (system operator)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  +g - GUIDE (helper/moderator)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Other modes:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  +s - SERVICE (server bots)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  +z - GAGGED (cannot send messages)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Example: /MODE yournick +i (to set invisible)")
 
         elif topic == "CHANMODES":
             await user.send(f":{self.servername} NOTICE {user.nickname} :=== Channel Modes ===")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Standard modes:")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :+i - Invite only (must be invited)")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :+m - Moderated (only voiced+ can speak)")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :+n - No external messages")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :+p - Private (hidden from WHOIS)")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :+s - Secret (hidden from LIST)")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :+t - Topic restricted (only hosts can change)")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :+k <key> - Channel password required")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :+l <limit> - User limit")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :IRCX modes:")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :+a - Auth-only (registered users only)")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :+d - Clone-enabled (allows cloning)")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :+e - Is-clone (this is a clone)")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :+f - Strip formatting codes")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :+g - Guide-op (Guides get host)")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :+h - Hidden (no JOIN/PART shown)")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :+j - No invitations allowed")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :+r - Registered channel")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :+u - Auditorium (only hosts see users)")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :+v - No avatar/profile data")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :+w - No whispers allowed")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :+y - Transcript logging enabled")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Standard IRC Modes:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  +i - Invite-only: Users must be explicitly invited to join")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  +m - Moderated: Only users with voice (+) or higher can speak")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  +n - No external: Only channel members can send messages")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  +p - Private: Channel hidden from /WHOIS (but shown in /LIST)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  +s - Secret: Channel hidden from /LIST and /WHOIS")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  +t - Topic protection: Only channel hosts can change the topic")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  +k <key> - Key: Password required to join")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  +l <limit> - Limit: Maximum number of users allowed")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :IRCX Extended Modes:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  +a - Auth-only: Only registered and identified users can join")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  +d - Clone-enabled: Allows users to create channel clones")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  +e - Is-clone: Marks this channel as a clone of another")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  +f - Strip-formatting: Remove formatting codes from messages")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  +g - Guide-op: Server GUIDEs automatically get host (@) status")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  +h - Hidden: JOIN/PART/QUIT messages are not shown")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  +j - No-invitations: INVITE command is disabled for this channel")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  +r - Registered: Channel is registered (auto-set)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  +u - Knock-mode: KNOCK requests allowed on invite-only channel")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  +w - No-whispers: WHISPER command disabled in this channel")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  +x - Auditorium: Only hosts see the full user list")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  +y - Transcript: Channel messages are logged to server")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  +z - Locked: Channel requires auth and is registered (+a +r auto-set)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /MODE #channel +im - Set invite-only and moderated")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /MODE #channel +k secretpass - Set channel password")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /MODE #channel +l 100 - Set user limit to 100")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /MODE #channel -s+p - Remove secret, add private")
 
         elif topic == "SERVICES":
             await user.send(f":{self.servername} NOTICE {user.nickname} :=== Services ===")
@@ -5974,28 +6282,499 @@ class pyIRCXServer:
 
         elif topic == "STAFF" and is_staff:
             await user.send(f":{self.servername} NOTICE {user.nickname} :=== Staff Commands ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Staff Levels:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  ADMIN - Administrator (highest privileges, +a mode)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  SYSOP - System Operator (operator privileges, +o mode)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  GUIDE - Helper/Moderator (helper privileges, +g mode)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :")
             await user.send(f":{self.servername} NOTICE {user.nickname} :KILL Commands:")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  KILL nick [reason] - Disconnect a user")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  KILL #channel [reason] - Destroy channel and kick all users")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  KILL pattern [reason] - Kill users by IP/hostmask (e.g., 192.168.1.*)")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :STAFF Commands:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :STAFF Management:")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  STAFF LIST - List all staff accounts")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  STAFF ADD user level - Add staff account")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  STAFF ADD user level - Add staff account (ADMIN/SYSOP/GUIDE)")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  STAFF DEL user - Remove staff account")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  STAFF SET user level - Change staff level")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  STAFF PASS user password - Change staff password")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Staff levels: ADMIN, SYSOP, GUIDE")
             if user.is_admin():
-                await user.send(f":{self.servername} NOTICE {user.nickname} :ADMIN Commands:")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :ADMIN-only Commands:")
                 await user.send(f":{self.servername} NOTICE {user.nickname} :  CONFIG GET key - View config value")
                 await user.send(f":{self.servername} NOTICE {user.nickname} :  CONFIG SET key value - Update config")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  PROFANITY - Manage profanity filter (see /HELP PROFANITY)")
                 await user.send(f":{self.servername} NOTICE {user.nickname} :  BROADCAST message - Send to all users")
 
+        # Individual command help
+        elif topic in ["JOIN", "J"]:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== JOIN Command ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /JOIN <#channel> [key]")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Join a channel. If the channel doesn't exist, it will be created.")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /JOIN #lobby - Join the lobby channel")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /JOIN #private secretpass - Join with password")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /JOIN #chat,#help - Join multiple channels")
+
+        elif topic in ["PART", "LEAVE"]:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== PART Command ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /PART <#channel> [reason]")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Leave a channel you're currently in.")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /PART #lobby - Leave the lobby")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /PART #chat Goodbye! - Leave with a message")
+
+        elif topic in ["MODE", "UMODE", "CMODE"]:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== MODE Command ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /MODE <target> [+/-modes] [parameters]")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Set or view modes on yourself or a channel.")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :User mode examples:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /MODE {user.nickname} - View your current modes")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /MODE {user.nickname} +i - Set yourself invisible")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /MODE {user.nickname} -i - Remove invisible mode")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Channel mode examples:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /MODE #channel - View channel modes")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /MODE #channel +m - Set moderated")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /MODE #channel +o alice - Give operator to alice")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /MODE #channel +k password - Set channel key")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :See: /HELP USERMODES and /HELP CHANMODES")
+
+        elif topic in ["TOPIC"]:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== TOPIC Command ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /TOPIC <#channel> [new topic]")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :View or change the topic of a channel.")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /TOPIC #lobby - View current topic")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /TOPIC #lobby Welcome to the lobby! - Set new topic")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Note: On +t channels, only hosts can change the topic")
+
+        elif topic in ["KICK"]:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== KICK Command ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /KICK <#channel> <nickname> [reason]")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Remove a user from a channel (requires host/owner).")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /KICK #lobby spammer - Kick user")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /KICK #lobby alice Flooding - Kick with reason")
+
+        elif topic in ["INVITE"]:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== INVITE Command ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /INVITE <nickname> <#channel>")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Invite a user to join a channel.")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /INVITE alice #lobby - Invite alice to #lobby")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Note: Required for +i (invite-only) channels")
+
+        elif topic in ["WHOIS", "WHO"]:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== WHOIS/WHO Commands ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :WHOIS Usage: /WHOIS <nickname>")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Get detailed information about a user")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Example: /WHOIS alice")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :WHO Usage: /WHO <pattern>")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  List users matching a pattern")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Examples:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :    /WHO #lobby - List users in #lobby")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :    /WHO *alice* - Find users with 'alice' in nick")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :    /WHO *@*.com - Find users by hostname")
+
+        elif topic in ["ACCESS"]:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== ACCESS Command (IRCX) ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Manage channel access control lists (channel-level) or server access (staff).")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Channel-level ACCESS:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Usage: /ACCESS <#channel> <action> [level] [mask] [reason]")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Actions: LIST, ADD, DEL, CLEAR")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Levels: OWNER, HOST, VOICE, GRANT, DENY")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Examples:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :    /ACCESS #lobby LIST - View all entries")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :    /ACCESS #lobby ADD HOST alice!*@* Trusted - Give host")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :    /ACCESS #lobby ADD DENY *!*@spammer.com Banned")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :    /ACCESS #lobby DEL DENY *!*@spammer.com")
+            if is_staff:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Server-level ACCESS (Staff):")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  Usage: /ACCESS $ <action> [level] [mask] [reason]  (local server)")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :         /ACCESS * <action> [level] [mask] [reason]  (global network)")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  Control server-wide access restrictions")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  Scope: $ = local server only, * = all linked servers")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  Levels: GRANT (allow), DENY (ban)")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  Examples:")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :    /ACCESS $ LIST - View local server access list")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :    /ACCESS $ ADD DENY *!*@badhost.com Local ban")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :    /ACCESS * ADD DENY *!*@spammer.net Network-wide ban")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :    /ACCESS $ DEL DENY *!*@badhost.com")
+
+        elif topic in ["PROP", "PROPERTY", "PROPERTIES"]:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== PROP Command (IRCX) ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /PROP <#channel> [property] [value]")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :View or set extended channel properties.")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /PROP #lobby - List all properties")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /PROP #lobby OWNERKEY mypassword - Set owner key")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /PROP #lobby TOPIC Welcome! - Set topic via PROP")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /PROP #lobby LAG 0 - Set lag property")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Common properties: OWNERKEY, HOSTKEY, TOPIC, LAG, ONJOIN, ONPART")
+
+        elif topic in ["WHISPER", "NOTICE"]:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== WHISPER Command (IRCX) ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /WHISPER <#channel> <nickname> <message>")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Send a private message to someone in a channel.")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Only the target user sees the message.")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /WHISPER #lobby alice Hey, check your messages")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Note: Won't work on channels with +w (no whispers) mode")
+
+        elif topic in ["REGISTER", "IDENTIFY", "UNREGISTER"]:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== Registration Commands ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :REGISTER - Claim your nickname")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Usage: /REGISTER <account> <email|*> <password>")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Example: /REGISTER myaccount me@example.com mypassword")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Example: /REGISTER myaccount * mypassword (no email)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :IDENTIFY - Log into your registered nickname")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Usage: /IDENTIFY <account> <password>")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Example: /IDENTIFY myaccount mypassword")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :UNREGISTER - Delete your registration")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Usage: /UNREGISTER <account>")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Alternative: /MSG Registrar or /MSG NickServ")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :See also: /HELP MFA")
+
+        elif topic in ["MFA", "2FA", "TOTP"]:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== MFA (Two-Factor Authentication) ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Add extra security to your account with authenticator apps.")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :MFA ENABLE - Enable two-factor authentication")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Usage: /MFA ENABLE")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  You'll receive a QR code to scan with your authenticator app")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  (Google Authenticator, Authy, etc.)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :MFA VERIFY - Complete login with MFA code")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Usage: /MFA VERIFY <6-digit-code>")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Example: /MFA VERIFY 123456")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :MFA DISABLE - Turn off MFA")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Usage: /MFA DISABLE <6-digit-code>")
+
+        elif topic in ["LIST", "LISTX"]:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== LIST Command ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /LIST [pattern]")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :List all channels on the network.")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /LIST - Show all channels")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /LIST *help* - Find channels with 'help' in name")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /LIST #lobby - Show specific channel")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Note: Secret (+s) channels are hidden unless you're in them")
+
+        elif topic in ["PRIVMSG", "MSG", "MESSAGE"]:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== PRIVMSG Command ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /MSG <target> <message>")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Send a message to a user or channel.")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /MSG alice Hello! - Send private message to alice")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /MSG #lobby Hello everyone! - Send to channel")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /MSG Registrar HELP - Talk to a service")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /MSG NickServ IDENTIFY password - Alternative syntax")
+
+        elif topic in ["AWAY", "BACK"]:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== AWAY Command ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /AWAY [message]")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Mark yourself as away or return.")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /AWAY - Mark as away (no message)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /AWAY Gone for lunch - Set away with message")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /AWAY - Return from away (toggle)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :When away, people will see your message when they WHOIS you")
+
+        elif topic in ["KILL"] and is_staff:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== KILL Command (ADMIN/SYSOP only) ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /KILL <target> [reason]")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Disconnect users or destroy channels. Requires ADMIN or SYSOP.")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /KILL alice Spamming - Disconnect user")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /KILL #badchannel - Destroy channel and kick all users")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /KILL 192.168.1.* Network abuse - Kill by IP pattern")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Use with caution!")
+
+        elif topic in ["WHOWAS"]:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== WHOWAS Command ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /WHOWAS <nickname> [count]")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Show information about a user who has disconnected.")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /WHOWAS alice - Show last known info for alice")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /WHOWAS bob 5 - Show up to 5 history entries for bob")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Note: History is limited and may expire after a period of time")
+
+        elif topic in ["NAMES"]:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== NAMES Command ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /NAMES [#channel]")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :List all users in a channel with their status.")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /NAMES #lobby - List all users in #lobby")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /NAMES - List users in all visible channels")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Prefixes: . = owner, @ = host, + = voice")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Note: Only shows channels you have access to")
+
+        elif topic in ["KNOCK"]:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== KNOCK Command (IRCX) ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /KNOCK <#channel> [message]")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Request an invitation to an invite-only channel.")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /KNOCK #private - Request access")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /KNOCK #vip I'd like to join - Request with message")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Note: Channel hosts will be notified of your request")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Rate limited to prevent abuse")
+
+        elif topic in ["EVENT"]:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== EVENT Command (IRCX) ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /EVENT <#channel> <message>")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Send an event message to all users in a channel.")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /EVENT #lobby Welcome to our chat!")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /EVENT #game Round 5 starting in 30 seconds")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Note: Requires host or owner status in the channel")
+
+        elif topic in ["TRANSCRIPT"]:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== TRANSCRIPT Command (IRCX) ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /TRANSCRIPT <#channel> <ON|OFF>")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Enable or disable transcript logging for a channel.")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /TRANSCRIPT #lobby ON - Enable logging")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /TRANSCRIPT #lobby OFF - Disable logging")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Note: Requires owner status. Sets +y mode on channel")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Logs are stored server-side for moderation purposes")
+
+        elif topic in ["STATS"]:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== STATS Command ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /STATS [query]")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Display server statistics and information.")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /STATS - Show general server statistics")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /STATS u - Show server uptime")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Common queries: u (uptime), c (connections), m (commands)")
+            if is_staff:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Note: Staff (ADMIN/SYSOP/GUIDE) can view detailed stats")
+
+        elif topic in ["PROFANITY"] and user.is_admin():
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== PROFANITY Command (ADMIN only) ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Manage ServiceBot profanity filter in real-time.")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Commands:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /PROFANITY LIST - View current configuration")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /PROFANITY ADD WORD <word> - Add word to filter")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /PROFANITY ADD PATTERN <regex> - Add regex pattern")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /PROFANITY DEL WORD <word> - Remove word")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /PROFANITY DEL PATTERN <regex> - Remove pattern")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /PROFANITY ENABLE - Enable filter")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /PROFANITY DISABLE - Disable filter")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /PROFANITY TEST <text> - Test if text matches")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /PROFANITY ADD PATTERN (spam|viagra) - Block variations")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /PROFANITY TEST Check this message - Test before adding")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Changes persist to config file automatically")
+
+        elif topic in ["CONFIG"] and user.is_admin():
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== CONFIG Command (ADMIN only) ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /CONFIG <GET|SET> <key> [value]")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :View or modify server configuration at runtime.")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /CONFIG GET server.motd - View MOTD setting")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /CONFIG SET server.max_users 1000 - Update max users")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Note: Changes persist to config file. Use with caution.")
+
+        elif topic in ["INFO"]:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== INFO Command ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /INFO")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Display detailed server information including:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  - Server version and software")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  - Supported protocols (IRC, IRCX)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  - Special features and capabilities")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  - Contact information")
+
+        elif topic in ["LUSERS"]:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== LUSERS Command ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /LUSERS")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Display user and channel statistics including:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  - Total users connected")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  - Number of staff and services")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  - Total channels")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  - Peak user counts")
+
+        elif topic in ["ISON"]:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== ISON Command ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /ISON <nickname> [nickname2] [...]")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Check if one or more users are currently online.")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /ISON alice - Check if alice is online")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /ISON alice bob charlie - Check multiple users")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Returns only the nicknames that are currently online")
+
+        elif topic in ["USERHOST"]:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== USERHOST Command ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /USERHOST <nickname> [nickname2] [...]")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Get user@host information for connected users.")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /USERHOST alice - Get alice's user@host")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /USERHOST alice bob - Check multiple users (max 5)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Shows away status and operator status")
+
+        elif topic in ["SILENCE"]:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== SILENCE Command ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /SILENCE [+/-mask]")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Block or unblock messages from specific users.")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /SILENCE - List your silence list")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /SILENCE +bob!*@* - Block all messages from bob")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /SILENCE -*!*@spammer.com - Block all from host")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /SILENCE -bob!*@* - Unblock bob")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Note: Silenced users can't send you private messages")
+
+        elif topic in ["WATCH"]:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== WATCH Command ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /WATCH [+/-nickname]")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Get notified when users come online or go offline.")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /WATCH - View your watch list")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /WATCH +alice - Watch for alice")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /WATCH -alice - Stop watching alice")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :You'll receive notifications when watched users connect/disconnect")
+
+        elif topic in ["TIME"]:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== TIME Command ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /TIME")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Display the current server time and timezone.")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Useful for coordinating events across timezones")
+
+        elif topic in ["VERSION"]:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== VERSION Command ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /VERSION")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Display the server software version and information.")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Shows: pyIRCX version, creation date, and build info")
+
+        elif topic in ["NICK", "NICKNAME"]:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== NICK Command ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /NICK <new_nickname>")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Change your nickname.")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /NICK alice - Change your nick to alice")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Rules: 1-30 characters, letters/numbers/_ - only")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Note: Cannot start with a number or special character")
+
+        elif topic in ["QUIT", "EXIT", "BYE"]:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== QUIT Command ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /QUIT [message]")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Disconnect from the server.")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /QUIT - Disconnect with default message")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /QUIT Goodbye everyone! - Disconnect with custom message")
+
+        elif topic in ["ADMIN"]:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== ADMIN Command ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /ADMIN")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Display administrative contact information for the server.")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Shows: Server location, organization, and admin contacts")
+
+        elif topic in ["LINKS"]:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== LINKS Command ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /LINKS")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Display list of linked servers (for networks with multiple servers).")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Shows: Server names, relationships, and connection info")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Note: Single-server networks will show only one entry")
+
+        elif topic in ["CHGPASS", "CHANGEPASS"]:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== CHGPASS Command ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /CHGPASS <old_password> <new_password>")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Change your account password.")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Example:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /CHGPASS oldpass newpass - Change password")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Alternative: /MSG Registrar SET PASSWORD <old> <new>")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Note: Must be identified to your account first")
+
+        elif topic in ["MOTD"]:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== MOTD Command ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /MOTD")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Display the server's Message of the Day.")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Shows welcome message, server rules, and important announcements.")
+
+        elif topic in ["MEMO"]:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== MEMO Command ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Send and receive offline messages directly (alternative to /MSG Messenger).")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /MEMO SEND <nick> <message> - Send memo to user")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /MEMO LIST - List pending memos")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /MEMO READ [id] - Read memo(s)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /MEMO DEL <id|ALL> - Delete memo(s)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Example:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /MEMO SEND alice Don't forget the meeting tomorrow!")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /MEMO LIST - See all pending memos")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /MEMO READ 1 - Read memo #1")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /MEMO DEL ALL - Delete all memos")
+
+        elif topic in ["ALIASES", "ALIAS", "SHORTCUTS"]:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== Command Aliases ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Shortcut commands for faster typing:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /J  <channel>        - JOIN a channel")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /P  <channel>        - PART (leave) a channel")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /W  <nick>           - WHOIS user information")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /M  <nick> <message> - MSG (send private message)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /N  <nickname>       - NICK (change nickname)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /Q  [message]        - QUIT (disconnect)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /T  <channel> [text] - TOPIC (view/set topic)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /K  <channel> <nick> - KICK user from channel")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /I  <nick> <channel> - INVITE user to channel")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /L  [filter]         - LIST channels")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /WW <nick>           - WHOWAS (past user info)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /WH <channel> <msg>  - WHISPER (private channel message)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /J #lobby           - Same as /JOIN #lobby")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /W alice            - Same as /WHOIS alice")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /M bob Hello!       - Same as /MSG bob Hello!")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Note: All aliases are case-insensitive and work identically to full commands.")
+
+        elif topic in ["GAG", "UNGAG"] and is_staff:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== GAG/UNGAG Commands (Staff) ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Prevent or restore a user's ability to send messages.")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /GAG <nick> - Global gag (sets user mode +z)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /GAG <#channel> <nick> - Channel-specific gag")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /UNGAG <nick> - Remove global gag")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /UNGAG <#channel> <nick> - Remove channel gag")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Requirements:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  - Global gag: Staff only (ADMIN/SYSOP/GUIDE)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  - Channel gag: Channel host/owner or staff")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /GAG spammer - Globally prevent spammer from talking")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /GAG #lobby troublemaker - Gag only in #lobby")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /UNGAG spammer - Restore global ability to talk")
+
+        elif topic in ["CREATE"]:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== CREATE Command ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /CREATE <#channel> [key]")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Alias for /JOIN - Creates a new channel or joins existing one.")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :See /HELP JOIN for full details.")
+
+        elif topic in ["CONNECT", "SQUIT"] and user.is_admin():
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== CONNECT/SQUIT Commands (ADMIN only) ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Server linking commands for network administration.")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /CONNECT <server> <port> [remote_server] - Link to remote server")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /SQUIT <server> [reason] - Disconnect server from network")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Note: Requires ADMIN privileges and proper server configuration")
+
         else:
+            # Try fuzzy matching for suggestions
+            suggestions = self._get_help_suggestions(topic)
             await user.send(f":{self.servername} NOTICE {user.nickname} :No help available for: {topic}")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Available topics: COMMANDS CHANNEL REGISTER IRCX USERMODES CHANMODES SERVICES")
+            if suggestions:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Did you mean: {', '.join(suggestions)}?")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Available topics: COMMANDS CHANNEL REGISTER IRCX USERMODES CHANMODES SERVICES ALIASES")
             if is_staff:
                 await user.send(f":{self.servername} NOTICE {user.nickname} :Staff topic: STAFF")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Try /HELP <command> for specific commands (e.g., /HELP JOIN)")
 
     async def handle_info(self, user):
         """Handle INFO command - return server information (RFC 2812)"""
@@ -7331,6 +8110,40 @@ class pyIRCXServer:
     # SERVICE HANDLERS (Registrar, Messenger, NewsFlash)
     # ==========================================================================
 
+    def _get_help_suggestions(self, topic):
+        """Suggest similar help topics for typos using fuzzy matching"""
+        import difflib
+
+        # All valid help topics and commands
+        valid_topics = [
+            # Main topics
+            "COMMANDS", "CHANNEL", "REGISTER", "IRCX", "USERMODES", "CHANMODES", "SERVICES", "STAFF",
+            # Basic commands
+            "JOIN", "PART", "MODE", "TOPIC", "KICK", "INVITE", "QUIT", "EXIT", "BYE", "NICK", "NICKNAME", "CREATE",
+            # User information
+            "WHOIS", "WHO", "WHOWAS", "NAMES", "ISON", "USERHOST", "AWAY",
+            # Channel and IRCX
+            "ACCESS", "PROP", "PROPERTY", "WHISPER", "KNOCK", "EVENT", "TRANSCRIPT",
+            # Messaging
+            "MSG", "PRIVMSG", "MESSAGE", "NOTICE", "MEMO",
+            # Registration and security
+            "IDENTIFY", "UNREGISTER", "MFA", "2FA", "TOTP", "CHGPASS", "CHANGEPASS",
+            # Channel listing
+            "LIST", "LISTX",
+            # User management
+            "SILENCE", "WATCH",
+            # Server info
+            "INFO", "LUSERS", "STATS", "TIME", "VERSION", "ADMIN", "LINKS", "MOTD",
+            # Command shortcuts
+            "ALIASES", "ALIAS", "SHORTCUTS",
+            # Staff commands
+            "KILL", "PROFANITY", "CONFIG", "GAG", "UNGAG", "CONNECT", "SQUIT"
+        ]
+
+        # Get close matches (case-insensitive)
+        matches = difflib.get_close_matches(topic.upper(), valid_topics, n=3, cutoff=0.6)
+        return matches
+
     async def _service_reply(self, service_name, user, message):
         """Send a reply from a service to a user"""
         await user.send(f":{service_name}!{service_name}@{self.servername} NOTICE {user.nickname} :{message}")
@@ -7352,23 +8165,39 @@ class pyIRCXServer:
 
         if cmd == "HELP":
             await self._service_reply("Registrar", user, "=== Registrar Service Help ===")
+            await self._service_reply("Registrar", user, "")
             await self._service_reply("Registrar", user, "Nickname Registration:")
             await self._service_reply("Registrar", user, "  REGISTER <password> [email] - Register your current nickname")
+            await self._service_reply("Registrar", user, "    Example: REGISTER mypassword me@example.com")
+            await self._service_reply("Registrar", user, "    Example: REGISTER mypassword (without email)")
             await self._service_reply("Registrar", user, "  IDENTIFY <password> - Log into your registered nickname")
+            await self._service_reply("Registrar", user, "    Example: IDENTIFY mypassword")
             await self._service_reply("Registrar", user, "  DROP - Delete your nickname registration")
             await self._service_reply("Registrar", user, "  INFO [nickname] - View registration info")
+            await self._service_reply("Registrar", user, "    Example: INFO alice")
+            await self._service_reply("Registrar", user, "")
             await self._service_reply("Registrar", user, "Channel Registration:")
-            await self._service_reply("Registrar", user, "  CHANNEL REGISTER <#channel> - Register a channel")
+            await self._service_reply("Registrar", user, "  CHANNEL REGISTER <#channel> - Register a channel you own")
+            await self._service_reply("Registrar", user, "    Example: CHANNEL REGISTER #mychannel")
             await self._service_reply("Registrar", user, "  CHANNEL DROP <#channel> - Unregister a channel")
-            await self._service_reply("Registrar", user, "  CHANNEL INFO <#channel> - View channel info")
+            await self._service_reply("Registrar", user, "  CHANNEL INFO <#channel> - View channel registration info")
+            await self._service_reply("Registrar", user, "    Example: CHANNEL INFO #lobby")
+            await self._service_reply("Registrar", user, "")
             await self._service_reply("Registrar", user, "Account Settings:")
             await self._service_reply("Registrar", user, "  SET PASSWORD <newpass> - Change your password")
-            await self._service_reply("Registrar", user, "  SET EMAIL <email> - Change your email")
+            await self._service_reply("Registrar", user, "    Example: SET PASSWORD mynewpassword")
+            await self._service_reply("Registrar", user, "  SET EMAIL <email> - Change your email address")
+            await self._service_reply("Registrar", user, "    Example: SET EMAIL newemail@example.com")
+            await self._service_reply("Registrar", user, "")
             await self._service_reply("Registrar", user, "Two-Factor Authentication:")
-            await self._service_reply("Registrar", user, "  MFA ENABLE - Enable two-factor authentication")
-            await self._service_reply("Registrar", user, "  MFA VERIFY <code> - Complete MFA login")
+            await self._service_reply("Registrar", user, "  MFA ENABLE - Enable 2FA (you'll receive a QR code)")
+            await self._service_reply("Registrar", user, "  MFA VERIFY <code> - Complete MFA login with 6-digit code")
+            await self._service_reply("Registrar", user, "    Example: MFA VERIFY 123456")
             await self._service_reply("Registrar", user, "  MFA DISABLE <code> - Disable two-factor authentication")
-            await self._service_reply("Registrar", user, "Alternative: Use direct commands REGISTER, IDENTIFY, UNREGISTER, MFA")
+            await self._service_reply("Registrar", user, "    Example: MFA DISABLE 123456")
+            await self._service_reply("Registrar", user, "")
+            await self._service_reply("Registrar", user, "Alternative: Use direct commands /REGISTER, /IDENTIFY, /UNREGISTER, /MFA")
+            await self._service_reply("Registrar", user, "For direct help: /HELP REGISTER or /HELP MFA")
 
         elif cmd == "REGISTER":
             # REGISTER <password> [email] -> REGISTER <nick> {*|email} <password>
@@ -7908,14 +8737,24 @@ class pyIRCXServer:
         cmd = parts[0].upper()
 
         if cmd in ["HELP", "COMMANDS"]:
-            await self._service_reply("Messenger", user, "Messenger - Offline Message Service")
+            await self._service_reply("Messenger", user, "=== Messenger - Offline Message Service ===")
+            await self._service_reply("Messenger", user, "")
+            await self._service_reply("Messenger", user, "Send and receive messages when users are offline.")
+            await self._service_reply("Messenger", user, "")
             await self._service_reply("Messenger", user, "Commands:")
-            await self._service_reply("Messenger", user, "  SEND <nick> <message> - Send a message to an offline user")
-            await self._service_reply("Messenger", user, "  READ - Read your offline messages")
-            await self._service_reply("Messenger", user, "  DELETE <id> - Delete a specific message")
-            await self._service_reply("Messenger", user, "  COUNT - Show count of unread messages")
+            await self._service_reply("Messenger", user, "  SEND <nick> <message> - Send a message to a user")
+            await self._service_reply("Messenger", user, "    Example: SEND alice Don't forget the meeting tomorrow!")
+            await self._service_reply("Messenger", user, "    If the user is offline, they'll receive it when they return")
+            await self._service_reply("Messenger", user, "  READ - Read all your offline messages")
+            await self._service_reply("Messenger", user, "    Shows sender, timestamp, and message content")
+            await self._service_reply("Messenger", user, "  DELETE <id> - Delete a specific message by ID")
+            await self._service_reply("Messenger", user, "    Example: DELETE 5")
+            await self._service_reply("Messenger", user, "  COUNT - Show how many unread messages you have")
             if user.is_admin():
-                await self._service_reply("Messenger", user, "  PUSH <message> - (ADMIN) Send message to all users")
+                await self._service_reply("Messenger", user, "  PUSH <message> - (ADMIN only) Send to all online users")
+                await self._service_reply("Messenger", user, "    Example: PUSH Server maintenance in 5 minutes")
+            await self._service_reply("Messenger", user, "")
+            await self._service_reply("Messenger", user, "Tip: Messages are delivered automatically when the user logs in")
 
         elif cmd == "SEND":
             if len(parts) < 3:
@@ -8093,14 +8932,23 @@ class pyIRCXServer:
         is_staff = user.is_staff()
 
         if cmd in ["HELP", "COMMANDS"]:
-            await self._service_reply("NewsFlash", user, "NewsFlash - Network News Service")
+            await self._service_reply("NewsFlash", user, "=== NewsFlash - Network News Service ===")
+            await self._service_reply("NewsFlash", user, "")
+            await self._service_reply("NewsFlash", user, "Network-wide announcements and updates.")
+            await self._service_reply("NewsFlash", user, "")
             await self._service_reply("NewsFlash", user, "Commands:")
             await self._service_reply("NewsFlash", user, "  LIST - View all active news messages")
+            await self._service_reply("NewsFlash", user, "    Shows message ID, timestamp, and content")
             if is_staff:
-                await self._service_reply("NewsFlash", user, "  ADD <message> - (STAFF) Add a news message")
-                await self._service_reply("NewsFlash", user, "  DEL <id> - (STAFF) Delete a news message")
+                await self._service_reply("NewsFlash", user, "  ADD <message> - (STAFF only) Post a network announcement")
+                await self._service_reply("NewsFlash", user, "    Example: ADD Server upgrade scheduled for Saturday 3am EST")
+                await self._service_reply("NewsFlash", user, "  DEL <id> - (STAFF only) Remove a news message")
+                await self._service_reply("NewsFlash", user, "    Example: DEL 7")
             if user.is_admin():
-                await self._service_reply("NewsFlash", user, "  PUSH <message> - (ADMIN) Send immediate notice to all users")
+                await self._service_reply("NewsFlash", user, "  PUSH <message> - (ADMIN only) Send immediate notice to all online users")
+                await self._service_reply("NewsFlash", user, "    Example: PUSH Emergency maintenance starting now!")
+            await self._service_reply("NewsFlash", user, "")
+            await self._service_reply("NewsFlash", user, "Tip: News messages persist until deleted, PUSH is immediate")
 
         elif cmd == "LIST":
             await self._newsflash_list(user)
@@ -8828,6 +9676,9 @@ class pyIRCXServer:
             try:
                 user.writer.close()
                 await user.writer.wait_closed()
+            except (ConnectionResetError, BrokenPipeError, OSError):
+                # Normal disconnect - client closed connection
+                pass
             except Exception as e:
                 if self.debug_mode:
                     logger.error(f"Close error: {e}")

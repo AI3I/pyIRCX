@@ -472,15 +472,15 @@ console.log("=== admin.js LOADING ===");
                 $('#access-list').innerHTML = `<div class="alert alert-danger">${escapeHtml(data.error)}</div>`;
                 return;
             }
-            
+
             // Filter out expired rules
             const activeRules = data.filter(r => !r.expired);
-            
+
             if (activeRules.length === 0) {
                 $('#access-list').innerHTML = '<div class="empty-state"><div class="empty-state-icon">🛡️</div><div class="empty-state-text">No Access Rules</div><div class="empty-state-subtext">Add rules to control server access</div></div>';
                 return;
             }
-            
+
             let html = '<table class="table table-striped table-bordered">';
             html += '<thead><tr><th>Type</th><th>Pattern</th><th>Reason</th><th>Set By</th><th>Set At</th><th>Actions</th></tr></thead><tbody>';
             activeRules.forEach(r => {
@@ -511,6 +511,31 @@ console.log("=== admin.js LOADING ===");
                     }
                 });
             });
+        });
+
+        // Also update the reserved nicknames reference
+        updateReservedNicknamesReference();
+    }
+
+    function updateReservedNicknamesReference() {
+        // Load config to get actual ServiceBot count
+        callAPI('get-config').then(config => {
+            const serviceBotCount = config?.services?.servicebot_count || 10;
+            const serviceBotElement = $('#reserved-servicebot-range');
+
+            if (serviceBotElement) {
+                if (serviceBotCount === 1) {
+                    serviceBotElement.innerHTML = '<li><strong>ServiceBot</strong> - Primary service bot</li>';
+                } else {
+                    serviceBotElement.innerHTML = `
+                        <li><strong>ServiceBot</strong> - Primary service bot</li>
+                        <li><strong>ServiceBot01</strong> through <strong>ServiceBot${String(serviceBotCount).padStart(2, '0')}</strong></li>
+                        <li>Pattern: <code>ServiceBot*</code></li>
+                    `;
+                }
+            }
+        }).catch(err => {
+            console.error('Failed to load config for reserved nicknames reference:', err);
         });
     }
 
@@ -2020,6 +2045,11 @@ console.log("=== admin.js LOADING ===");
                 $$('.config-tab-content').forEach(c => c.classList.remove('active'));
                 this.classList.add('active');
                 $('#config-tab-' + tabName).classList.add('active');
+
+                // Auto-load MOTD when MOTD tab is clicked
+                if (tabName === 'motd') {
+                    setTimeout(() => loadMotd(), 100);
+                }
             });
         });
 
@@ -2069,6 +2099,7 @@ console.log("=== admin.js LOADING ===");
             setVal('#cfg-network-addr', config.network?.listen_addr || '');
             setVal('#cfg-network-ports', (config.network?.listen_ports || []).join(','));
             setCheck('#cfg-network-ipv6', config.network?.enable_ipv6 || false);
+            setVal('#cfg-network-addr-ipv6', config.network?.listen_addr_ipv6 || '');
             setCheck('#cfg-network-resolve', config.network?.resolve_hostnames || false);
 
             // Database settings
@@ -2079,6 +2110,7 @@ console.log("=== admin.js LOADING ===");
             setVal('#cfg-limits-max-users', config.limits?.max_users || 1000);
             setVal('#cfg-limits-msg-length', config.limits?.msg_length || 512);
             setVal('#cfg-limits-nick-cooldown', config.limits?.nick_change_cooldown || 60);
+            setVal('#cfg-limits-client-timeout', config.limits?.client_timeout || 300);
             setVal('#cfg-limits-max-nick', config.limits?.max_nick_length || 30);
             setVal('#cfg-limits-max-user', config.limits?.max_user_length || 30);
             setVal('#cfg-limits-max-channel', config.limits?.max_channel_length || 50);
@@ -2197,6 +2229,7 @@ console.log("=== admin.js LOADING ===");
         newConfig.network.listen_addr = getVal('#cfg-network-addr');
         newConfig.network.listen_ports = getVal('#cfg-network-ports', '').split(',').map(p => parseInt(p.trim())).filter(p => !isNaN(p));
         newConfig.network.enable_ipv6 = getCheck('#cfg-network-ipv6');
+        newConfig.network.listen_addr_ipv6 = getVal('#cfg-network-addr-ipv6') || null;
         newConfig.network.resolve_hostnames = getCheck('#cfg-network-resolve');
 
         // Database settings
@@ -2207,6 +2240,7 @@ console.log("=== admin.js LOADING ===");
         newConfig.limits.max_users = parseInt(getVal('#cfg-limits-max-users'));
         newConfig.limits.msg_length = parseInt(getVal('#cfg-limits-msg-length'));
         newConfig.limits.nick_change_cooldown = parseInt(getVal('#cfg-limits-nick-cooldown'));
+        newConfig.limits.client_timeout = parseInt(getVal('#cfg-limits-client-timeout'));
         newConfig.limits.max_nick_length = parseInt(getVal('#cfg-limits-max-nick'));
         newConfig.limits.max_user_length = parseInt(getVal('#cfg-limits-max-user'));
         newConfig.limits.max_channel_length = parseInt(getVal('#cfg-limits-max-channel'));
@@ -2316,9 +2350,9 @@ console.log("=== admin.js LOADING ===");
 
     window.saveMotd = async function() {
         const motdEditor = $('#motd-editor');
-        const motdText = motdEditor.value.trim();
+        const motdText = motdEditor.value;  // DO NOT trim - preserve exact whitespace
 
-        if (!motdText) {
+        if (!motdText || motdText.trim() === '') {
             if (!confirm('Set an empty MOTD? This will use the default MOTD.')) {
                 return;
             }
@@ -2334,21 +2368,6 @@ console.log("=== admin.js LOADING ===");
             showToast('Success', 'MOTD saved successfully! Reload the service for changes to take effect.', 'success');
         } catch (err) {
             showToast('Error', 'Failed to save MOTD: ' + err.message, 'error');
-        }
-    };
-
-    // Load MOTD when config page is shown
-    const originalShowPage = window.showPage;
-    window.showPage = function(page) {
-        originalShowPage(page);
-        if (page === 'config') {
-            // Load MOTD if MOTD tab becomes active
-            const motdTab = document.querySelector('[data-tab="motd"]');
-            if (motdTab) {
-                motdTab.addEventListener('click', () => {
-                    setTimeout(() => loadMotd(), 100);
-                }, { once: true });
-            }
         }
     };
 

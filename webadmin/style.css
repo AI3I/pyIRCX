@@ -628,10 +628,28 @@ body {
     font-size: 14px;
 }
 
+/* Compact number inputs for small values */
+.form-control[type="number"] {
+    width: 150px;
+    max-width: 100%;
+}
+
 .form-control:focus {
     outline: none;
     border-color: #007bff;
     box-shadow: 0 0 0 2px rgba(0,123,255,0.1);
+}
+
+/* Two-column layout for related fields */
+.form-row {
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+}
+
+.form-row .form-group {
+    flex: 1;
+    min-width: 250px;
 }
 
 /* Stats Grid Layout */

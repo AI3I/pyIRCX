@@ -4,7 +4,7 @@
 
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.1.9-brightgreen.svg)](#)
+[![Version](https://img.shields.io/badge/version-1.2.0-brightgreen.svg)](#)
 [![Tests](https://img.shields.io/badge/tests-243%20passing-brightgreen.svg)](#testing)
 
 ---
@@ -23,13 +23,13 @@ If you remember the days of **Microsoft Comic Chat**, chat rooms with real nicks
 
 > **Active Development:** pyIRCX is under active development with frequent updates, enhancements, and bug fixes. New features, security improvements, and performance optimizations are released regularly. See [CHANGELOG.md](CHANGELOG.md) for detailed release notes and version history.
 
-**Current Version:** 1.1.9
+**Current Version:** 1.2.0
 
 **Latest Releases:**
+- **v1.2.0** (January 16, 2026) - User experience polish: Enhanced help system, command aliases, improved message quality, STATS/STAFF formatting, configurable client timeout, comprehensive webadmin tooltips
 - **v1.1.9** (January 16, 2026) - Traditional IRC service aliases (NickServ/ChanServ/MemoServ)
 - **v1.1.8** (January 16, 2026) - Comprehensive documentation reorganization, Apache/httpd multi-distro setup
 - **v1.1.7** (January 16, 2026) - WebChat configuration system, SELinux hardening, MOTD editor fixes
-- **v1.1.6** (January 16, 2026) - Web admin security & permissions (CSRF protection, SELinux contexts)
 
 For complete version history, see [CHANGELOG.md](CHANGELOG.md)
 
@@ -734,7 +734,7 @@ GNU General Public License v3.0 — See [LICENSE](LICENSE) for details.
 <p align="center">
   <i>Bringing back the chat rooms of yesterday, with the technology of today.</i>
   <br><br>
-  <b>pyIRCX 1.1.6</b> — The production-ready IRCX server for distributed networks
+  <b>pyIRCX 1.2.0</b> — The production-ready IRCX server for distributed networks
   <br><br>
   ⭐ <b>Star this project on GitHub if you find it useful!</b> ⭐
 </p>

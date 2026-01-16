@@ -88,6 +88,9 @@ $csrf_token = $_SESSION['csrf_token'];
                     <span class="nav-icon">🚪</span>
                     <span class="nav-label">Logout</span>
                 </a>
+                <div style="padding: 15px; text-align: center; font-size: 11px; opacity: 0.6; margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.1);">
+                    pyIRCX v1.2.0
+                </div>
             </nav>
         </aside>
 
@@ -285,6 +288,75 @@ $csrf_token = $_SESSION['csrf_token'];
                     </div>
                     <div class="card-body">
                         <div id="access-list">Loading...</div>
+
+                        <!-- Reserved Nicknames Reference -->
+                        <div style="margin-top: 30px; padding-top: 20px; border-top: 2px solid #e0e0e0;">
+                            <h4 style="color: #444; margin-bottom: 15px;">📋 Reserved Nicknames & Usernames</h4>
+                            <p style="color: #666; margin-bottom: 15px;">
+                                The following nicknames and patterns are internally reserved by the system and cannot be registered or used by regular users.
+                                Some are actively used by virtual services, while others are reserved for future implementation.
+                            </p>
+
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
+                                <!-- Active Virtual Service Users -->
+                                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 4px solid #007bff;">
+                                    <h5 style="color: #007bff; margin-bottom: 10px;">🤖 Active Virtual Services</h5>
+                                    <p style="font-size: 13px; color: #666; margin-bottom: 10px;">Currently in use by the server:</p>
+                                    <ul style="margin: 0; padding-left: 20px; color: #555; font-size: 14px;">
+                                        <li><strong>System</strong> - Server system messages</li>
+                                        <li><strong>Registrar</strong> - Nickname/channel registration</li>
+                                        <li><strong>Messenger</strong> - Offline message delivery</li>
+                                        <li><strong>NewsFlash</strong> - Server announcements</li>
+                                    </ul>
+                                </div>
+
+                                <!-- ServiceBot Pool -->
+                                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 4px solid #28a745;">
+                                    <h5 style="color: #28a745; margin-bottom: 10px;">🛡️ ServiceBot Pool</h5>
+                                    <p style="font-size: 13px; color: #666; margin-bottom: 10px;">Channel monitoring and moderation:</p>
+                                    <ul id="reserved-servicebot-range" style="margin: 0; padding-left: 20px; color: #555; font-size: 14px;">
+                                        <li><strong>ServiceBot</strong> - Primary service bot</li>
+                                        <li><strong>ServiceBot01</strong> through <strong>ServiceBot10</strong></li>
+                                        <li>Pattern: <code>ServiceBot*</code></li>
+                                    </ul>
+                                </div>
+
+                                <!-- Reserved IRC Services (Unused) -->
+                                <div style="background: #fff8e1; padding: 15px; border-radius: 8px; border-left: 4px solid #ff9800;">
+                                    <h5 style="color: #e65100; margin-bottom: 10px;">🔒 Reserved IRC Services</h5>
+                                    <p style="font-size: 13px; color: #666; margin-bottom: 10px;">Traditional IRC service names (reserved but unused):</p>
+                                    <ul style="margin: 0; padding-left: 20px; color: #555; font-size: 14px; column-count: 2; column-gap: 10px;">
+                                        <li><strong>NickServ</strong></li>
+                                        <li><strong>ChanServ</strong></li>
+                                        <li><strong>MemoServ</strong></li>
+                                        <li><strong>OperServ</strong></li>
+                                        <li><strong>BotServ</strong></li>
+                                        <li><strong>HostServ</strong></li>
+                                        <li><strong>HelpServ</strong></li>
+                                        <li><strong>InfoServ</strong></li>
+                                        <li><strong>StatServ</strong></li>
+                                        <li><strong>Global</strong></li>
+                                        <li><strong>ALIS</strong></li>
+                                        <li><strong>Services</strong></li>
+                                    </ul>
+                                    <p style="font-size: 12px; color: #888; margin-top: 10px; margin-bottom: 0;">
+                                        <em>Note: These names are reserved for potential future features or third-party services integration.</em>
+                                    </p>
+                                </div>
+
+                                <!-- Access Control Notes -->
+                                <div style="background: #fff3cd; padding: 15px; border-radius: 8px; border-left: 4px solid #ffc107;">
+                                    <h5 style="color: #856404; margin-bottom: 10px;">ℹ️ Access Control Notes</h5>
+                                    <ul style="margin: 0; padding-left: 20px; color: #856404; font-size: 14px;">
+                                        <li>All reserved nicknames (active and unused) bypass access rules</li>
+                                        <li>Cannot be banned, restricted, or registered by users</li>
+                                        <li>Pattern matching is case-insensitive</li>
+                                        <li>Staff accounts use regular nicknames (not reserved names)</li>
+                                        <li>Users attempting to use reserved names will receive an error</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -416,42 +488,54 @@ $csrf_token = $_SESSION['csrf_token'];
                             <div class="form-group">
                                 <label>Server Name</label>
                                 <input type="text" class="form-control" id="cfg-server-name">
+                                <small>FQDN of your IRC server (e.g., irc.example.com)</small>
                             </div>
                             <div class="form-group">
                                 <label>Network Name</label>
                                 <input type="text" class="form-control" id="cfg-server-network">
+                                <small>Display name for your IRC network</small>
                             </div>
                             <div class="form-group">
                                 <label>Staff Login Message</label>
                                 <input type="text" class="form-control" id="cfg-server-staff-message">
+                                <small>Message shown to staff members when they authenticate</small>
                             </div>
 
                             <h4 style="margin-top: 20px;">Network Settings</h4>
                             <div class="form-group">
-                                <label>Listen Address</label>
+                                <label>Listen Address (IPv4)</label>
                                 <input type="text" class="form-control" id="cfg-network-addr">
-                                <small>Use 0.0.0.0 for all interfaces</small>
+                                <small>IPv4 address to bind to. Use 0.0.0.0 for all IPv4 interfaces, or specific IP. Default: 0.0.0.0</small>
+                            </div>
+                            <div class="form-group">
+                                <label><input type="checkbox" id="cfg-network-ipv6"> Enable IPv6</label>
+                                <small>Allow connections from IPv6 clients. Binds to :: (all IPv6 interfaces) by default.</small>
+                            </div>
+                            <div class="form-group">
+                                <label>Listen Address (IPv6)</label>
+                                <input type="text" class="form-control" id="cfg-network-addr-ipv6" placeholder="::">
+                                <small>Optional IPv6 address to bind to. Leave empty to use :: (all IPv6 interfaces). Example: 2001:db8::1</small>
                             </div>
                             <div class="form-group">
                                 <label>Listen Ports (comma-separated)</label>
                                 <input type="text" class="form-control" id="cfg-network-ports">
-                                <small>Example: 6667,7000</small>
-                            </div>
-                            <div class="form-group">
-                                <label><input type="checkbox" id="cfg-network-ipv6"> Enable IPv6</label>
+                                <small>Plain-text IRC ports. Standard: 6667,7000. Example: 6667,7000,8000</small>
                             </div>
                             <div class="form-group">
                                 <label><input type="checkbox" id="cfg-network-resolve"> Resolve Hostnames</label>
+                                <small>Perform reverse DNS lookups for connecting clients (may add latency)</small>
                             </div>
 
                             <h4 style="margin-top: 20px;">Database Settings</h4>
                             <div class="form-group">
                                 <label>Database Path</label>
                                 <input type="text" class="form-control" id="cfg-database-path">
+                                <small>SQLite database file path (relative to /opt/pyircx or absolute path). Default: pyircx.db</small>
                             </div>
                             <div class="form-group">
                                 <label>Connection Pool Size</label>
                                 <input type="number" class="form-control" id="cfg-database-pool">
+                                <small>Number of concurrent database connections. Higher = better performance under load. Default: 5</small>
                             </div>
                         </div>
 
@@ -461,34 +545,47 @@ $csrf_token = $_SESSION['csrf_token'];
                             <div class="form-group">
                                 <label>Maximum Users</label>
                                 <input type="number" class="form-control" id="cfg-limits-max-users">
+                                <small>Maximum concurrent connections. Default: 1000</small>
                             </div>
                             <div class="form-group">
                                 <label>Message Length</label>
                                 <input type="number" class="form-control" id="cfg-limits-msg-length">
+                                <small>Maximum characters per message. IRC standard: 512. Default: 512</small>
                             </div>
                             <div class="form-group">
                                 <label>Nickname Change Cooldown (seconds)</label>
                                 <input type="number" class="form-control" id="cfg-limits-nick-cooldown">
+                                <small>Time users must wait between nickname changes. Set to 0 to disable cooldown, or 3600+ to effectively prevent nickname changes. Default: 60 (1 minute). Staff are exempt.</small>
+                            </div>
+                            <div class="form-group">
+                                <label>Client Timeout (seconds)</label>
+                                <input type="number" class="form-control" id="cfg-limits-client-timeout">
+                                <small>Maximum time a client can go without sending data before being disconnected (prevents ghost connections). Default: 300 (5 minutes)</small>
                             </div>
                             <div class="form-group">
                                 <label>Maximum Nickname Length</label>
                                 <input type="number" class="form-control" id="cfg-limits-max-nick">
+                                <small>Maximum characters in a nickname. IRC standard: 9-30. Default: 30</small>
                             </div>
                             <div class="form-group">
                                 <label>Maximum Username Length</label>
                                 <input type="number" class="form-control" id="cfg-limits-max-user">
+                                <small>Maximum characters in a username (ident). Default: 30</small>
                             </div>
                             <div class="form-group">
                                 <label>Maximum Channel Name Length</label>
                                 <input type="number" class="form-control" id="cfg-limits-max-channel">
+                                <small>Maximum characters in a channel name (including #). Default: 50</small>
                             </div>
                             <div class="form-group">
                                 <label>Maximum Total Channels</label>
                                 <input type="number" class="form-control" id="cfg-limits-max-channels">
+                                <small>Maximum number of channels that can exist on the server. Default: 500</small>
                             </div>
                             <div class="form-group">
                                 <label>Maximum Channels Per User</label>
                                 <input type="number" class="form-control" id="cfg-limits-max-channels-user">
+                                <small>Maximum channels a single user can join simultaneously. Default: 20</small>
                             </div>
                         </div>
 
@@ -504,11 +601,11 @@ Type /help for available commands."></textarea>
                                 <small>Each line will be displayed as a separate line in the MOTD. Users see this when they connect or use the /MOTD command.</small>
                             </div>
                             <div style="margin-top: 15px;">
+                                <button type="button" class="btn btn-success" onclick="loadMotd()">
+                                    <i class="fas fa-download"></i> Load MOTD
+                                </button>
                                 <button type="button" class="btn btn-primary" onclick="saveMotd()">
                                     <i class="fas fa-save"></i> Save MOTD
-                                </button>
-                                <button type="button" class="btn btn-secondary" onclick="loadMotd()">
-                                    <i class="fas fa-sync"></i> Reload
                                 </button>
                             </div>
                         </div>
@@ -518,79 +615,95 @@ Type /help for available commands."></textarea>
                             <h4>Flood Protection</h4>
                             <div class="form-group">
                                 <label><input type="checkbox" id="cfg-security-flood-enabled"> Enable Flood Protection</label>
+                                <small>Automatically limit users sending too many messages too quickly. Services are exempt.</small>
                             </div>
                             <div class="form-group">
                                 <label>Flood Messages Threshold</label>
                                 <input type="number" class="form-control" id="cfg-security-flood-msgs">
+                                <small>Maximum messages allowed within the flood window. Default: 5</small>
                             </div>
                             <div class="form-group">
                                 <label>Flood Window (seconds)</label>
                                 <input type="number" class="form-control" id="cfg-security-flood-window">
+                                <small>Time period to track message rate. Default: 2 seconds</small>
                             </div>
 
                             <h4 style="margin-top: 20px;">Connection Throttling</h4>
                             <div class="form-group">
                                 <label><input type="checkbox" id="cfg-security-throttle-enabled"> Enable Connection Throttle</label>
+                                <small>Limit connection attempts from a single IP to prevent DoS attacks</small>
                             </div>
                             <div class="form-group">
                                 <label>Connection Throttle Limit</label>
                                 <input type="number" class="form-control" id="cfg-security-throttle">
+                                <small>Maximum connections from one IP within the throttle window. Default: 3</small>
                             </div>
                             <div class="form-group">
                                 <label>Throttle Window (seconds)</label>
                                 <input type="number" class="form-control" id="cfg-security-throttle-window">
+                                <small>Time period to track connections per IP. Default: 60 seconds</small>
                             </div>
 
                             <h4 style="margin-top: 20px;">Authentication</h4>
                             <div class="form-group">
                                 <label>CAP Timeout (seconds)</label>
                                 <input type="number" class="form-control" id="cfg-security-cap-timeout">
+                                <small>Maximum time for client capability negotiation before disconnection. Default: 30 seconds</small>
                             </div>
                             <div class="form-group">
-                                <label>Maximum Authenticated Attempts</label>
+                                <label>Maximum Authentication Attempts</label>
                                 <input type="number" class="form-control" id="cfg-security-auth-attempts">
+                                <small>Failed login attempts allowed before temporary lockout. Default: 5</small>
                             </div>
                             <div class="form-group">
-                                <label>Authenticated Lockout Duration (seconds)</label>
+                                <label>Authentication Lockout Duration (seconds)</label>
                                 <input type="number" class="form-control" id="cfg-security-auth-lockout">
+                                <small>How long to block login attempts after exceeding max attempts. Default: 900 (15 minutes)</small>
                             </div>
                             <div class="form-group">
-                                <label>Authenticated Lockout Window (seconds)</label>
+                                <label>Authentication Lockout Window (seconds)</label>
                                 <input type="number" class="form-control" id="cfg-security-auth-window">
+                                <small>Time period to track failed attempts. Default: 300 (5 minutes)</small>
                             </div>
 
-                            <h4 style="margin-top: 20px;">DNSBL</h4>
+                            <h4 style="margin-top: 20px;">DNSBL (DNS Blacklist)</h4>
                             <div class="form-group">
                                 <label><input type="checkbox" id="cfg-dnsbl-enabled"> Enable DNSBL</label>
+                                <small>Check connecting IPs against DNS-based blacklists for known malicious hosts</small>
                             </div>
                             <div class="form-group">
                                 <label>DNSBL Action</label>
-                                <select class="form-control" id="cfg-dnsbl-action">
+                                <select class="form-control" id="cfg-dnsbl-action" style="width: 200px;">
                                     <option value="reject">Reject</option>
                                     <option value="warn">Warn</option>
                                     <option value="tag">Tag</option>
                                 </select>
+                                <small>Reject: Block connection. Warn: Allow but log. Tag: Allow and mark user.</small>
                             </div>
                             <div class="form-group">
                                 <label>DNSBL Lists (one per line)</label>
                                 <textarea class="form-control" id="cfg-dnsbl-lists" rows="3"></textarea>
+                                <small>DNS blacklist servers to query. Common: zen.spamhaus.org, dnsbl.dronebl.org</small>
                             </div>
 
                             <h4 style="margin-top: 20px;">Proxy Detection</h4>
                             <div class="form-group">
                                 <label><input type="checkbox" id="cfg-proxy-enabled"> Enable Proxy Detection</label>
+                                <small>Detect and handle connections from open proxies, VPNs, and Tor</small>
                             </div>
                             <div class="form-group">
                                 <label>Proxy Ports (comma-separated)</label>
                                 <input type="text" class="form-control" id="cfg-proxy-ports">
+                                <small>Ports to check for open proxies. Common: 80,8080,3128,1080. Default: 80,8080,3128,1080</small>
                             </div>
                             <div class="form-group">
                                 <label>Proxy Action</label>
-                                <select class="form-control" id="cfg-proxy-action">
+                                <select class="form-control" id="cfg-proxy-action" style="width: 200px;">
                                     <option value="reject">Reject</option>
                                     <option value="warn">Warn</option>
                                     <option value="tag">Tag</option>
                                 </select>
+                                <small>Reject: Block proxy users. Warn: Allow but log. Tag: Allow and mark user.</small>
                             </div>
                         </div>
 
@@ -599,19 +712,23 @@ Type /help for available commands."></textarea>
                             <h4>Service Bots</h4>
                             <div class="form-group">
                                 <label><input type="checkbox" id="cfg-servicebot-enabled"> Enable Service Bots</label>
+                                <small>Enables virtual service users (ServiceBot, ServiceBot01-ServiceBot10) that can manage channels. Bots automatically join/part channels based on user activity to provide moderation and assistance.</small>
                             </div>
                             <div class="form-group">
                                 <label>Service Bot Count</label>
                                 <input type="number" class="form-control" id="cfg-services-count">
+                                <small>Number of ServiceBot instances to run (1-10). Default: 10. More bots = better distribution across channels, but uses more resources.</small>
                             </div>
                             <div class="form-group">
                                 <label>Maximum Channels Per Bot</label>
                                 <input type="number" class="form-control" id="cfg-services-max-channels">
+                                <small>Maximum channels each ServiceBot can manage simultaneously. Default: 100. Prevents bot overload. Channels beyond limit won't get a ServiceBot assigned.</small>
                             </div>
 
                             <h4 style="margin-top: 20px;">Profanity Filter</h4>
                             <div class="form-group">
                                 <label><input type="checkbox" id="cfg-profanity-enabled"> Enable Profanity Filter</label>
+                                <small>Automatically filters profanity and inappropriate content in messages. Uses exact word matching (or regex with /PROFANITY command). Staff are exempt from filters.</small>
                             </div>
                             <div class="form-group">
                                 <label>Filter Action</label>
@@ -621,9 +738,11 @@ Type /help for available commands."></textarea>
                                     <option value="kick">Kick</option>
                                     <option value="ban">Ban</option>
                                 </select>
+                                <small>Action to take when profanity is detected. Warn = Message user. Gag = Mute user (mode +z). Kick = Remove from channel. Ban = Permanent ban from server.</small>
                             </div>
                             <div class="form-group">
                                 <label><input type="checkbox" id="cfg-profanity-case"> Case Sensitive</label>
+                                <small>Enable to match exact case (e.g., "WORD" vs "word"). Disabled = case-insensitive matching (recommended for better coverage).</small>
                             </div>
                             <div class="form-group">
                                 <label>Warning Message</label>
@@ -631,14 +750,17 @@ Type /help for available commands."></textarea>
                                 <small>Message sent to users when warned for profanity.</small>
                             </div>
                             <div class="form-group">
-                                <label>Profanity Word List (comma-separated)</label>
-                                <textarea class="form-control" id="cfg-profanity-words" rows="3" placeholder="badword1, badword2, badword3"></textarea>
-                                <small>List of words to filter. Leave empty to disable.</small>
+                                <label>Profanity Word List (one per line)</label>
+                                <textarea class="form-control" id="cfg-profanity-words" rows="3" placeholder="badword1
+badword2
+badword3"></textarea>
+                                <small>List of exact words to filter (one per line). Or use /PROFANITY command for runtime management with regex support.</small>
                             </div>
 
                             <h4 style="margin-top: 20px;">Malicious Detection</h4>
                             <div class="form-group">
                                 <label><input type="checkbox" id="cfg-malicious-enabled"> Enable Malicious Detection</label>
+                                <small>Automatically detects and responds to malicious behavior: flooding, spam, excessive CAPS, repeated messages, and URL spam. Configure individual detection types below.</small>
                             </div>
 
                             <h5 style="margin-top: 15px; color: #666;">Flood Detection</h5>
@@ -731,18 +853,22 @@ Type /help for available commands."></textarea>
                             <h4>SSL/TLS Settings</h4>
                             <div class="form-group">
                                 <label><input type="checkbox" id="cfg-ssl-enabled"> Enable SSL/TLS</label>
+                                <small>Enable encrypted connections using SSL/TLS. Requires valid certificate and key files. Standard IRC SSL port is 6697.</small>
                             </div>
                             <div class="form-group">
                                 <label>SSL Ports (comma-separated)</label>
-                                <input type="text" class="form-control" id="cfg-ssl-ports">
+                                <input type="text" class="form-control" id="cfg-ssl-ports" placeholder="6697, 7000">
+                                <small>Ports to listen on for SSL/TLS connections (comma-separated). Default: 6697. Example: 6697, 7000, 9999</small>
                             </div>
                             <div class="form-group">
                                 <label>Certificate File Path</label>
-                                <input type="text" class="form-control" id="cfg-ssl-cert">
+                                <input type="text" class="form-control" id="cfg-ssl-cert" placeholder="/etc/letsencrypt/live/example.com/fullchain.pem">
+                                <small>Path to SSL certificate file (PEM format). Relative to /opt/pyircx or absolute path. Use Let's Encrypt or self-signed certificate.</small>
                             </div>
                             <div class="form-group">
                                 <label>Key File Path</label>
-                                <input type="text" class="form-control" id="cfg-ssl-key">
+                                <input type="text" class="form-control" id="cfg-ssl-key" placeholder="/etc/letsencrypt/live/example.com/privkey.pem">
+                                <small>Path to SSL private key file (PEM format). Relative to /opt/pyircx or absolute path. Must match certificate. Keep secure (chmod 600).</small>
                             </div>
                             <div class="form-group">
                                 <label>Minimum TLS Version</label>
@@ -750,9 +876,11 @@ Type /help for available commands."></textarea>
                                     <option value="TLSv1.2">TLS 1.2</option>
                                     <option value="TLSv1.3">TLS 1.3</option>
                                 </select>
+                                <small>Minimum TLS version allowed. TLS 1.2 = broader compatibility. TLS 1.3 = better security. Default: TLS 1.2</small>
                             </div>
                             <div class="form-group">
                                 <label><input type="checkbox" id="cfg-ssl-auto-reload"> Auto-reload Certificates</label>
+                                <small>Automatically reload certificate files when they change (useful for Let's Encrypt auto-renewal). No server restart required.</small>
                             </div>
                         </div>
 
@@ -761,14 +889,17 @@ Type /help for available commands."></textarea>
                             <h4>Server Linking</h4>
                             <div class="form-group">
                                 <label><input type="checkbox" id="cfg-linking-enabled"> Enable Server Linking</label>
+                                <small>Allow this server to link with other IRC servers to form a network. Use /CONNECT and /SQUIT commands (ADMIN only) to manage server links.</small>
                             </div>
                             <div class="form-group">
                                 <label>Bind Host</label>
-                                <input type="text" class="form-control" id="cfg-linking-host">
+                                <input type="text" class="form-control" id="cfg-linking-host" placeholder="0.0.0.0">
+                                <small>IP address to bind for server-to-server connections. Default: 0.0.0.0 (all IPv4 interfaces). Use specific IP for multi-homed servers.</small>
                             </div>
                             <div class="form-group">
                                 <label>Bind Port</label>
-                                <input type="number" class="form-control" id="cfg-linking-port">
+                                <input type="number" class="form-control" id="cfg-linking-port" placeholder="7000">
+                                <small>Port for server-to-server connections. Default: 7000. Must not conflict with client ports. Firewall: Allow only trusted server IPs.</small>
                             </div>
                         </div>
 
@@ -777,35 +908,43 @@ Type /help for available commands."></textarea>
                             <h4>Transcripts</h4>
                             <div class="form-group">
                                 <label><input type="checkbox" id="cfg-transcript-enabled"> Enable Transcripts</label>
+                                <small>Automatically log all channel activity to transcript files. Channels can enable transcripts with mode +y. Useful for auditing and compliance.</small>
                             </div>
                             <div class="form-group">
                                 <label>Transcript Directory</label>
-                                <input type="text" class="form-control" id="cfg-transcript-dir">
+                                <input type="text" class="form-control" id="cfg-transcript-dir" placeholder="transcripts">
+                                <small>Directory to store transcript files (relative to /opt/pyircx or absolute path). Default: transcripts. Must be writable by pyircx service.</small>
                             </div>
                             <div class="form-group">
                                 <label>Maximum Lines Per File</label>
-                                <input type="number" class="form-control" id="cfg-transcript-max">
+                                <input type="number" class="form-control" id="cfg-transcript-max" placeholder="10000">
+                                <small>Maximum lines before rotating to a new file. Default: 10000. Prevents files from growing too large. Archives are timestamped.</small>
                             </div>
 
                             <h4 style="margin-top: 20px;">Persistence</h4>
                             <div class="form-group">
                                 <label><input type="checkbox" id="cfg-persist-auto"> Auto-save State</label>
+                                <small>Automatically save server state (channels, user registrations, settings) at regular intervals. Enables recovery after unexpected shutdown.</small>
                             </div>
                             <div class="form-group">
                                 <label>Save Interval (seconds)</label>
-                                <input type="number" class="form-control" id="cfg-persist-interval">
+                                <input type="number" class="form-control" id="cfg-persist-interval" placeholder="300">
+                                <small>How often to save state (in seconds). Default: 300 (5 minutes). Lower values = less data loss risk, but more disk I/O.</small>
                             </div>
 
                             <h4 style="margin-top: 20px;">NewsFlash</h4>
                             <div class="form-group">
                                 <label><input type="checkbox" id="cfg-newsflash-connect"> Show on Connect</label>
+                                <small>Automatically send NewsFlash messages to users when they connect. Useful for server announcements, rules, and updates.</small>
                             </div>
                             <div class="form-group">
                                 <label><input type="checkbox" id="cfg-newsflash-periodic"> Enable Periodic Announcements</label>
+                                <small>Periodically broadcast NewsFlash messages to all connected users. Good for reminders and recurring announcements.</small>
                             </div>
                             <div class="form-group">
                                 <label>Periodic Interval (seconds)</label>
-                                <input type="number" class="form-control" id="cfg-newsflash-interval">
+                                <input type="number" class="form-control" id="cfg-newsflash-interval" placeholder="3600">
+                                <small>How often to broadcast NewsFlash messages (in seconds). Default: 3600 (1 hour). Avoid setting too low to prevent spam.</small>
                             </div>
                         </div>
                     </div>

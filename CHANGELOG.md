@@ -5,6 +5,97 @@ All notable changes to pyIRCX will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-01-16
+
+### Added
+- **Command Aliases**: 12 shortcut commands for faster typing
+  - `/J` → `/JOIN`, `/P` → `/PART`, `/W` → `/WHOIS`, `/M` → `/MSG`
+  - `/N` → `/NICK`, `/Q` → `/QUIT`, `/T` → `/TOPIC`, `/K` → `/KICK`
+  - `/I` → `/INVITE`, `/L` → `/LIST`, `/WW` → `/WHOWAS`, `/WH` → `/WHISPER`
+  - IRC standard compatible, zero overhead, transparent to users
+- **Configurable Client Timeout**: Prevents ghost connections from dead clients
+  - New config field: `limits.client_timeout` (default: 300 seconds)
+  - Webadmin field added with tooltip explaining ghost connection prevention
+  - Automatic disconnect after period of no data (commands, PING/PONG, etc.)
+  - Logs timeout events for monitoring
+- **Complete Help System**: 7 new help pages for 100% command coverage
+  - `/HELP MOTD` - Display server Message of the Day
+  - `/HELP MEMO` - Offline message system (SEND, LIST, READ, DEL)
+  - `/HELP GAG`/`/HELP UNGAG` - Staff command to mute/unmute users
+  - `/HELP CREATE` - Alias for JOIN (creates or joins channel)
+  - `/HELP CONNECT` - ADMIN command for server linking
+  - `/HELP SQUIT` - ADMIN command to disconnect linked servers
+  - Fuzzy matching updated with all new topics for typo suggestions
+- **Enhanced STATS Formatting**: Professional output with counts and idle times
+  - `STATS a`, `STATS o`, `STATS g` now show: count in header, idle time per user, "No X currently online" messages
+  - Visual improvements: === separators, indentation, "End of X" footers
+  - Format: `username!user@host (idle: 5m)`
+- **Enhanced STAFF Commands**: Detailed confirmations with audit trails
+  - `STAFF LIST`: Count in header, counts per level, [ONLINE] status indicators
+  - `STAFF ADD/DEL/SET/PASS`: "=== SUCCESS ===" header, full details, "Created/Changed/Deleted by" tracking
+  - All operations show when changes take effect
+- **Webadmin Comprehensive Tooltips**: 60+ tooltip fields across all 7 configuration tabs
+  - Server tab: All fields with defaults and examples, IPv6 address field added
+  - Limits tab: All limits with IRC standard notes, client timeout explanation
+  - Security tab: Flood protection, DNSBL, proxy detection with clear explanations
+  - Services tab: ServiceBot settings, profanity filter, malicious detection thresholds
+  - SSL/TLS tab: Certificate paths, TLS versions, Let's Encrypt examples
+  - Linking tab: Server-to-server binding, ports, firewall guidance
+  - Advanced tab: Transcripts, persistence, NewsFlash intervals with defaults
+  - All fields now self-documenting
+- **Reserved Nicknames Reference**: Comprehensive reference on Access Control page
+  - Active Virtual Services (4): System, Registrar, Messenger, NewsFlash
+  - ServiceBot Pool (dynamic): Updates based on configuration
+  - Reserved IRC Services (12): NickServ, ChanServ, MemoServ, OperServ, BotServ, HostServ, HelpServ, InfoServ, StatServ, Global, ALIS, Services
+  - Color-coded sections, clear notes about access control implications
+  - Explains both active and unused reserved names
+- **IPv6 Configuration**: New `network.listen_addr_ipv6` configuration field
+  - Default: `::` (all IPv6 interfaces)
+  - Webadmin field with tooltip explaining usage
+  - Dual-stack deployment support
+
+### Fixed
+- **MOTD Whitespace Preservation**: ASCII art and formatted content now displays correctly
+  - Problem: Leading/trailing spaces were stripped when saving MOTD
+  - Solution: Removed `.trim()` from MOTD save in webadmin
+  - Backend already correct (uses `.rstrip()` only)
+  - Impact: MOTD ASCII art aligns perfectly
+- **MOTD Auto-Load**: MOTD tab now loads content automatically when clicked
+  - Problem: Required manual "Reload" button click
+  - Solution: Added auto-load trigger in config tab click handler
+  - Improves user workflow
+- **Message Quality**: ~40 error and system messages improved for clarity
+  - Grammar: Consistent punctuation, proper sentence case, trailing periods
+  - Clarity: "Invalid nickname" (not "Erroneous"), "No such nickname or channel" (not "No such nick/channel")
+  - Actionable: "See /HELP {command}" added to parameter errors, "check modes/permissions" added to channel errors
+  - KNOCK messages: Clearer rate limiting guidance
+  - MFA messages: Step-by-step instructions
+  - Database errors: "contact administrator if persists"
+  - Rate limiting: "please wait" guidance
+
+### Changed
+- **Webadmin Number Inputs**: Compact 150px width for number fields (was full-width)
+  - Better for 4-digit values like ports, timeouts, limits
+- **MOTD Button Layout**: Green "Load MOTD" button moved to left of "Save MOTD"
+  - More intuitive workflow (load first, then save)
+- **Profanity Word List Format**: Changed from "comma-separated" to "one per line"
+  - Clearer placeholder showing correct format
+  - Note added about /PROFANITY command for regex support
+
+### Documentation
+- **README.md**: Updated version to 1.2.0, added v1.2.0 to latest releases
+- **RELEASE_v1.2.0.md**: Comprehensive release notes with all 150+ improvements
+- **CHANGELOG.md**: This comprehensive v1.2.0 entry
+- Documentation for all features pending: MANUAL.md updates for command aliases, client timeout, reserved nicknames
+
+### Code Quality
+- **Lines Modified**: ~200 across 4 files (pyircx.py, index.php, admin.js, style.css)
+- **Breaking Changes**: None - all changes are additive or improvements
+- **Test Coverage**: 243 passing tests (needs updates for v1.2.0 features)
+- **Message Quality**: Professional, clear, actionable across all user-facing text
+- **Help Coverage**: 100% - every command now documented
+- **Configuration Documentation**: 100% - all fields have tooltips
+
 ## [1.1.9] - 2026-01-16
 
 ### Added

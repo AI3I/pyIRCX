@@ -1,7 +1,7 @@
 # pyIRCX Server Manual
 
-**Version:** 1.0.5
-**Last Updated:** 2026-01-02
+**Version:** 1.2.0
+**Last Updated:** 2026-01-16
 **License:** GNU General Public License v3.0
 
 ---
@@ -199,6 +199,7 @@ Configuration is stored in `pyircx_config.json`. Below is a complete reference:
 | `max_users` | int | `1000` | Maximum concurrent connections |
 | `msg_length` | int | `512` | Maximum message length |
 | `nick_change_cooldown` | int | `60` | Seconds between nick changes (0-3600) |
+| `client_timeout` | int | `300` | Seconds before disconnecting idle clients (prevents ghost connections) |
 | `max_nick_length` | int | `30` | Maximum nickname length |
 | `max_user_length` | int | `30` | Maximum username length |
 | `max_channel_length` | int | `50` | Maximum channel name length |
@@ -599,6 +600,38 @@ QUIT [:<message>]
 ---
 
 ## User Commands
+
+### Command Aliases
+
+pyIRCX supports shortcut aliases for commonly-used commands:
+
+| Alias | Full Command | Description |
+|-------|-------------|-------------|
+| `/J` | `/JOIN` | Join a channel |
+| `/P` | `/PART` | Leave a channel |
+| `/W` | `/WHOIS` | View user information |
+| `/M` | `/MSG` | Send private message |
+| `/N` | `/NICK` | Change nickname |
+| `/Q` | `/QUIT` | Disconnect from server |
+| `/T` | `/TOPIC` | View/set channel topic |
+| `/K` | `/KICK` | Remove user from channel |
+| `/I` | `/INVITE` | Invite user to channel |
+| `/L` | `/LIST` | List channels |
+| `/WW` | `/WHOWAS` | View past user information |
+| `/WH` | `/WHISPER` | Send private channel message |
+
+**Examples:**
+```
+/J #lobby               (same as /JOIN #lobby)
+/W alice                (same as /WHOIS alice)
+/M bob Hello!           (same as /MSG bob Hello!)
+```
+
+**Notes:**
+- All aliases are case-insensitive
+- Aliases work identically to full commands
+- IRC standard compatible (common on other servers)
+- No overhead - simple dictionary lookup
 
 ### Message Commands
 
@@ -1195,6 +1228,85 @@ Automated channel monitors. Configurable count (default: 10).
 - `gag` - Prevent speaking (+z in channel)
 - `kick` - Remove from channel
 - `ban` - Ban and remove
+
+---
+
+## Reserved Nicknames
+
+pyIRCX reserves certain nicknames for internal system use. These names cannot be registered or used by regular users.
+
+### Active Virtual Services
+
+These services are actively running and provide functionality:
+
+| Nickname | Purpose | Commands |
+|----------|---------|----------|
+| **System** | Server system messages | N/A (automatic) |
+| **Registrar** | Nickname/channel registration | REGISTER, IDENTIFY, DROP, INFO, etc. |
+| **Messenger** | Offline message delivery | SEND, READ, DELETE, COUNT |
+| **NewsFlash** | Server announcements | N/A (automatic) |
+
+**Usage:**
+```
+/MSG Registrar HELP
+/MSG Messenger SEND alice Your meeting is in 10 minutes
+```
+
+### ServiceBot Pool
+
+ServiceBots provide automated channel monitoring and moderation:
+
+| Nickname | Purpose |
+|----------|---------|
+| **ServiceBot** | Dispatcher/router to pool |
+| **ServiceBot01** through **ServiceBotNN** | Individual monitoring bots |
+
+**Configuration:**
+The number of ServiceBots is configurable via `services.servicebot_count` (default: 10).
+
+**Pattern Reserved:** `ServiceBot*` (all names starting with "ServiceBot")
+
+### Reserved IRC Service Names
+
+The following traditional IRC service names are reserved for potential future features or third-party services integration:
+
+- **NickServ** - Routes to Registrar (currently)
+- **ChanServ** - Routes to Registrar (currently)
+- **MemoServ** - Routes to Messenger (currently)
+- **OperServ** - Reserved (unused)
+- **BotServ** - Reserved (unused)
+- **HostServ** - Reserved (unused)
+- **HelpServ** - Reserved (unused)
+- **InfoServ** - Reserved (unused)
+- **StatServ** - Reserved (unused)
+- **Global** - Reserved (unused)
+- **ALIS** - Reserved (unused)
+- **Services** - Reserved (unused)
+
+### Access Control Implications
+
+All reserved nicknames:
+- **Bypass access rules** - Cannot be banned or restricted
+- **Cannot be registered** - `/REGISTER` will fail
+- **Case-insensitive** - NickServ, nickserv, NICKSERV all reserved
+- **Pattern matching** - ServiceBot* blocks ServiceBot, ServiceBot99, etc.
+
+**Error When Attempting to Use:**
+```
+:servername 432 yournick reservedname :Nickname is reserved for services
+```
+
+### Staff Accounts vs Reserved Names
+
+**Important:** Staff accounts (ADMIN/SYSOP/GUIDE) use regular nicknames, NOT reserved names.
+
+**Example:**
+```
+Correct:   /STAFF ADD alice mypassword ADMIN
+Incorrect: /STAFF ADD System password ADMIN  (reserved name!)
+```
+
+Staff members register normal nicknames and authenticate with `/STAFF LOGIN`.
 
 ---
 
