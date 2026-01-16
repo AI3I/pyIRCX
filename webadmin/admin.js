@@ -87,10 +87,19 @@ console.log("=== admin.js LOADING ===");
 
     // API wrapper
     function callAPI(cmd, args = []) {
+        // Get CSRF token from meta tag
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
         // Use system-wide installation path
         const fd = new FormData();
         fd.append('cmd', cmd);
         args.forEach((a,i) => fd.append(`args[${i}]`, a));
+        if (csrfToken) {
+            fd.append('csrf_token', csrfToken);
+        }
+
+        console.log(`API call: ${cmd}, args count: ${args.length}, has CSRF: ${!!csrfToken}`);
+
         return fetch('api.php', {method: 'POST', body: fd})
             .then(r => {
                 if (r.status === 401) {
@@ -98,10 +107,15 @@ console.log("=== admin.js LOADING ===");
                     window.location.href = 'login.php';
                     throw new Error('Unauthorized');
                 }
+                if (r.status === 403) {
+                    // CSRF validation failed - reload page to get new token
+                    window.location.reload();
+                    throw new Error('CSRF validation failed');
+                }
                 return r.json();
             })
             .catch(err => {
-                if (err.message !== 'Unauthorized') {
+                if (err.message !== 'Unauthorized' && err.message !== 'CSRF validation failed') {
                     return { error: err.message };
                 }
                 throw err;
@@ -118,8 +132,27 @@ console.log("=== admin.js LOADING ===");
 
         showToast('Service Control', `${actionLabels[action]} pyIRCX service...`, 'info');
 
-        fetch('api.php', {method: 'POST', body: (() => { const fd = new FormData(); fd.append('cmd', 'service-control'); fd.append('action', action); return fd; })() }).then(r => r.json()).then(d => { if(d.error) throw new Error(d.error); })
-            .then(() => {
+        // Get CSRF token
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
+        // Make request with CSRF token
+        const fd = new FormData();
+        fd.append('cmd', 'service-control');
+        fd.append('action', action);
+        if (csrfToken) {
+            fd.append('csrf_token', csrfToken);
+        }
+
+        fetch('api.php', {method: 'POST', body: fd})
+            .then(r => {
+                if (r.status === 403) {
+                    window.location.reload();
+                    throw new Error('CSRF validation failed');
+                }
+                return r.json();
+            })
+            .then(d => {
+                if(d.error) throw new Error(d.error);
                 showToast('Success', `Service ${action}ed successfully`, 'success');
                 setTimeout(() => {
                     loadServiceStatus();
@@ -2010,6 +2043,16 @@ console.log("=== admin.js LOADING ===");
     }
 
     function loadConfigForm() {
+        // Helper to safely set form values
+        const setVal = (id, val) => {
+            const el = $(id);
+            if (el) el.value = val;
+        };
+        const setCheck = (id, val) => {
+            const el = $(id);
+            if (el) el.checked = val;
+        };
+
         callAPI('full-config').then(config => {
             if (config.error) {
                 showToast('Error', 'Failed to load configuration', 'error');
@@ -2018,86 +2061,86 @@ console.log("=== admin.js LOADING ===");
             currentConfig = config;
 
             // Server settings
-            $('#cfg-server-name').value = config.server?.name || '';
-            $('#cfg-server-network').value = config.server?.network || '';
-            $('#cfg-server-staff-message').value = config.server?.staff_login_message || '';
+            setVal('#cfg-server-name', config.server?.name || '');
+            setVal('#cfg-server-network', config.server?.network || '');
+            setVal('#cfg-server-staff-message', config.server?.staff_login_message || '');
 
             // Network settings
-            $('#cfg-network-addr').value = config.network?.listen_addr || '';
-            $('#cfg-network-ports').value = (config.network?.listen_ports || []).join(',');
-            $('#cfg-network-ipv6').checked = config.network?.enable_ipv6 || false;
-            $('#cfg-network-resolve').checked = config.network?.resolve_hostnames || false;
+            setVal('#cfg-network-addr', config.network?.listen_addr || '');
+            setVal('#cfg-network-ports', (config.network?.listen_ports || []).join(','));
+            setCheck('#cfg-network-ipv6', config.network?.enable_ipv6 || false);
+            setCheck('#cfg-network-resolve', config.network?.resolve_hostnames || false);
 
             // Database settings
-            $('#cfg-database-path').value = config.database?.path || '';
-            $('#cfg-database-pool').value = config.database?.pool_size || 5;
+            setVal('#cfg-database-path', config.database?.path || '');
+            setVal('#cfg-database-pool', config.database?.pool_size || 5);
 
             // Limits
-            $('#cfg-limits-max-users').value = config.limits?.max_users || 1000;
-            $('#cfg-limits-msg-length').value = config.limits?.msg_length || 512;
-            $('#cfg-limits-nick-cooldown').value = config.limits?.nick_change_cooldown || 60;
-            $('#cfg-limits-max-nick').value = config.limits?.max_nick_length || 30;
-            $('#cfg-limits-max-user').value = config.limits?.max_user_length || 30;
-            $('#cfg-limits-max-channel').value = config.limits?.max_channel_length || 50;
-            $('#cfg-limits-max-channels').value = config.limits?.max_channels || 500;
-            $('#cfg-limits-max-channels-user').value = config.limits?.max_channels_per_user || 20;
+            setVal('#cfg-limits-max-users', config.limits?.max_users || 1000);
+            setVal('#cfg-limits-msg-length', config.limits?.msg_length || 512);
+            setVal('#cfg-limits-nick-cooldown', config.limits?.nick_change_cooldown || 60);
+            setVal('#cfg-limits-max-nick', config.limits?.max_nick_length || 30);
+            setVal('#cfg-limits-max-user', config.limits?.max_user_length || 30);
+            setVal('#cfg-limits-max-channel', config.limits?.max_channel_length || 50);
+            setVal('#cfg-limits-max-channels', config.limits?.max_channels || 500);
+            setVal('#cfg-limits-max-channels-user', config.limits?.max_channels_per_user || 20);
 
             // Security
-            $('#cfg-security-flood-enabled').checked = config.security?.enable_flood_protection || false;
-            $('#cfg-security-flood-msgs').value = config.security?.flood_messages || 5;
-            $('#cfg-security-flood-window').value = config.security?.flood_window || 2;
-            $('#cfg-security-throttle-enabled').checked = config.security?.enable_connection_throttle || false;
-            $('#cfg-security-throttle').value = config.security?.connection_throttle || 100;
-            $('#cfg-security-throttle-window').value = config.security?.throttle_window || 60;
-            $('#cfg-security-cap-timeout').value = config.security?.cap_timeout || 60;
-            $('#cfg-security-auth-attempts').value = config.security?.auth_max_attempts || 5;
-            $('#cfg-security-auth-lockout').value = config.security?.auth_lockout_duration || 300;
-            $('#cfg-security-auth-window').value = config.security?.auth_lockout_window || 600;
+            setCheck('#cfg-security-flood-enabled', config.security?.enable_flood_protection || false);
+            setVal('#cfg-security-flood-msgs', config.security?.flood_messages || 5);
+            setVal('#cfg-security-flood-window', config.security?.flood_window || 2);
+            setCheck('#cfg-security-throttle-enabled', config.security?.enable_connection_throttle || false);
+            setVal('#cfg-security-throttle', config.security?.connection_throttle || 100);
+            setVal('#cfg-security-throttle-window', config.security?.throttle_window || 60);
+            setVal('#cfg-security-cap-timeout', config.security?.cap_timeout || 60);
+            setVal('#cfg-security-auth-attempts', config.security?.auth_max_attempts || 5);
+            setVal('#cfg-security-auth-lockout', config.security?.auth_lockout_duration || 300);
+            setVal('#cfg-security-auth-window', config.security?.auth_lockout_window || 600);
 
             // DNSBL
-            $('#cfg-dnsbl-enabled').checked = config.security?.dnsbl?.enabled || false;
-            $('#cfg-dnsbl-action').value = config.security?.dnsbl?.action || 'reject';
-            $('#cfg-dnsbl-lists').value = (config.security?.dnsbl?.lists || []).join('\n');
+            setCheck('#cfg-dnsbl-enabled', config.security?.dnsbl?.enabled || false);
+            setVal('#cfg-dnsbl-action', config.security?.dnsbl?.action || 'reject');
+            setVal('#cfg-dnsbl-lists', (config.security?.dnsbl?.lists || []).join('\n'));
 
             // Proxy detection
-            $('#cfg-proxy-enabled').checked = config.security?.proxy_detection?.enabled || false;
-            $('#cfg-proxy-ports').value = (config.security?.proxy_detection?.ports || []).join(',');
-            $('#cfg-proxy-action').value = config.security?.proxy_detection?.action || 'reject';
+            setCheck('#cfg-proxy-enabled', config.security?.proxy_detection?.enabled || false);
+            setVal('#cfg-proxy-ports', (config.security?.proxy_detection?.ports || []).join(','));
+            setVal('#cfg-proxy-action', config.security?.proxy_detection?.action || 'reject');
 
             // Services
-            $('#cfg-servicebot-enabled').checked = config.servicebot?.enabled || false;
-            $('#cfg-services-count').value = config.services?.servicebot_count || 10;
-            $('#cfg-services-max-channels').value = config.services?.servicebot_max_channels || 10;
-            $('#cfg-profanity-enabled').checked = config.servicebot?.profanity_filter?.enabled || false;
-            $('#cfg-profanity-action').value = config.servicebot?.profanity_filter?.action || 'warn';
-            $('#cfg-profanity-case').checked = config.servicebot?.profanity_filter?.case_sensitive || false;
-            $('#cfg-malicious-enabled').checked = config.servicebot?.malicious_detection?.enabled || false;
-            $('#cfg-malicious-flood-threshold').value = config.servicebot?.malicious_detection?.flood_threshold || 5;
-            $('#cfg-malicious-caps').value = config.servicebot?.malicious_detection?.caps_threshold || 0.7;
-            $('#cfg-malicious-url').value = config.servicebot?.malicious_detection?.url_spam_threshold || 3;
+            setCheck('#cfg-servicebot-enabled', config.servicebot?.enabled || false);
+            setVal('#cfg-services-count', config.services?.servicebot_count || 10);
+            setVal('#cfg-services-max-channels', config.services?.servicebot_max_channels || 10);
+            setCheck('#cfg-profanity-enabled', config.servicebot?.profanity_filter?.enabled || false);
+            setVal('#cfg-profanity-action', config.servicebot?.profanity_filter?.action || 'warn');
+            setCheck('#cfg-profanity-case', config.servicebot?.profanity_filter?.case_sensitive || false);
+            setCheck('#cfg-malicious-enabled', config.servicebot?.malicious_detection?.enabled || false);
+            setVal('#cfg-malicious-flood-threshold', config.servicebot?.malicious_detection?.flood_threshold || 5);
+            setVal('#cfg-malicious-caps', config.servicebot?.malicious_detection?.caps_threshold || 0.7);
+            setVal('#cfg-malicious-url', config.servicebot?.malicious_detection?.url_spam_threshold || 3);
 
             // SSL
-            $('#cfg-ssl-enabled').checked = config.ssl?.enabled || false;
-            $('#cfg-ssl-ports').value = (config.ssl?.ports || []).join(',');
-            $('#cfg-ssl-cert').value = config.ssl?.cert_file || '';
-            $('#cfg-ssl-key').value = config.ssl?.key_file || '';
-            $('#cfg-ssl-min-version').value = config.ssl?.min_version || 'TLSv1.2';
-            $('#cfg-ssl-auto-reload').checked = config.ssl?.auto_reload || false;
+            setCheck('#cfg-ssl-enabled', config.ssl?.enabled || false);
+            setVal('#cfg-ssl-ports', (config.ssl?.ports || []).join(','));
+            setVal('#cfg-ssl-cert', config.ssl?.cert_file || '');
+            setVal('#cfg-ssl-key', config.ssl?.key_file || '');
+            setVal('#cfg-ssl-min-version', config.ssl?.min_version || 'TLSv1.2');
+            setCheck('#cfg-ssl-auto-reload', config.ssl?.auto_reload || false);
 
             // Linking
-            $('#cfg-linking-enabled').checked = config.linking?.enabled || false;
-            $('#cfg-linking-host').value = config.linking?.bind_host || '';
-            $('#cfg-linking-port').value = config.linking?.bind_port || 7001;
+            setCheck('#cfg-linking-enabled', config.linking?.enabled || false);
+            setVal('#cfg-linking-host', config.linking?.bind_host || '');
+            setVal('#cfg-linking-port', config.linking?.bind_port || 7001);
 
             // Advanced
-            $('#cfg-transcript-enabled').checked = config.transcript?.enabled || false;
-            $('#cfg-transcript-dir').value = config.transcript?.directory || '';
-            $('#cfg-transcript-max').value = config.transcript?.max_lines || 10000;
-            $('#cfg-persist-auto').checked = config.persistence?.auto_save || false;
-            $('#cfg-persist-interval').value = config.persistence?.save_interval || 300;
-            $('#cfg-newsflash-connect').checked = config.newsflash?.on_connect || false;
-            $('#cfg-newsflash-periodic').checked = config.newsflash?.periodic_enabled || false;
-            $('#cfg-newsflash-interval').value = config.newsflash?.periodic_interval || 3600;
+            setCheck('#cfg-transcript-enabled', config.transcript?.enabled || false);
+            setVal('#cfg-transcript-dir', config.transcript?.directory || '');
+            setVal('#cfg-transcript-max', config.transcript?.max_lines || 10000);
+            setCheck('#cfg-persist-auto', config.persistence?.auto_save || false);
+            setVal('#cfg-persist-interval', config.persistence?.save_interval || 300);
+            setCheck('#cfg-newsflash-connect', config.newsflash?.on_connect || false);
+            setCheck('#cfg-newsflash-periodic', config.newsflash?.periodic_enabled || false);
+            setVal('#cfg-newsflash-interval', config.newsflash?.periodic_interval || 3600);
         });
     }
 
@@ -2110,95 +2153,134 @@ console.log("=== admin.js LOADING ===");
         // Build config object from form
         const newConfig = JSON.parse(JSON.stringify(currentConfig)); // Deep clone
 
+        // Ensure all required sections exist
+        newConfig.server = newConfig.server || {};
+        newConfig.network = newConfig.network || {};
+        newConfig.database = newConfig.database || {};
+        newConfig.limits = newConfig.limits || {};
+        newConfig.security = newConfig.security || {};
+        newConfig.security.dnsbl = newConfig.security.dnsbl || {};
+        newConfig.security.proxy_detection = newConfig.security.proxy_detection || {};
+        newConfig.servicebot = newConfig.servicebot || {};
+        newConfig.servicebot.profanity_filter = newConfig.servicebot.profanity_filter || {};
+        newConfig.servicebot.malicious_detection = newConfig.servicebot.malicious_detection || {};
+        newConfig.services = newConfig.services || {};
+        newConfig.ssl = newConfig.ssl || {};
+        newConfig.linking = newConfig.linking || {};
+        newConfig.persistence = newConfig.persistence || {};
+        newConfig.newsflash = newConfig.newsflash || {};
+
+        // Helper to safely get form values
+        const getVal = (id, def = '') => {
+            const el = $(id);
+            return el ? el.value : def;
+        };
+        const getCheck = (id, def = false) => {
+            const el = $(id);
+            return el ? el.checked : def;
+        };
+
         // Server settings
-        newConfig.server.name = $('#cfg-server-name').value;
-        newConfig.server.network = $('#cfg-server-network').value;
-        newConfig.server.staff_login_message = $('#cfg-server-staff-message').value;
+        newConfig.server.name = getVal('#cfg-server-name');
+        newConfig.server.network = getVal('#cfg-server-network');
+        newConfig.server.staff_login_message = getVal('#cfg-server-staff-message');
 
         // Network settings
-        newConfig.network.listen_addr = $('#cfg-network-addr').value;
-        newConfig.network.listen_ports = $('#cfg-network-ports').value.split(',').map(p => parseInt(p.trim())).filter(p => !isNaN(p));
-        newConfig.network.enable_ipv6 = $('#cfg-network-ipv6').checked;
-        newConfig.network.resolve_hostnames = $('#cfg-network-resolve').checked;
+        newConfig.network.listen_addr = getVal('#cfg-network-addr');
+        newConfig.network.listen_ports = getVal('#cfg-network-ports', '').split(',').map(p => parseInt(p.trim())).filter(p => !isNaN(p));
+        newConfig.network.enable_ipv6 = getCheck('#cfg-network-ipv6');
+        newConfig.network.resolve_hostnames = getCheck('#cfg-network-resolve');
 
         // Database settings
-        newConfig.database.path = $('#cfg-database-path').value;
-        newConfig.database.pool_size = parseInt($('#cfg-database-pool').value);
+        newConfig.database.path = getVal('#cfg-database-path');
+        newConfig.database.pool_size = parseInt(getVal('#cfg-database-pool'));
 
         // Limits
-        newConfig.limits.max_users = parseInt($('#cfg-limits-max-users').value);
-        newConfig.limits.msg_length = parseInt($('#cfg-limits-msg-length').value);
-        newConfig.limits.nick_change_cooldown = parseInt($('#cfg-limits-nick-cooldown').value);
-        newConfig.limits.max_nick_length = parseInt($('#cfg-limits-max-nick').value);
-        newConfig.limits.max_user_length = parseInt($('#cfg-limits-max-user').value);
-        newConfig.limits.max_channel_length = parseInt($('#cfg-limits-max-channel').value);
-        newConfig.limits.max_channels = parseInt($('#cfg-limits-max-channels').value);
-        newConfig.limits.max_channels_per_user = parseInt($('#cfg-limits-max-channels-user').value);
+        newConfig.limits.max_users = parseInt(getVal('#cfg-limits-max-users'));
+        newConfig.limits.msg_length = parseInt(getVal('#cfg-limits-msg-length'));
+        newConfig.limits.nick_change_cooldown = parseInt(getVal('#cfg-limits-nick-cooldown'));
+        newConfig.limits.max_nick_length = parseInt(getVal('#cfg-limits-max-nick'));
+        newConfig.limits.max_user_length = parseInt(getVal('#cfg-limits-max-user'));
+        newConfig.limits.max_channel_length = parseInt(getVal('#cfg-limits-max-channel'));
+        newConfig.limits.max_channels = parseInt(getVal('#cfg-limits-max-channels'));
+        newConfig.limits.max_channels_per_user = parseInt(getVal('#cfg-limits-max-channels-user'));
 
         // Security
-        newConfig.security.enable_flood_protection = $('#cfg-security-flood-enabled').checked;
-        newConfig.security.flood_messages = parseInt($('#cfg-security-flood-msgs').value);
-        newConfig.security.flood_window = parseInt($('#cfg-security-flood-window').value);
-        newConfig.security.enable_connection_throttle = $('#cfg-security-throttle-enabled').checked;
-        newConfig.security.connection_throttle = parseInt($('#cfg-security-throttle').value);
-        newConfig.security.throttle_window = parseInt($('#cfg-security-throttle-window').value);
-        newConfig.security.cap_timeout = parseInt($('#cfg-security-cap-timeout').value);
-        newConfig.security.auth_max_attempts = parseInt($('#cfg-security-auth-attempts').value);
-        newConfig.security.auth_lockout_duration = parseInt($('#cfg-security-auth-lockout').value);
-        newConfig.security.auth_lockout_window = parseInt($('#cfg-security-auth-window').value);
+        newConfig.security.enable_flood_protection = getCheck('#cfg-security-flood-enabled');
+        newConfig.security.flood_messages = parseInt(getVal('#cfg-security-flood-msgs'));
+        newConfig.security.flood_window = parseInt(getVal('#cfg-security-flood-window'));
+        newConfig.security.enable_connection_throttle = getCheck('#cfg-security-throttle-enabled');
+        newConfig.security.connection_throttle = parseInt(getVal('#cfg-security-throttle'));
+        newConfig.security.throttle_window = parseInt(getVal('#cfg-security-throttle-window'));
+        newConfig.security.cap_timeout = parseInt(getVal('#cfg-security-cap-timeout'));
+        newConfig.security.auth_max_attempts = parseInt(getVal('#cfg-security-auth-attempts'));
+        newConfig.security.auth_lockout_duration = parseInt(getVal('#cfg-security-auth-lockout'));
+        newConfig.security.auth_lockout_window = parseInt(getVal('#cfg-security-auth-window'));
 
         // DNSBL
-        newConfig.security.dnsbl.enabled = $('#cfg-dnsbl-enabled').checked;
-        newConfig.security.dnsbl.action = $('#cfg-dnsbl-action').value;
-        newConfig.security.dnsbl.lists = $('#cfg-dnsbl-lists').value.split('\n').map(l => l.trim()).filter(l => l);
+        newConfig.security.dnsbl.enabled = getCheck('#cfg-dnsbl-enabled');
+        newConfig.security.dnsbl.action = getVal('#cfg-dnsbl-action');
+        newConfig.security.dnsbl.lists = getVal('#cfg-dnsbl-lists').split('\n').map(l => l.trim()).filter(l => l);
 
         // Proxy detection
-        newConfig.security.proxy_detection.enabled = $('#cfg-proxy-enabled').checked;
-        newConfig.security.proxy_detection.ports = $('#cfg-proxy-ports').value.split(',').map(p => parseInt(p.trim())).filter(p => !isNaN(p));
-        newConfig.security.proxy_detection.action = $('#cfg-proxy-action').value;
+        newConfig.security.proxy_detection.enabled = getCheck('#cfg-proxy-enabled');
+        newConfig.security.proxy_detection.ports = getVal('#cfg-proxy-ports').split(',').map(p => parseInt(p.trim())).filter(p => !isNaN(p));
+        newConfig.security.proxy_detection.action = getVal('#cfg-proxy-action');
 
         // Services
-        newConfig.servicebot.enabled = $('#cfg-servicebot-enabled').checked;
-        newConfig.services.servicebot_count = parseInt($('#cfg-services-count').value);
-        newConfig.services.servicebot_max_channels = parseInt($('#cfg-services-max-channels').value);
-        newConfig.servicebot.profanity_filter.enabled = $('#cfg-profanity-enabled').checked;
-        newConfig.servicebot.profanity_filter.action = $('#cfg-profanity-action').value;
-        newConfig.servicebot.profanity_filter.case_sensitive = $('#cfg-profanity-case').checked;
-        newConfig.servicebot.malicious_detection.enabled = $('#cfg-malicious-enabled').checked;
-        newConfig.servicebot.malicious_detection.flood_threshold = parseInt($('#cfg-malicious-flood-threshold').value);
-        newConfig.servicebot.malicious_detection.caps_threshold = parseFloat($('#cfg-malicious-caps').value);
-        newConfig.servicebot.malicious_detection.url_spam_threshold = parseInt($('#cfg-malicious-url').value);
+        newConfig.servicebot.enabled = getCheck('#cfg-servicebot-enabled');
+        newConfig.services.servicebot_count = parseInt(getVal('#cfg-services-count'));
+        newConfig.services.servicebot_max_channels = parseInt(getVal('#cfg-services-max-channels'));
+        newConfig.servicebot.profanity_filter.enabled = getCheck('#cfg-profanity-enabled');
+        newConfig.servicebot.profanity_filter.action = getVal('#cfg-profanity-action');
+        newConfig.servicebot.profanity_filter.case_sensitive = getCheck('#cfg-profanity-case');
+        newConfig.servicebot.malicious_detection.enabled = getCheck('#cfg-malicious-enabled');
+        newConfig.servicebot.malicious_detection.flood_threshold = parseInt(getVal('#cfg-malicious-flood-threshold'));
+        newConfig.servicebot.malicious_detection.caps_threshold = parseFloat(getVal('#cfg-malicious-caps'));
+        newConfig.servicebot.malicious_detection.url_spam_threshold = parseInt(getVal('#cfg-malicious-url'));
 
         // SSL
-        newConfig.ssl.enabled = $('#cfg-ssl-enabled').checked;
-        newConfig.ssl.ports = $('#cfg-ssl-ports').value.split(',').map(p => parseInt(p.trim())).filter(p => !isNaN(p));
-        newConfig.ssl.cert_file = $('#cfg-ssl-cert').value;
-        newConfig.ssl.key_file = $('#cfg-ssl-key').value;
-        newConfig.ssl.min_version = $('#cfg-ssl-min-version').value;
-        newConfig.ssl.auto_reload = $('#cfg-ssl-auto-reload').checked;
+        newConfig.ssl.enabled = getCheck('#cfg-ssl-enabled');
+        newConfig.ssl.ports = getVal('#cfg-ssl-ports').split(',').map(p => parseInt(p.trim())).filter(p => !isNaN(p));
+        newConfig.ssl.cert_file = getVal('#cfg-ssl-cert');
+        newConfig.ssl.key_file = getVal('#cfg-ssl-key');
+        newConfig.ssl.min_version = getVal('#cfg-ssl-min-version');
+        newConfig.ssl.auto_reload = getCheck('#cfg-ssl-auto-reload');
 
         // Linking
-        newConfig.linking.enabled = $('#cfg-linking-enabled').checked;
-        newConfig.linking.bind_host = $('#cfg-linking-host').value;
-        newConfig.linking.bind_port = parseInt($('#cfg-linking-port').value);
+        newConfig.linking.enabled = getCheck('#cfg-linking-enabled');
+        newConfig.linking.bind_host = getVal('#cfg-linking-host');
+        newConfig.linking.bind_port = parseInt(getVal('#cfg-linking-port'));
 
         // Advanced
-        newConfig.persistence.auto_save = $('#cfg-persist-auto').checked;
-        newConfig.persistence.save_interval = parseInt($('#cfg-persist-interval').value);
-        newConfig.newsflash.on_connect = $('#cfg-newsflash-connect').checked;
-        newConfig.newsflash.periodic_enabled = $('#cfg-newsflash-periodic').checked;
-        newConfig.newsflash.periodic_interval = parseInt($('#cfg-newsflash-interval').value);
+        newConfig.persistence.auto_save = getCheck('#cfg-persist-auto');
+        newConfig.persistence.save_interval = parseInt(getVal('#cfg-persist-interval'));
+        newConfig.newsflash.on_connect = getCheck('#cfg-newsflash-connect');
+        newConfig.newsflash.periodic_enabled = getCheck('#cfg-newsflash-periodic');
+        newConfig.newsflash.periodic_interval = parseInt(getVal('#cfg-newsflash-interval'));
 
         // Confirm and save
         if (confirm('Save configuration and restart server?')) {
-            callAPI('set-config', [JSON.stringify(newConfig)]).then(res => {
+            console.log('Saving configuration...');
+            const configStr = JSON.stringify(newConfig);
+            console.log('Config length:', configStr.length);
+
+            callAPI('set-config', [configStr]).then(res => {
+                console.log('set-config response:', res);
                 if (res.error) {
+                    console.error('Save error:', res.error);
                     showToast('Error', res.error, 'error');
-                } else {
+                } else if (res.success) {
                     showToast('Success', 'Configuration saved, restarting service...', 'success');
                     controlService('restart');
                     currentConfig = newConfig;
+                } else {
+                    console.warn('Unexpected response:', res);
+                    showToast('Warning', 'Unexpected response from server', 'warning');
                 }
+            }).catch(err => {
+                console.error('Save failed:', err);
+                showToast('Error', 'Failed to save: ' + err.message, 'error');
             });
         }
     }

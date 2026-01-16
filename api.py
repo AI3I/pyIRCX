@@ -1618,6 +1618,14 @@ def test_staff_login(username, password):
     except Exception as e:
         return {"error": str(e)}
 
+def test_staff_login_stdin(username):
+    """Test if a staff username/password combination is valid (password from stdin)"""
+    # Read password from stdin (more secure for web interface)
+    password = sys.stdin.read().strip()
+
+    # Use the existing test_staff_login function
+    return test_staff_login(username, password)
+
 def get_staff_details(username):
     """Get detailed staff information including owned nicknames"""
     db_path = get_db_path()
@@ -2227,6 +2235,11 @@ def main():
             result = {"error": "Usage: test-staff-login <username> <password>"}
         else:
             result = test_staff_login(sys.argv[2], sys.argv[3])
+    elif command == "test-staff-login-stdin":
+        if len(sys.argv) < 3:
+            result = {"error": "Usage: test-staff-login-stdin <username> (password from stdin)"}
+        else:
+            result = test_staff_login_stdin(sys.argv[2])
     elif command == "get-staff-details":
         if len(sys.argv) < 3:
             result = {"error": "Usage: get-staff-details <username>"}

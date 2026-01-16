@@ -191,20 +191,35 @@ if [ $COCKPIT_REMOVED -eq 0 ]; then
     echo "Cockpit module not found"
 fi
 
-# Remove service user
+# Remove service user and group
 echo ""
-echo -e "${BLUE}Checking for service user...${NC}"
+echo -e "${BLUE}Checking for service user and group...${NC}"
 if id "$SERVICE_USER" &>/dev/null; then
-    read -p "Remove user '$SERVICE_USER'? [y/N] " -n 1 -r
+    read -p "Remove user '$SERVICE_USER' and group '$SERVICE_GROUP'? [y/N] " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        userdel "$SERVICE_USER" 2>/dev/null || true
+        # Remove user with home directory
+        userdel -r "$SERVICE_USER" 2>/dev/null || userdel "$SERVICE_USER" 2>/dev/null || true
         echo -e "${GREEN}✓ User removed${NC}"
+        # Remove group if it still exists
+        if getent group "$SERVICE_GROUP" &>/dev/null; then
+            groupdel "$SERVICE_GROUP" 2>/dev/null || true
+            echo -e "${GREEN}✓ Group removed${NC}"
+        fi
     else
-        echo "Keeping user '$SERVICE_USER'"
+        echo "Keeping user '$SERVICE_USER' and group '$SERVICE_GROUP'"
     fi
 else
     echo "Service user not found"
+    # Still check if group exists
+    if getent group "$SERVICE_GROUP" &>/dev/null; then
+        read -p "Remove group '$SERVICE_GROUP'? [y/N] " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            groupdel "$SERVICE_GROUP" 2>/dev/null || true
+            echo -e "${GREEN}✓ Group removed${NC}"
+        fi
+    fi
 fi
 
 # Ask about Let's Encrypt certificates
@@ -278,6 +293,9 @@ if [ -d "$CONFIG_DIR" ]; then
 fi
 if id "$SERVICE_USER" &>/dev/null; then
     echo "  - Service user: $SERVICE_USER"
+fi
+if getent group "$SERVICE_GROUP" &>/dev/null; then
+    echo "  - Service group: $SERVICE_GROUP"
 fi
 if [ -d /etc/letsencrypt/live ]; then
     echo "  - SSL certificates: /etc/letsencrypt/"

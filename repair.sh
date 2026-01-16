@@ -422,12 +422,13 @@ if [[ ! $REPLY =~ ^[Nn]$ ]]; then
         chown -R "$SERVICE_USER:$SERVICE_GROUP" "$INSTALL_DIR" 2>/dev/null || true
         chown -R "$SERVICE_USER:$SERVICE_GROUP" "$CONFIG_DIR" 2>/dev/null || true
         chmod 775 "$INSTALL_DIR" 2>/dev/null || true  # Group needs write for SQLite journal files
+        chmod 775 "$CONFIG_DIR" 2>/dev/null || true  # Group needs write for web admin config edits
         chmod 750 "$INSTALL_DIR/transcripts" 2>/dev/null || true  # Keep transcripts private
         chmod 664 "$INSTALL_DIR/pyircx.db" 2>/dev/null || true  # Database group writable
+        chmod 664 "$CONFIG_DIR/pyircx_config.json" 2>/dev/null || true  # Config group writable (for web admin)
         chmod 755 "$INSTALL_DIR/pyircx.py" 2>/dev/null || true
         chmod 755 "$INSTALL_DIR/api.py" 2>/dev/null || true
         chmod 755 "$INSTALL_DIR/linking.py" 2>/dev/null || true
-        chmod 644 "$CONFIG_DIR/pyircx_config.json" 2>/dev/null || true
 
         # Add web server user to pyircx group for database access
         # Detect web server user (apache, www-data, or http)
@@ -444,6 +445,25 @@ if [[ ! $REPLY =~ ^[Nn]$ ]]; then
             echo -e "${YELLOW}Adding $WEB_USER to $SERVICE_GROUP group for database access...${NC}"
             usermod -a -G "$SERVICE_GROUP" "$WEB_USER"
             echo -e "${GREEN}✓ Web server user added to group${NC}"
+
+            # Restart PHP-FPM to apply group membership
+            if systemctl is-active --quiet php-fpm 2>/dev/null; then
+                echo -e "${YELLOW}Restarting PHP-FPM to apply group membership...${NC}"
+                systemctl restart php-fpm
+                echo -e "${GREEN}✓ PHP-FPM restarted${NC}"
+            fi
+        fi
+
+        # Fix SELinux contexts if enabled
+        if command -v getenforce &>/dev/null && [ "$(getenforce)" != "Disabled" ]; then
+            if command -v semanage &> /dev/null && command -v restorecon &> /dev/null; then
+                echo -e "${YELLOW}Fixing SELinux contexts...${NC}"
+                semanage fcontext -a -t httpd_sys_rw_content_t "/opt/pyircx(/.*)?" 2>/dev/null || true
+                semanage fcontext -a -t httpd_sys_rw_content_t "/etc/pyircx(/.*)?" 2>/dev/null || true
+                restorecon -Rv /opt/pyircx 2>/dev/null || true
+                restorecon -Rv /etc/pyircx 2>/dev/null || true
+                echo -e "${GREEN}✓ SELinux contexts fixed${NC}"
+            fi
         fi
 
         echo -e "${GREEN}✓ Permissions fixed${NC}"

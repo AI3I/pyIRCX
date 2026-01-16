@@ -15,7 +15,7 @@
   },
   "database": {
     "path": "pyircx.db",
-    "pool_size": 5
+    "pool_size": 10
   },
   "system": {
     "nick": "System",

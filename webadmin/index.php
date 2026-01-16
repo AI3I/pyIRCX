@@ -1,4 +1,10 @@
 <?php
+// Secure session configuration
+ini_set('session.cookie_httponly', 1);
+ini_set('session.cookie_secure', isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 1 : 0);
+ini_set('session.cookie_samesite', 'Strict');
+ini_set('session.use_strict_mode', 1);
+
 session_start();
 
 // Authentication check - redirect to login if not authenticated
@@ -8,12 +14,19 @@ if (!isset($_SESSION["admin_user"]) || !isset($_SESSION["admin_level"]) || $_SES
 }
 
 $admin_user = htmlspecialchars($_SESSION["admin_user"]);
+
+// Ensure CSRF token exists
+if (!isset($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+$csrf_token = $_SESSION['csrf_token'];
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="<?php echo $csrf_token; ?>">
     <title>pyIRCX Server Administration</title>
     <link rel="stylesheet" href="style.css">
 </head>

@@ -225,6 +225,7 @@ set_permissions() {
     chown -R "$SERVICE_USER:$SERVICE_GROUP" "$INSTALL_DIR"
     chown -R "$SERVICE_USER:$SERVICE_GROUP" "$CONFIG_DIR"
     chmod 775 "$INSTALL_DIR"  # Group needs write for SQLite journal files
+    chmod 775 "$CONFIG_DIR"  # Group needs write for web admin config edits
     chmod 750 "$INSTALL_DIR/transcripts"  # Keep transcripts private
     chmod 664 "$INSTALL_DIR/pyircx.db" 2>/dev/null || true  # Database group writable
     chmod 664 "$CONFIG_DIR/pyircx_config.json" 2>/dev/null || true  # Config group writable (for web admin)
@@ -247,6 +248,13 @@ set_permissions() {
         echo -e "${YELLOW}Adding $WEB_USER to $SERVICE_GROUP group for database access...${NC}"
         usermod -a -G "$SERVICE_GROUP" "$WEB_USER"
         echo -e "${GREEN}✓ Web server user added to group${NC}"
+
+        # Restart PHP-FPM to apply group membership
+        if systemctl is-active --quiet php-fpm 2>/dev/null; then
+            echo -e "${YELLOW}Restarting PHP-FPM to apply group membership...${NC}"
+            systemctl restart php-fpm
+            echo -e "${GREEN}✓ PHP-FPM restarted${NC}"
+        fi
     fi
 
     echo -e "${GREEN}Permissions set${NC}"
@@ -359,18 +367,19 @@ install_selinux() {
 
     cd - > /dev/null
 
-    # Configure file contexts for /opt/pyircx (allow Apache write access)
+    # Configure file contexts for /opt/pyircx and /etc/pyircx (allow Apache write access)
     if command -v semanage &> /dev/null && command -v restorecon &> /dev/null; then
         echo -e "${YELLOW}Configuring SELinux file contexts...${NC}"
 
-        # Set contexts for database and directory
+        # Set contexts for database and directories
         semanage fcontext -a -t httpd_sys_rw_content_t "/opt/pyircx/pyircx\.db" 2>/dev/null || true
         semanage fcontext -a -t httpd_sys_rw_content_t "/opt/pyircx(/.*)?" 2>/dev/null || true
+        semanage fcontext -a -t httpd_sys_rw_content_t "/etc/pyircx(/.*)?" 2>/dev/null || true
         semanage fcontext -a -t httpd_sys_rw_content_t "/etc/pyircx/pyircx_config\.json" 2>/dev/null || true
 
         # Apply contexts
         restorecon -Rv /opt/pyircx 2>/dev/null || true
-        restorecon -v /etc/pyircx/pyircx_config.json 2>/dev/null || true
+        restorecon -Rv /etc/pyircx 2>/dev/null || true
         echo -e "${GREEN}✓ SELinux file contexts configured${NC}"
     fi
 
