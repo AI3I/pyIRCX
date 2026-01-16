@@ -1,10 +1,18 @@
-# Security Analysis - pyIRCX v1.0.5
+# Security Analysis - pyIRCX v1.1.9
 
 ## Executive Summary
 
 pyIRCX has been designed with security as a priority. This document outlines security features, known considerations, and recommendations for secure deployment.
 
 **Overall Security Rating: PRODUCTION-READY** ✅
+
+**Recent Security Enhancements (v1.1.6+):**
+- ✅ Comprehensive CSRF token protection on all web admin API endpoints
+- ✅ Secure session handling with HTTP/HTTPS auto-detection
+- ✅ Stdin password input (no password exposure in process lists)
+- ✅ Enhanced SELinux context hardening across all components
+- ✅ Group-based permissions (no world-writable files)
+- ✅ Automated Apache/httpd security configuration script
 
 ## Security Features
 
@@ -94,15 +102,17 @@ python3 cleanup_users.py
 
 **Risk Level: LOW** (v1.1.6+)
 
-**Security Features (v1.1.6):**
-- ✅ CSRF token protection on all API endpoints
-- ✅ Session-based authentication with IRC staff accounts
-- ✅ Secure cookie handling (HTTP/HTTPS auto-detection)
-- ✅ Stdin password input (no password exposure in process lists)
-- ✅ SELinux context isolation (httpd_sys_rw_content_t)
-- ✅ Group-based permissions (775/664, no world-writable files)
+**Security Features (v1.1.6-v1.1.8):**
+- ✅ CSRF token protection on all API endpoints (v1.1.6)
+- ✅ Session-based authentication with IRC staff accounts (v1.1.6)
+- ✅ Secure cookie handling (HTTP/HTTPS auto-detection) (v1.1.6)
+- ✅ Stdin password input (no password exposure in process lists) (v1.1.6)
+- ✅ SELinux context isolation (httpd_sys_rw_content_t) (v1.1.6)
+- ✅ Comprehensive SELinux configuration across all installation scripts (v1.1.7)
+- ✅ Group-based permissions (775/664, no world-writable files) (v1.1.6)
 - ✅ PolicyKit for service control (passwordless with authorization)
 - ✅ Proper file permissions and ownership
+- ✅ Automated Apache/httpd security setup script with SELinux support (v1.1.8)
 
 **Considerations:**
 - Runs on Apache/nginx (standard HTTP/HTTPS ports)
@@ -119,10 +129,12 @@ python3 cleanup_users.py
 
 **Recommendation:**
 - Use HTTPS in production (auto-detects and adapts)
+- Use `setup_apache.sh` script for automated secure Apache configuration (v1.1.8+)
 - Use firewall to restrict web admin access to trusted IPs
 - Change default staff passwords immediately
 - Keep Apache/PHP updated
 - Monitor `/var/log/httpd/` for suspicious activity
+- Verify SELinux contexts after installation (see `docs/user/SELINUX.md`)
 
 ### 3. Server Linking Authentication
 
@@ -233,6 +245,8 @@ python3 cleanup_users.py
 - [ ] Enable fail2ban or similar for brute force protection
 - [ ] Review staff accounts (delete test accounts)
 - [ ] Set up log monitoring/alerting
+- [ ] Run `setup_apache.sh` for automated secure web admin setup (v1.1.8+)
+- [ ] Verify SELinux contexts on RHEL-based systems
 
 **Network Security:**
 - [ ] Use firewall to restrict administrative access
@@ -249,24 +263,65 @@ python3 cleanup_users.py
 - [ ] Backup database regularly
 - [ ] Test disaster recovery procedures
 
+### Automated Apache/httpd Setup (v1.1.8+)
+
+**`setup_apache.sh` Script:**
+The automated Apache setup script provides secure configuration out of the box:
+
+```bash
+sudo ./setup_apache.sh
+```
+
+**What it configures:**
+- ✅ Auto-detects Linux distribution (RHEL, Fedora, CentOS, Rocky, Alma, Amazon Linux, Debian, Ubuntu)
+- ✅ Installs Apache and PHP with required modules
+- ✅ Configures proper group permissions (apache:pyircx)
+- ✅ Sets SELinux contexts automatically on RHEL-based systems
+- ✅ Creates secure VirtualHost configurations for WebAdmin and WebChat
+- ✅ Sets proper file permissions (775 for directories, 664 for files)
+- ✅ Tests configuration before applying changes
+- ✅ Provides clear error messages and troubleshooting steps
+
+**Manual verification after running script:**
+```bash
+# Verify SELinux contexts (RHEL-based systems)
+ls -Z /opt/pyircx/webadmin/
+ls -Z /opt/pyircx/webchat/
+ls -Z /etc/pyircx/
+
+# Verify group permissions
+ls -la /opt/pyircx/webadmin/
+ls -la /etc/pyircx/
+
+# Verify Apache is running
+systemctl status httpd  # RHEL-based
+systemctl status apache2  # Debian-based
+```
+
 ### File Permissions
 
 ```bash
 # Configuration (contains passwords)
-chmod 600 pyircx_config.json
-chown pyircx:pyircx pyircx_config.json
+chmod 600 /etc/pyircx/pyircx_config.json
+chown pyircx:pyircx /etc/pyircx/pyircx_config.json
 
 # Database
-chmod 600 pyircx.db
-chown pyircx:pyircx pyircx.db
+chmod 600 /opt/pyircx/pyircx.db
+chown pyircx:pyircx /opt/pyircx/pyircx.db
 
 # Code (read-only)
-chmod 644 pyircx.py
-chown root:root pyircx.py
+chmod 644 /opt/pyircx/pyircx.py
+chown root:root /opt/pyircx/pyircx.py
 
 # Service file
 chmod 644 /etc/systemd/system/pyircx.service
 chown root:root /etc/systemd/system/pyircx.service
+
+# WebAdmin (after running setup_apache.sh)
+chmod 775 /opt/pyircx/webadmin/
+chmod 664 /opt/pyircx/webadmin/*.php
+chown apache:pyircx /opt/pyircx/webadmin/  # RHEL-based
+chown www-data:pyircx /opt/pyircx/webadmin/  # Debian-based
 ```
 
 ### SSL/TLS Configuration
@@ -421,19 +476,35 @@ EOF
 
 ## Conclusion
 
-pyIRCX v1.0.5 is **production-ready** with strong security foundations:
+pyIRCX v1.1.9 is **production-ready** with strong security foundations:
 
 ✅ **No known vulnerabilities**
 ✅ **Industry-standard security practices**
 ✅ **Comprehensive protection mechanisms**
-✅ **Channel mode security** - Fixed +r mode protection
+✅ **CSRF protection and secure session handling** (v1.1.6+)
+✅ **SELinux hardening across all components** (v1.1.6-v1.1.7)
+✅ **Automated secure Apache configuration** (v1.1.8+)
+✅ **Group-based permissions** - No world-writable files (v1.1.6+)
+✅ **Stdin password input** - No password exposure (v1.1.6+)
 ⚠️ **Requires proper deployment configuration**
 ⚠️ **Default passwords must be changed**
 
-With proper deployment and maintenance, pyIRCX provides a secure platform for IRC/IRCX services.
+**Security Improvements Since v1.0.5:**
+- **v1.1.6** (Jan 16, 2026): Major web admin security overhaul - CSRF protection, secure sessions, SELinux contexts
+- **v1.1.7** (Jan 16, 2026): Comprehensive SELinux configuration across all installation scripts
+- **v1.1.8** (Jan 16, 2026): Automated Apache/httpd security setup with SELinux support
+- **v1.1.9** (Jan 16, 2026): Traditional IRC service compatibility (no security impact)
+
+With proper deployment and maintenance, pyIRCX provides a secure, production-ready platform for IRC/IRCX services.
+
+**For detailed documentation:**
+- SELinux configuration: `docs/user/SELINUX.md`
+- Staff account security: `docs/user/STAFF_ACCOUNT_REFERENCE.md`
+- Configuration reference: `docs/user/CONFIG.md`
+- Web admin setup: `webadmin/README.md` and `webadmin/INSTALL.md`
 
 ---
 
-**Document Version:** 1.0.5
-**Last Updated:** 2026-01-02
-**Next Review:** 2026-06-01
+**Document Version:** 1.1.9
+**Last Updated:** 2026-01-16
+**Next Review:** 2026-07-01
