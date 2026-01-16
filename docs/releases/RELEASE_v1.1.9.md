@@ -1,7 +1,7 @@
 # pyIRCX v1.1.9 Release Notes
 
 **Release Date:** January 16, 2026
-**Focus:** Traditional IRC Service Compatibility & Apache/httpd Multi-Distribution Support
+**Focus:** Traditional IRC Service Compatibility
 
 ---
 
@@ -22,16 +22,6 @@ None in this release.
   - Maintains compatibility with traditional IRC client configurations
   - Proper CamelCase formatting for service names (OperServ not Operserv)
 
-### Apache/httpd Multi-Distribution Setup Script
-- **`setup_apache.sh`**: Comprehensive Apache/httpd configuration for all supported distributions
-  - Auto-detects distribution (RHEL, Fedora, CentOS, Rocky, Alma, Amazon Linux, Debian, Ubuntu)
-  - Configures Apache for both WebAdmin and WebChat
-  - Handles SELinux contexts automatically on RHEL-based systems
-  - Sets proper permissions (apache:pyircx group membership)
-  - Installs and configures PHP and required modules
-  - Tests configuration before applying
-  - Provides clear success/error messages with troubleshooting steps
-
 ---
 
 ## 🐛 Bug Fixes
@@ -46,11 +36,10 @@ None in this release.
 
 ---
 
-## 📋 All Changes from v1.1.7
+## 📋 All Changes from v1.1.8
 
 1. **Service Alias Routing**: Added case-insensitive routing for traditional IRC service names (NickServ, ChanServ, MemoServ, etc.) to maintain compatibility with classic IRC networks
 2. **Service Name Formatting**: Fixed service name capitalization to use proper CamelCase (OperServ, HelpServ, etc.)
-3. **Apache Setup Script**: Created comprehensive `setup_apache.sh` for automated Apache/httpd configuration across all supported Linux distributions
 
 ---
 
@@ -59,14 +48,11 @@ None in this release.
 ### Core Server
 - `pyircx.py`: Added service alias routing (lines 3503-3531)
 
-### Installation Scripts
-- `setup_apache.sh`: **NEW** - Multi-distribution Apache/httpd setup script
-
 ---
 
 ## 🔧 Upgrade Instructions
 
-### From v1.1.7
+### From v1.1.8
 
 1. **Stop the server:**
    ```bash

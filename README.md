@@ -26,10 +26,10 @@ If you remember the days of **Microsoft Comic Chat**, chat rooms with real nicks
 **Current Version:** 1.1.9
 
 **Latest Releases:**
-- **v1.1.9** (January 16, 2026) - Traditional IRC service aliases (NickServ/ChanServ/MemoServ), Apache/httpd multi-distro setup
-- **v1.1.7** (January 16, 2026) - Documentation updates, SELinux hardening, WebChat configuration system, MOTD editor fixes
+- **v1.1.9** (January 16, 2026) - Traditional IRC service aliases (NickServ/ChanServ/MemoServ)
+- **v1.1.8** (January 16, 2026) - Comprehensive documentation reorganization, Apache/httpd multi-distro setup
+- **v1.1.7** (January 16, 2026) - WebChat configuration system, SELinux hardening, MOTD editor fixes
 - **v1.1.6** (January 16, 2026) - Web admin security & permissions (CSRF protection, SELinux contexts)
-- **v1.1.5** (January 15, 2026) - Critical bug fixes, test harness, STATS/HELP systems, VOICEKEY
 
 For complete version history, see [CHANGELOG.md](CHANGELOG.md)
 

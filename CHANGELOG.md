@@ -14,6 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `MemoServ` → Routes to Messenger (offline messages)
   - `OperServ`, `HelpServ`, `InfoServ`, `BotServ`, `HostServ`, `StatServ`, `Global`, `ALIS`, `Services` → Provide help information directing users to active services
   - Maintains compatibility with traditional IRC client configurations
+  - Proper CamelCase formatting for service names
+
+## [1.1.8] - 2026-01-16
+
+### Added
 - **Apache/httpd Multi-Distribution Setup Script**: `setup_apache.sh`
   - Auto-detects distribution (RHEL, Fedora, CentOS, Rocky, Alma, Amazon Linux, Debian, Ubuntu)
   - Configures Apache for both WebAdmin and WebChat
@@ -22,6 +27,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Installs and configures PHP and required modules
   - Tests configuration before applying
   - Provides clear success/error messages with troubleshooting steps
+
+### Documentation
+- **Complete Documentation Reorganization**: Restructured all documentation into organized subdirectories
+  - `docs/user/` - User and admin guides (CONFIG, MANUAL, LINKING, SELINUX, STAFF_ACCOUNT_REFERENCE)
+  - `docs/testing/` - Testing documentation (TESTING, TESTHARNESS, TEST_COVERAGE_ANALYSIS)
+  - `docs/performance/` - Performance guides (PERFORMANCE, SECURITY_AND_PERFORMANCE_AUDIT)
+  - `docs/development/` - Development docs (RELEASE_CHECKLIST, VERSION_MANAGEMENT)
+  - `docs/releases/` - All release notes (RELEASE_v1.1.x)
+  - Cleaner repository root (20 → 4 markdown files)
+- **New WebChat Documentation**: `webchat/README.md` - Complete configuration and troubleshooting guide
+- **Documentation Updates**: CONFIG.md, webadmin/README.md, README.md updated with new paths
 
 ## [1.1.7] - 2026-01-16
 
