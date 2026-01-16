@@ -25,7 +25,21 @@ If you remember the days of **Microsoft Comic Chat**, chat rooms with real nicks
 
 ## Recent Updates
 
-### Version 1.1.6 (January 2026)
+### Version 1.1.6 (January 16, 2026)
+**Web Admin Security & Permission Fixes**
+
+- **CSRF Token Protection** — Implemented comprehensive CSRF token validation across all web admin API endpoints
+- **Secure Session Handling** — Fixed session cookie security to work with both HTTP and HTTPS deployments
+- **Stdin Password Input** — Added `test-staff-login-stdin` API command for secure password handling
+- **SELinux Context Hardening** — Extended httpd_sys_rw_content_t contexts to cover `/etc/pyircx` directory
+- **HTTP/HTTPS Auto-Detection** — Web admin automatically adapts session security based on protocol
+- **Null-Safe Form Handling** — Configuration editor handles missing form fields gracefully with safe getter/setter functions
+- **Permission Fixes** — All installation, upgrade, and repair scripts now properly configure web admin permissions (775/664)
+- **Bug Fixes** — Fixed web admin login errors, CSRF validation failures, permission denied errors, and configuration save crashes
+- **Database Pool** — Increased default pool_size from 5 to 10 connections for better concurrency with web admin
+- **PHP-FPM Restart** — Scripts now automatically restart PHP-FPM after adding apache to pyircx group
+
+### Version 1.1.5 (January 15, 2026)
 **Critical Bug Fixes & Test Harness**
 
 - **CRITICAL: JOIN Race Condition Fix** — Fixed race condition causing multiple users to receive owner mode (+q)
@@ -46,7 +60,7 @@ If you remember the days of **Microsoft Comic Chat**, chat rooms with real nicks
 - **IRC Protocol Compliance** — Numerics 004/005 now IRCv3-compliant
 - **WebChat Improvements** — Service bot detection (🤖), button icons, connection info display
 
-### Version 1.1.4 (January 2026)
+### Version 1.1.4 (January 14, 2026)
 **Critical Async Bug Fix**
 
 - **CRITICAL: Channel Broadcast Bug** — Fixed catastrophic async bug in Channel.broadcast()
@@ -55,7 +69,7 @@ If you remember the days of **Microsoft Comic Chat**, chat rooms with real nicks
   - All multi-user channel operations were broken (JOIN/PART/messages)
   - **Action Required:** Immediate upgrade recommended for all v1.1.3 and earlier installations
 
-### Version 1.1.3 (January 2026)
+### Version 1.1.3 (January 14, 2026)
 **Security Hardening & Code Quality**
 
 - **Error Handling Specificity** — Replaced all bare `except:` clauses with specific exception types
@@ -70,7 +84,7 @@ If you remember the days of **Microsoft Comic Chat**, chat rooms with real nicks
 - **Database Connection Pooling** — Increased default pool size from 5 to 10 connections
   - Added pool saturation monitoring and warnings
 
-### Version 1.1.2 (January 2026)
+### Version 1.1.2 (January 12, 2026)
 **Channel Operations & Database Architecture Improvements**
 
 - **Channel Unlock Fix** — Services can now set/unset MODE +z (locked mode) for web admin
@@ -96,7 +110,7 @@ If you remember the days of **Microsoft Comic Chat**, chat rooms with real nicks
 - **Security Settings** — Changed 'Auth' labels to 'Authenticated' for clarity
 - **ServiceBot Configuration** — Added configuration and user management features
 
-### Version 1.1.0 (January 2026)
+### Version 1.1.0 (January 11, 2026)
 **Web Administration Panel & IRC Protocol Fixes**
 
 - **Web Admin Panel** — Standalone PHP-based admin interface replacing Cockpit
