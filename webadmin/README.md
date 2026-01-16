@@ -80,9 +80,11 @@ Your web admin is now live and fully functional, replacing the old Cockpit inter
 - Monitor user communications
 
 ### Configuration Page
+- **MOTD Editor** - Edit Message of the Day with blank line preservation (v1.1.7+)
 - View server configuration
 - Edit JSON config directly
 - Auto-restart after save
+- Changes persist correctly (fixed in v1.1.7)
 
 ### Logs Page
 - View server logs

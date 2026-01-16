@@ -370,7 +370,7 @@ To create a multi-server network:
 /LINKS
 ```
 
-See [LINKING.md](LINKING.md) for complete server linking documentation.
+See [LINKING.md](docs/user/LINKING.md) for complete server linking documentation.
 
 ### SSL/TLS Setup (Recommended)
 
@@ -442,10 +442,13 @@ For IRCX features, use the IRCX command after connecting:
 
 ## Documentation
 
-- **[LINKING.md](LINKING.md)** — Server linking protocol and setup
-- **[CONFIG.md](CONFIG.md)** — Full configuration reference
-- **[MANUAL.md](MANUAL.md)** — User and operator command guide
-- **[STAFF_ACCOUNT_REFERENCE.md](STAFF_ACCOUNT_REFERENCE.md)** — Quick reference for staff commands
+- **[LINKING.md](docs/user/LINKING.md)** — Server linking protocol and setup
+- **[CONFIG.md](docs/user/CONFIG.md)** — Full configuration reference
+- **[MANUAL.md](docs/user/MANUAL.md)** — User and operator command guide
+- **[SELINUX.md](docs/user/SELINUX.md)** — SELinux configuration and troubleshooting
+- **[STAFF_ACCOUNT_REFERENCE.md](docs/user/STAFF_ACCOUNT_REFERENCE.md)** — Quick reference for staff commands
+- **[TESTING.md](docs/testing/TESTING.md)** — Comprehensive testing guide (243 tests)
+- **[PERFORMANCE.md](docs/performance/PERFORMANCE.md)** — Performance tuning and optimization
 
 ---
 
@@ -485,7 +488,7 @@ python3 services.py     # 13 service improvements tests
 - Latest report symlinked to `testing/logs/latest.md`
 - Full test output captured for failure diagnosis
 
-See [TESTING_UPDATES.md](TESTING_UPDATES.md) for detailed test harness documentation.
+See [TESTING.md](docs/testing/TESTING.md) for detailed test harness documentation and [TESTHARNESS.md](docs/testing/TESTHARNESS.md) for test harness implementation details.
 
 ---
 

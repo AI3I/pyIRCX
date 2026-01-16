@@ -11,6 +11,8 @@ Configuration is stored in `pyircx_config.json`. All options have sensible defau
 | `server.version` | `"1.0.5"` | Server version string |
 | `server.version_label` | `"pyIRCX"` | Version label for VERSION command |
 | `server.created_date` | `"2026"` | Server creation date shown in 003 |
+| `server.motd` | `[...]` | Message of the Day displayed to connecting users (array of strings, blank lines preserved) |
+| `server.staff_login_message` | `"Welcome to the staff team."` | Message shown to staff on successful authentication |
 
 ## Network Settings
 
