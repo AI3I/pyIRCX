@@ -40,7 +40,7 @@ If you remember the days of **Microsoft Comic Chat**, chat rooms with real nicks
 - **PHP-FPM Restart** — Scripts now automatically restart PHP-FPM after adding apache to pyircx group
 
 ### Version 1.1.5 (January 15, 2026)
-**Critical Bug Fixes & Test Harness**
+**Critical Bug Fixes, Test Harness & Server Statistics**
 
 - **CRITICAL: JOIN Race Condition Fix** — Fixed race condition causing multiple users to receive owner mode (+q)
   - Added channel_creation_lock to prevent concurrent channel creation
@@ -54,11 +54,23 @@ If you remember the days of **Microsoft Comic Chat**, chat rooms with real nicks
   - 16 new STATS system tests
   - 15 new HELP system tests
   - Automated markdown logging system
+- **8 New STATS Flags** — Enhanced server monitoring and diagnostics
+  - `STATS p` - Peak usage statistics
+  - `STATS f` - Flood protection monitoring
+  - `STATS m` - Message statistics and most active channels
+  - `STATS b` - ServiceBot violation tracking
+  - `STATS n` - Network information summary
+  - `STATS v` - Command usage statistics (staff only)
+  - Enhanced `STATS k/d/l` - Improved ban and access control listings
+- **Complete HELP System** — Comprehensive in-server documentation
+  - New HELP REGISTER topic covering nickname/channel registration
+  - Enhanced service HELP commands (Registrar, ServiceBot, Messenger, NewsFlash)
+  - All commands, modes, and IRCX features documented
 - **Channel Mode +g (guide-op)** — Auto-grant owner (+q) to guides when they join
 - **Case-Sensitivity Fixes** — Fixed 7 critical handlers (PROP, TRANSCRIPT, KNOCK, INVITE, REGISTER, DROP, Registrar)
 - **ACCESS GRANT Bypasses** — Users with ACCESS GRANT can now bypass mode +j (no-invitations) and +u (knock-mode)
 - **IRC Protocol Compliance** — Numerics 004/005 now IRCv3-compliant
-- **WebChat Improvements** — Service bot detection (🤖), button icons, connection info display
+- **WebChat Improvements** — Service bot detection (🤖), emoji picker, search functionality, button icons, connection info display, normalized sound effects
 
 ### Version 1.1.4 (January 14, 2026)
 **Critical Async Bug Fix**
