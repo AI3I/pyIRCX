@@ -1770,7 +1770,7 @@ RESPONSES = {
     "368": "{channel} :End of channel ban list",
     "369": "{target} :End of WHOWAS",
     "371": ":{info}",
-    "372": "- {text}",
+    "372": "-{text}",
     "374": ":End of /INFO list",
     "375": "- {servername} Message of the Day -",
     "376": "End of /MOTD command",

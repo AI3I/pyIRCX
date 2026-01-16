@@ -731,7 +731,26 @@ function sysMsg(text, cls = 'system') {
     // Always send system messages to Status window
     const status = getChannel('Status');
     status.isStatus = true;
-    addMsg('Status', escapeHtml(text), cls);
+    // For MOTD, preserve all whitespace by using textContent instead of innerHTML
+    if (cls === 'motd') {
+        const ch = status;
+        const div = document.createElement('div');
+        div.className = 'message motd';
+        div.style.whiteSpace = 'pre';
+        const tsSpan = document.createElement('span');
+        tsSpan.className = 'ts';
+        tsSpan.textContent = ts();
+        div.appendChild(tsSpan);
+        div.appendChild(document.createTextNode(text));
+        ch.messages.push(div);
+        if (ch.messages.length > 500) ch.messages.shift();
+        if ('Status'.toLowerCase() === currentChannel.toLowerCase()) {
+            $('messages').appendChild(div.cloneNode(true));
+            $('messages').scrollTop = $('messages').scrollHeight;
+        }
+    } else {
+        addMsg('Status', escapeHtml(text), cls);
+    }
 }
 
 function connect() {
@@ -875,7 +894,12 @@ function handleMessage(data) {
         case '042': sysMsg(p[p.length-1] || p.join(' '), 'system'); break; // Your unique ID
 
         // MOTD - all go to Status window
-        case '372': sysMsg(p[p.length-1] || p.join(' '), 'motd'); break;
+        case '372':
+            // Strip leading dash from IRC protocol format (372 response is ":-text")
+            let motdText = p[p.length-1] || p.join(' ');
+            if (motdText.startsWith('-')) motdText = motdText.substring(1);
+            sysMsg(motdText, 'motd');
+            break;
         case '375': sysMsg('--- Message of the Day ---', 'motd'); break;
         case '376': case '422': sysMsg('--- End of MOTD ---', 'motd'); break;
 
