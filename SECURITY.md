@@ -478,16 +478,16 @@ EOF
 
 pyIRCX v1.1.9 is **production-ready** with strong security foundations:
 
-✅ **No known vulnerabilities**
-✅ **Industry-standard security practices**
-✅ **Comprehensive protection mechanisms**
-✅ **CSRF protection and secure session handling** (v1.1.6+)
-✅ **SELinux hardening across all components** (v1.1.6-v1.1.7)
-✅ **Automated secure Apache configuration** (v1.1.8+)
-✅ **Group-based permissions** - No world-writable files (v1.1.6+)
-✅ **Stdin password input** - No password exposure (v1.1.6+)
-⚠️ **Requires proper deployment configuration**
-⚠️ **Default passwords must be changed**
+- ✅ **No known vulnerabilities**
+- ✅ **Industry-standard security practices**
+- ✅ **Comprehensive protection mechanisms**
+- ✅ **CSRF protection and secure session handling** (v1.1.6+)
+- ✅ **SELinux hardening across all components** (v1.1.6-v1.1.7)
+- ✅ **Automated secure Apache configuration** (v1.1.8+)
+- ✅ **Group-based permissions** - No world-writable files (v1.1.6+)
+- ✅ **Stdin password input** - No password exposure (v1.1.6+)
+- ⚠️ **Requires proper deployment configuration**
+- ⚠️ **Default passwords must be changed**
 
 **Security Improvements Since v1.0.5:**
 - **v1.1.6** (Jan 16, 2026): Major web admin security overhaul - CSRF protection, secure sessions, SELinux contexts
