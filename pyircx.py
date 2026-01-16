@@ -3499,6 +3499,37 @@ class pyIRCXServer:
         if target.lower() == 'newsflash':
             await self._handle_newsflash_msg(user, text)
             return
+
+        # Traditional IRC service aliases
+        if target.lower() == 'nickserv':
+            # NickServ → Registrar (nickname registration)
+            await self._handle_registrar_msg(user, text)
+            return
+        if target.lower() == 'chanserv':
+            # ChanServ → Registrar (channel registration)
+            await self._handle_registrar_msg(user, text)
+            return
+        if target.lower() == 'memoserv':
+            # MemoServ → Messenger (offline messages)
+            await self._handle_messenger_msg(user, text)
+            return
+
+        # Other service aliases - provide help information
+        other_services = ['operserv', 'helpserv', 'infoserv', 'botserv',
+                         'hostserv', 'statserv', 'global', 'alis', 'services']
+        if target.lower() in other_services:
+            service_name = target.capitalize()
+            await self._service_reply(service_name, user, f"pyIRCX {service_name} Service")
+            await self._service_reply(service_name, user, "This service is currently implemented as an alias.")
+            await self._service_reply(service_name, user, "Available services:")
+            await self._service_reply(service_name, user, "  Registrar/NickServ - Nickname registration (/msg Registrar HELP)")
+            await self._service_reply(service_name, user, "  Registrar/ChanServ - Channel registration (/msg Registrar HELP)")
+            await self._service_reply(service_name, user, "  Messenger/MemoServ - Offline messages (/msg Messenger HELP)")
+            await self._service_reply(service_name, user, "  NewsFlash - Network announcements (/msg NewsFlash HELP)")
+            await self._service_reply(service_name, user, "  ServiceBot## - Channel moderation (/msg ServiceBot01 HELP)")
+            await self._service_reply(service_name, user, "For full command list: /HELP")
+            return
+
         # Check if target is a ServiceBot (case-insensitive)
         for botname in self.servicebots:
             if target.lower() == botname.lower():
