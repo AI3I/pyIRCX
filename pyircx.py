@@ -2592,49 +2592,49 @@ class pyIRCXServer:
                 force_realname INTEGER DEFAULT 0
             )""")
 
-            # Create default admin account if no staff accounts exist
-            async with db.execute("SELECT COUNT(*) FROM users") as cursor:
-                row = await cursor.fetchone()
-                if row[0] == 0:
-                    default_user = CONFIG.get('admin', 'default_username', default='admin')
-                    default_pass = CONFIG.get('admin', 'default_password', default='changeme')
-                    password_hash = await hash_password_async(default_pass)
-                    await db.execute(
-                        "INSERT INTO users (username, password_hash, level) VALUES (?, ?, ?)",
-                        (default_user, password_hash, 'ADMIN')
-                    )
-                    await db.commit()
-                    logger.warning(f"Created default ADMIN account: {default_user}")
-                    logger.warning("*** CHANGE THE DEFAULT PASSWORD IMMEDIATELY using: STAFF PASS ***")
+                # Create default admin account if no staff accounts exist
+                async with db.execute("SELECT COUNT(*) FROM users") as cursor:
+                    row = await cursor.fetchone()
+                    if row[0] == 0:
+                        default_user = CONFIG.get('admin', 'default_username', default='admin')
+                        default_pass = CONFIG.get('admin', 'default_password', default='changeme')
+                        password_hash = await hash_password_async(default_pass)
+                        await db.execute(
+                            "INSERT INTO users (username, password_hash, level) VALUES (?, ?, ?)",
+                            (default_user, password_hash, 'ADMIN')
+                        )
+                        await db.commit()
+                        logger.warning(f"Created default ADMIN account: {default_user}")
+                        logger.warning("*** CHANGE THE DEFAULT PASSWORD IMMEDIATELY using: STAFF PASS ***")
 
-            # Migrate users table schema (add missing columns for existing installations)
-            try:
-                await db.execute("ALTER TABLE users ADD COLUMN created_at INTEGER DEFAULT 0")
-            except aiosqlite.OperationalError:
-                pass  # Column already exists
-            try:
-                await db.execute("ALTER TABLE users ADD COLUMN last_login INTEGER DEFAULT 0")
-            except aiosqlite.OperationalError:
-                pass  # Column already exists
-            try:
-                await db.execute("ALTER TABLE users ADD COLUMN registered_nick TEXT")
-            except aiosqlite.OperationalError:
-                pass  # Column already exists
-            try:
-                await db.execute("ALTER TABLE users ADD COLUMN email TEXT")
-            except aiosqlite.OperationalError:
-                pass  # Column already exists
-            try:
-                await db.execute("ALTER TABLE users ADD COLUMN realname TEXT")
-            except aiosqlite.OperationalError:
-                pass  # Column already exists
-            try:
-                await db.execute("ALTER TABLE users ADD COLUMN force_realname INTEGER DEFAULT 0")
-            except aiosqlite.OperationalError:
-                pass  # Column already exists
+                # Migrate users table schema (add missing columns for existing installations)
+                try:
+                    await db.execute("ALTER TABLE users ADD COLUMN created_at INTEGER DEFAULT 0")
+                except aiosqlite.OperationalError:
+                    pass  # Column already exists
+                try:
+                    await db.execute("ALTER TABLE users ADD COLUMN last_login INTEGER DEFAULT 0")
+                except aiosqlite.OperationalError:
+                    pass  # Column already exists
+                try:
+                    await db.execute("ALTER TABLE users ADD COLUMN registered_nick TEXT")
+                except aiosqlite.OperationalError:
+                    pass  # Column already exists
+                try:
+                    await db.execute("ALTER TABLE users ADD COLUMN email TEXT")
+                except aiosqlite.OperationalError:
+                    pass  # Column already exists
+                try:
+                    await db.execute("ALTER TABLE users ADD COLUMN realname TEXT")
+                except aiosqlite.OperationalError:
+                    pass  # Column already exists
+                try:
+                    await db.execute("ALTER TABLE users ADD COLUMN force_realname INTEGER DEFAULT 0")
+                except aiosqlite.OperationalError:
+                    pass  # Column already exists
 
-            # Registered nicknames with UUID and MFA
-            await db.execute("""CREATE TABLE IF NOT EXISTS registered_nicks (
+                # Registered nicknames with UUID and MFA
+                await db.execute("""CREATE TABLE IF NOT EXISTS registered_nicks (
                 uuid TEXT PRIMARY KEY,
                 nickname TEXT UNIQUE NOT NULL,
                 password_hash TEXT NOT NULL,
@@ -2644,79 +2644,79 @@ class pyIRCXServer:
                 mfa_enabled INTEGER DEFAULT 0,
                 mfa_secret TEXT,
                 registered_by TEXT
-            )""")
+                )""")
 
-            # Registered channels with UUID
-            await db.execute("""CREATE TABLE IF NOT EXISTS registered_channels (
-                uuid TEXT PRIMARY KEY,
-                channel_name TEXT UNIQUE NOT NULL,
-                owner_uuid TEXT,
-                registered_at INTEGER,
-                last_used INTEGER,
-                description TEXT,
-                properties TEXT,
-                FOREIGN KEY (owner_uuid) REFERENCES registered_nicks(uuid)
-            )""")
+                # Registered channels with UUID
+                await db.execute("""CREATE TABLE IF NOT EXISTS registered_channels (
+                    uuid TEXT PRIMARY KEY,
+                    channel_name TEXT UNIQUE NOT NULL,
+                    owner_uuid TEXT,
+                    registered_at INTEGER,
+                    last_used INTEGER,
+                    description TEXT,
+                    properties TEXT,
+                    FOREIGN KEY (owner_uuid) REFERENCES registered_nicks(uuid)
+                )""")
 
-            # Server access rules
-            await db.execute("""CREATE TABLE IF NOT EXISTS server_access (
-                id INTEGER PRIMARY KEY,
-                type TEXT,
-                pattern TEXT,
-                set_by TEXT,
-                set_at INTEGER,
-                reason TEXT,
-                timeout INTEGER DEFAULT 0
-            )""")
+                # Server access rules
+                await db.execute("""CREATE TABLE IF NOT EXISTS server_access (
+                    id INTEGER PRIMARY KEY,
+                    type TEXT,
+                    pattern TEXT,
+                    set_by TEXT,
+                    set_at INTEGER,
+                    reason TEXT,
+                    timeout INTEGER DEFAULT 0
+                )""")
 
-            # Messenger mailbox
-            await db.execute("""CREATE TABLE IF NOT EXISTS mailbox (
-                id INTEGER PRIMARY KEY,
-                recipient_uuid TEXT,
-                sender_nick TEXT,
-                message TEXT,
-                sent_at INTEGER,
-                read INTEGER DEFAULT 0,
-                FOREIGN KEY (recipient_uuid) REFERENCES registered_nicks(uuid)
-            )""")
+                # Messenger mailbox
+                await db.execute("""CREATE TABLE IF NOT EXISTS mailbox (
+                    id INTEGER PRIMARY KEY,
+                    recipient_uuid TEXT,
+                    sender_nick TEXT,
+                    message TEXT,
+                    sent_at INTEGER,
+                    read INTEGER DEFAULT 0,
+                    FOREIGN KEY (recipient_uuid) REFERENCES registered_nicks(uuid)
+                )""")
 
-            # NewsFlash rotating messages
-            await db.execute("""CREATE TABLE IF NOT EXISTS newsflash (
-                id INTEGER PRIMARY KEY,
-                message TEXT NOT NULL,
-                priority INTEGER DEFAULT 0,
-                active INTEGER DEFAULT 1,
-                created_by TEXT,
-                created_at INTEGER,
-                expires_at INTEGER
-            )""")
+                # NewsFlash rotating messages
+                await db.execute("""CREATE TABLE IF NOT EXISTS newsflash (
+                    id INTEGER PRIMARY KEY,
+                    message TEXT NOT NULL,
+                    priority INTEGER DEFAULT 0,
+                    active INTEGER DEFAULT 1,
+                    created_by TEXT,
+                    created_at INTEGER,
+                    expires_at INTEGER
+                )""")
 
-            # Memos (offline messaging via MEMO command)
-            await db.execute("""CREATE TABLE IF NOT EXISTS memos (
-                id INTEGER PRIMARY KEY,
-                recipient TEXT NOT NULL,
-                sender TEXT NOT NULL,
-                message TEXT NOT NULL,
-                sent_at INTEGER,
-                read INTEGER DEFAULT 0
-            )""")
+                # Memos (offline messaging via MEMO command)
+                await db.execute("""CREATE TABLE IF NOT EXISTS memos (
+                    id INTEGER PRIMARY KEY,
+                    recipient TEXT NOT NULL,
+                    sender TEXT NOT NULL,
+                    message TEXT NOT NULL,
+                    sent_at INTEGER,
+                    read INTEGER DEFAULT 0
+                )""")
 
-            # Create indexes for performance optimization
-            # Nickname lookups (IDENTIFY, registration checks)
-            await db.execute("CREATE INDEX IF NOT EXISTS idx_reg_nicks_nickname ON registered_nicks(nickname)")
-            # Channel registration lookups
-            await db.execute("CREATE INDEX IF NOT EXISTS idx_reg_chans_name ON registered_channels(channel_name)")
-            # Offline message lookups by recipient
-            await db.execute("CREATE INDEX IF NOT EXISTS idx_mailbox_recipient ON mailbox(recipient_uuid)")
-            # Memo lookups by recipient
-            await db.execute("CREATE INDEX IF NOT EXISTS idx_memos_recipient ON memos(recipient)")
-            # Staff user lookups
-            await db.execute("CREATE INDEX IF NOT EXISTS idx_staff_username ON staff_users(username)")
-            # Access list pattern lookups
-            await db.execute("CREATE INDEX IF NOT EXISTS idx_access_pattern ON server_access(pattern)")
+                # Create indexes for performance optimization
+                # Nickname lookups (IDENTIFY, registration checks)
+                await db.execute("CREATE INDEX IF NOT EXISTS idx_reg_nicks_nickname ON registered_nicks(nickname)")
+                # Channel registration lookups
+                await db.execute("CREATE INDEX IF NOT EXISTS idx_reg_chans_name ON registered_channels(channel_name)")
+                # Offline message lookups by recipient
+                await db.execute("CREATE INDEX IF NOT EXISTS idx_mailbox_recipient ON mailbox(recipient_uuid)")
+                # Memo lookups by recipient
+                await db.execute("CREATE INDEX IF NOT EXISTS idx_memos_recipient ON memos(recipient)")
+                # Staff user lookups
+                await db.execute("CREATE INDEX IF NOT EXISTS idx_staff_username ON users(username)")
+                # Access list pattern lookups
+                await db.execute("CREATE INDEX IF NOT EXISTS idx_access_pattern ON server_access(pattern)")
 
                 await db.commit()
-            logger.info("Database initialized (trunk)")
+                logger.info("Database initialized (trunk)")
         else:
             logger.info("Skipping database initialization (branch server)")
 
