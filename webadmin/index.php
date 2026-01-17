@@ -891,6 +891,18 @@ badword3"></textarea>
                                 <label><input type="checkbox" id="cfg-linking-enabled"> Enable Server Linking</label>
                                 <small>Allow this server to link with other IRC servers to form a network. Use /CONNECT and /SQUIT commands (ADMIN only) to manage server links.</small>
                             </div>
+
+                            <h4 style="margin-top: 20px;">Server Role</h4>
+                            <div class="form-group">
+                                <label>Role in Network</label>
+                                <select class="form-control" id="cfg-linking-role">
+                                    <option value="trunk">Trunk (Services Hub)</option>
+                                    <option value="branch">Branch (Access Point)</option>
+                                </select>
+                                <small><strong>Trunk:</strong> Hosts services (Registrar, Messenger, ServiceBots) and routes messages between branches. <strong>Branch:</strong> Connects to trunk, routes service requests, provides client access points.</small>
+                            </div>
+
+                            <h4 style="margin-top: 20px;">Network Connection</h4>
                             <div class="form-group">
                                 <label>Bind Host</label>
                                 <input type="text" class="form-control" id="cfg-linking-host" placeholder="0.0.0.0">
@@ -900,6 +912,54 @@ badword3"></textarea>
                                 <label>Bind Port</label>
                                 <input type="number" class="form-control" id="cfg-linking-port" placeholder="7000">
                                 <small>Port for server-to-server connections. Default: 7000. Must not conflict with client ports. Firewall: Allow only trusted server IPs.</small>
+                            </div>
+
+                            <!-- Branch-specific settings -->
+                            <div id="cfg-linking-branch-settings" style="display: none;">
+                                <h4 style="margin-top: 20px;">Branch Configuration</h4>
+                                <div class="form-group">
+                                    <label>Trunk Server (Services Hub)</label>
+                                    <input type="text" class="form-control" id="cfg-linking-trunk-server" placeholder="trunk.example.com">
+                                    <small>FQDN of the trunk server that hosts services. Branch will route all service requests here.</small>
+                                </div>
+                                <div class="form-group">
+                                    <label>Trunk Host</label>
+                                    <input type="text" class="form-control" id="cfg-linking-trunk-host" placeholder="10.0.1.1">
+                                    <small>IP address or hostname of trunk server for linking</small>
+                                </div>
+                                <div class="form-group">
+                                    <label>Trunk Port</label>
+                                    <input type="number" class="form-control" id="cfg-linking-trunk-port" placeholder="7001">
+                                    <small>Server-to-server port on the trunk</small>
+                                </div>
+                                <div class="form-group">
+                                    <label>Link Password</label>
+                                    <input type="password" class="form-control" id="cfg-linking-trunk-password" placeholder="secure-password-here">
+                                    <small>Password for authenticating with trunk server</small>
+                                </div>
+                                <div class="form-group">
+                                    <label><input type="checkbox" id="cfg-linking-trunk-autoconnect" checked> Auto-connect to Trunk</label>
+                                    <small>Automatically connect to trunk server on startup</small>
+                                </div>
+                            </div>
+
+                            <!-- Trunk-specific settings -->
+                            <div id="cfg-linking-trunk-settings" style="display: none;">
+                                <h4 style="margin-top: 20px;">Trunk Configuration</h4>
+                                <div class="form-group">
+                                    <label>ServiceBot Count</label>
+                                    <input type="number" class="form-control" id="cfg-linking-servicebot-count" placeholder="5" value="5">
+                                    <small>Number of ServiceBots to create for channel monitoring. Trunk hosts all ServiceBots for the network. Default: 5</small>
+                                </div>
+
+                                <h4 style="margin-top: 20px;">Branch Servers</h4>
+                                <div class="form-group">
+                                    <small>Configure branch servers that can connect to this trunk. Each branch needs a unique name, port, and password.</small>
+                                    <div id="cfg-linking-branches-list" style="margin-top: 10px;">
+                                        <!-- Branch entries will be added here dynamically -->
+                                    </div>
+                                    <button type="button" class="btn btn-sm btn-success" id="cfg-linking-add-branch">➕ Add Branch Server</button>
+                                </div>
                             </div>
                         </div>
 
