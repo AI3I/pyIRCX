@@ -1294,6 +1294,30 @@ class ServiceBotMonitor:
         self._pattern_cache = {}
         self._word_cache = {}
         self._cache_signature = None  # Track when to invalidate cache
+        # Cached config values (avoid 9 CONFIG.get() calls per message)
+        self._config_cache = {}
+        self._load_config_cache()
+
+    def _load_config_cache(self):
+        """Load and cache config values to avoid repeated CONFIG.get() calls per message"""
+        self._config_cache = {
+            'profanity_enabled': CONFIG.get('servicebot', 'profanity_filter', 'enabled', default=True),
+            'profanity_words': CONFIG.get('servicebot', 'profanity_filter', 'words', default=[]),
+            'profanity_patterns': CONFIG.get('servicebot', 'profanity_filter', 'patterns', default=[]),
+            'profanity_case_sensitive': CONFIG.get('servicebot', 'profanity_filter', 'case_sensitive', default=False),
+            'profanity_action': CONFIG.get('servicebot', 'profanity_filter', 'action', default='warn'),
+            'malicious_enabled': CONFIG.get('servicebot', 'malicious_detection', 'enabled', default=True),
+            'flood_action': CONFIG.get('servicebot', 'malicious_detection', 'flood_action', default='gag'),
+            'repeat_action': CONFIG.get('servicebot', 'malicious_detection', 'repeat_action', default='warn'),
+            'caps_action': CONFIG.get('servicebot', 'malicious_detection', 'caps_action', default='warn'),
+            'url_spam_action': CONFIG.get('servicebot', 'malicious_detection', 'url_spam_action', default='warn'),
+        }
+
+    def reload_config(self):
+        """Reload config cache when configuration changes (called from PROFANITY command)"""
+        self._load_config_cache()
+        # Force pattern cache rebuild on next check
+        self._cache_signature = None
 
     def _get_user_history(self, nickname):
         """Get or create user history entry"""
@@ -1317,14 +1341,14 @@ class ServiceBotMonitor:
         Check if text contains profanity.
         Supports both exact words and regex patterns.
         Returns (contains_profanity, matched_word/pattern) tuple.
-        Uses cached compiled patterns for performance.
+        Uses cached compiled patterns and config values for performance.
         """
-        if not CONFIG.get('servicebot', 'profanity_filter', 'enabled', default=True):
+        if not self._config_cache['profanity_enabled']:
             return False, None
 
-        words = CONFIG.get('servicebot', 'profanity_filter', 'words', default=[])
-        patterns = CONFIG.get('servicebot', 'profanity_filter', 'patterns', default=[])
-        case_sensitive = CONFIG.get('servicebot', 'profanity_filter', 'case_sensitive', default=False)
+        words = self._config_cache['profanity_words']
+        patterns = self._config_cache['profanity_patterns']
+        case_sensitive = self._config_cache['profanity_case_sensitive']
 
         # Create signature to detect config changes
         signature = (tuple(words), tuple(patterns), case_sensitive)
@@ -1457,34 +1481,30 @@ class ServiceBotMonitor:
         """
         Analyze a message for all violations.
         Returns list of (violation_type, action, details) tuples.
+        Uses cached config values for performance (avoids 5 CONFIG.get() calls per message).
         """
         violations = []
 
         # Check profanity
         has_profanity, matched = self.check_profanity(text)
         if has_profanity:
-            action = CONFIG.get('servicebot', 'profanity_filter', 'action', default='warn')
-            violations.append(('profanity', action, f"matched word: {matched}"))
+            violations.append(('profanity', self._config_cache['profanity_action'], f"matched word: {matched}"))
 
         # Check flood
         if self.check_flood(nickname, text):
-            action = CONFIG.get('servicebot', 'malicious_detection', 'flood_action', default='gag')
-            violations.append(('flood', action, "message flooding"))
+            violations.append(('flood', self._config_cache['flood_action'], "message flooding"))
 
         # Check repeat spam
         if self.check_repeat(nickname, text):
-            action = CONFIG.get('servicebot', 'malicious_detection', 'repeat_action', default='warn')
-            violations.append(('repeat', action, "repeated message spam"))
+            violations.append(('repeat', self._config_cache['repeat_action'], "repeated message spam"))
 
         # Check excessive caps
         if self.check_caps(text):
-            action = CONFIG.get('servicebot', 'malicious_detection', 'caps_action', default='warn')
-            violations.append(('caps', action, "excessive caps"))
+            violations.append(('caps', self._config_cache['caps_action'], "excessive caps"))
 
         # Check URL spam
         if self.check_url_spam(nickname, text):
-            action = CONFIG.get('servicebot', 'malicious_detection', 'url_spam_action', default='warn')
-            violations.append(('url_spam', action, "URL spam"))
+            violations.append(('url_spam', self._config_cache['url_spam_action'], "URL spam"))
 
         return violations
 
@@ -2268,6 +2288,11 @@ class pyIRCXServer:
         if channel_name not in self.channel_monitors:
             self.channel_monitors[channel_name] = ServiceBotMonitor()
         return self.channel_monitors[channel_name]
+
+    def _reload_all_monitor_configs(self):
+        """Reload config cache for all channel monitors (called when PROFANITY config changes)"""
+        for monitor in self.channel_monitors.values():
+            monitor.reload_config()
 
     def _get_servicebot_for_channel(self, channel):
         """Get the first ServiceBot in a channel (for sending messages)"""
@@ -6533,6 +6558,7 @@ class pyIRCXServer:
                 current_words.append(value)
                 CONFIG.set('servicebot', 'profanity_filter', 'words', current_words)
                 await CONFIG.save()
+                self._reload_all_monitor_configs()  # Reload cached config in all monitors
                 await user.send(f":{self.servername} NOTICE {user.nickname} :Added word '{value}' to profanity filter")
                 logger.info(f"PROFANITY: {user.nickname} added word '{value}'")
 
@@ -6551,6 +6577,7 @@ class pyIRCXServer:
                 current_patterns.append(value)
                 CONFIG.set('servicebot', 'profanity_filter', 'patterns', current_patterns)
                 await CONFIG.save()
+                self._reload_all_monitor_configs()  # Reload cached config in all monitors
                 await user.send(f":{self.servername} NOTICE {user.nickname} :Added pattern '{value}' to profanity filter")
                 logger.info(f"PROFANITY: {user.nickname} added pattern '{value}'")
 
@@ -6573,6 +6600,7 @@ class pyIRCXServer:
                 current_words.remove(value)
                 CONFIG.set('servicebot', 'profanity_filter', 'words', current_words)
                 await CONFIG.save()
+                self._reload_all_monitor_configs()  # Reload cached config in all monitors
                 await user.send(f":{self.servername} NOTICE {user.nickname} :Removed word '{value}' from profanity filter")
                 logger.info(f"PROFANITY: {user.nickname} removed word '{value}'")
 
@@ -6584,6 +6612,7 @@ class pyIRCXServer:
                 current_patterns.remove(value)
                 CONFIG.set('servicebot', 'profanity_filter', 'patterns', current_patterns)
                 await CONFIG.save()
+                self._reload_all_monitor_configs()  # Reload cached config in all monitors
                 await user.send(f":{self.servername} NOTICE {user.nickname} :Removed pattern '{value}' from profanity filter")
                 logger.info(f"PROFANITY: {user.nickname} removed pattern '{value}'")
 
@@ -6593,12 +6622,14 @@ class pyIRCXServer:
         elif subcmd == "ENABLE":
             CONFIG.set('servicebot', 'profanity_filter', 'enabled', True)
             await CONFIG.save()
+            self._reload_all_monitor_configs()  # Reload cached config in all monitors
             await user.send(f":{self.servername} NOTICE {user.nickname} :Profanity filter enabled")
             logger.info(f"PROFANITY: {user.nickname} enabled profanity filter")
 
         elif subcmd == "DISABLE":
             CONFIG.set('servicebot', 'profanity_filter', 'enabled', False)
             await CONFIG.save()
+            self._reload_all_monitor_configs()  # Reload cached config in all monitors
             await user.send(f":{self.servername} NOTICE {user.nickname} :Profanity filter disabled")
             logger.info(f"PROFANITY: {user.nickname} disabled profanity filter")
 
