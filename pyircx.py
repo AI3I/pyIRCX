@@ -2902,13 +2902,13 @@ class pyIRCXServer:
                 await user.send(f":{self.servername} NOTICE {user.nickname} :{message}")
             except KeyError as e:
                 logger.error(f"Missing template variable for {message_key}: {e}")
-                await user.send(f":{self.servername} NOTICE {user.nickname} :Message format error")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :The message format is not valid")
         # Try RESPONSES (numeric codes)
         elif message_key in RESPONSES:
             await user.send(self.get_reply(message_key, user, **kwargs))
         else:
             logger.error(f"Unknown message key: {message_key}")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Internal message error")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :An internal error occurred")
 
     def _strip_formatting(self, text):
         """Strip mIRC/IRC formatting codes from text (for +f channels)"""
@@ -3601,7 +3601,7 @@ class pyIRCXServer:
             # Deny if user is neither staff nor in ACCESS GRANT
             if not is_staff and not in_access_grant:
                 await user.send(f":{self.servername} NOTICE {user.nickname} :This server is restricted to authenticated staff and authorized users only")
-                await user.send(f":{self.servername} NOTICE {user.nickname} :Regular users should connect to a branch server")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :You should connect to a branch server")
                 await user.send(f"ERROR :Closing Link: {user.nickname} (Staff-only server)")
                 logger.info(f"Rejected non-authorized connection attempt: {user.nickname} ({user.ip})")
                 await self.quit_user(user)
@@ -3860,7 +3860,7 @@ class pyIRCXServer:
                 return
             # Channel mode +w: no whispers allowed
             if cmd == "WHISPER" and channel.modes.get('w', False):
-                await user.send(f":{self.servername} NOTICE {user.nickname} :Whispers are not allowed in {chan_name} (+w)")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :You cannot send whispers in {chan_name} (+w)")
                 return
 
             # WHISPER to channel is private message to a specific user in channel
@@ -4863,7 +4863,7 @@ class pyIRCXServer:
             access_grants = channel.get_access_grants(user)
             has_access_grant = 'GRANT' in access_grants or 'OWNER' in access_grants or 'HOST' in access_grants or 'VOICE' in access_grants
             if not is_staff and not is_service and not has_access_grant:
-                await user.send(f":{self.servername} NOTICE {user.nickname} :Invitations are not allowed in {chan_name} (+j)")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :You cannot send invitations in {chan_name} (+j)")
                 return
 
         if channel.modes.get('i'):
@@ -5406,11 +5406,11 @@ class pyIRCXServer:
                                 row = await cursor.fetchone()
                                 await user.send(f":{self.servername} NOTICE {user.nickname} :  Offline messages: {row[0]}")
                     except Exception as e:
-                        await user.send(f":{self.servername} NOTICE {user.nickname} :  Database query error: {str(e)}")
+                        await user.send(f":{self.servername} NOTICE {user.nickname} :  A database error occurred: {str(e)}")
                 else:
                     await user.send(f":{self.servername} NOTICE {user.nickname} :  Database file not found: {db_path}")
             except Exception as e:
-                await user.send(f":{self.servername} NOTICE {user.nickname} :  Error: {str(e)}")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  An error occurred: {str(e)}")
 
             # Configuration summary
             await user.send(f":{self.servername} NOTICE {user.nickname} :--- Configuration ---")
@@ -6330,7 +6330,7 @@ class pyIRCXServer:
 
             if len(params) < 3:
                 await self.send_notice(user, "860", usage="STAFF PASS <username> <oldpassword> <newpassword>")
-                await user.send(f":{self.servername} NOTICE {user.nickname} :For changing own password, old password required")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Your old password is required to change your password")
                 await user.send(f":{self.servername} NOTICE {user.nickname} :Admins changing others: STAFF PASS <username> <newpassword>")
                 return
 
@@ -6358,7 +6358,7 @@ class pyIRCXServer:
             elif len(params) == 3:
                 # STAFF PASS <username> <newpass> - legacy format (ADMIN only, local only)
                 if not is_admin:
-                    await user.send(f":{self.servername} NOTICE {user.nickname} :Old password required when changing own password")
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :Your old password is required when changing your own password")
                     await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: STAFF PASS <username> <oldpassword> <newpassword>")
                     return
 
@@ -6657,7 +6657,7 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :  +g - IRC guide (GUIDE)")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Other modes:")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  +s - Service (server bots and service accounts)")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  +z - Gagged (cannot send messages to channels or users)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  +z - Gagged (you cannot send messages to channels or users)")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Example: /MODE yournick +i (to set invisible)")
 
         elif topic == "CHANMODES":
@@ -6854,7 +6854,7 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :Only the target user sees the message.")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  /WHISPER #lobby alice Hey, check your messages")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Note: Cannot be used in channels with +w mode (whispers disabled)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Note: You cannot use this in channels with +w mode (whispers disabled)")
 
         elif topic in ["REGISTER", "IDENTIFY", "UNREGISTER"]:
             await user.send(f":{self.servername} NOTICE {user.nickname} :=== Registration Commands ===")
@@ -7053,7 +7053,7 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :  /SILENCE +bob!*@* - Block all messages from bob")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  /SILENCE +*!*@spammer.com - Block all messages from host")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  /SILENCE -bob!*@* - Unblock bob")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Note: Silenced users cannot send you private messages or notices")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Note: Silenced users will not be able to send you private messages or notices")
 
         elif topic in ["WATCH"]:
             await user.send(f":{self.servername} NOTICE {user.nickname} :=== WATCH Command ===")
@@ -7083,8 +7083,8 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :Change your nickname.")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  /NICK alice - Change your nick to alice")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Rules: Must be 1-30 characters, start with a letter, and contain only letters, numbers, -, _, [, ], {{, }}, \\, or |")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Note: Reserved service names (Registrar, NickServ, etc.) cannot be used")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Rules: Nicknames must be 1-30 characters, start with a letter, and contain only letters, numbers, -, _, [, ], {{, }}, \\, or |")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Note: You cannot use reserved service names (Registrar, NickServ, etc.)")
 
         elif topic in ["QUIT", "EXIT", "BYE"]:
             await user.send(f":{self.servername} NOTICE {user.nickname} :=== QUIT Command ===")
@@ -7121,7 +7121,7 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :Example:")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  /CHGPASS oldpass newpass - Change password")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Alternative: /MSG Registrar SET PASSWORD <old> <new>")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Note: Must be identified to your account first")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Note: You must be identified to your account first")
 
         elif topic in ["MOTD"]:
             await user.send(f":{self.servername} NOTICE {user.nickname} :=== MOTD Command ===")
