@@ -2088,7 +2088,7 @@ console.log("=== admin.js LOADING ===");
         return password;
     }
 
-    function addBranchEntry(name = '', host = '', port = '', password = '', autoconnect = false, maxusers = 10000) {
+    function addBranchEntry(name = '', host = '', port = '', password = '', autoconnect = false) {
         const list = $('#cfg-linking-branches-list');
         if (!list) return;
 
@@ -2097,7 +2097,7 @@ console.log("=== admin.js LOADING ===");
         div.className = 'branch-entry';
         div.style.cssText = 'border: 1px solid #ddd; padding: 10px; margin-bottom: 10px; border-radius: 4px; background: #f9f9f9;';
         div.innerHTML = `
-            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr 1fr; gap: 10px; align-items: end;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 10px; align-items: end;">
                 <div>
                     <label style="font-size: 12px; font-weight: bold;">Branch Name</label>
                     <input type="text" class="form-control branch-name" value="${escapeHtml(name)}" placeholder="branch1.example.com">
@@ -2109,10 +2109,6 @@ console.log("=== admin.js LOADING ===");
                 <div>
                     <label style="font-size: 12px; font-weight: bold;">Port</label>
                     <input type="number" class="form-control branch-port" value="${port || 7001}" placeholder="7001">
-                </div>
-                <div>
-                    <label style="font-size: 12px; font-weight: bold;">Max Connections</label>
-                    <input type="number" class="form-control branch-maxusers" value="${maxusers || 10000}" placeholder="10000">
                 </div>
                 <div>
                     <label style="font-size: 12px; font-weight: bold;">Password</label>
@@ -2157,7 +2153,6 @@ console.log("=== admin.js LOADING ===");
         const branchName = branchEntryDiv.querySelector('.branch-name').value;
         const branchHost = branchEntryDiv.querySelector('.branch-host').value;
         const linkPort = parseInt(branchEntryDiv.querySelector('.branch-port').value) || 7001;
-        const maxUsers = parseInt(branchEntryDiv.querySelector('.branch-maxusers').value) || 10000;
         const linkPassword = branchEntryDiv.querySelector('.branch-password').value;
 
         if (!branchName || !branchHost || !linkPassword) {
@@ -2195,9 +2190,9 @@ console.log("=== admin.js LOADING ===");
                     "listen_ports": clientPorts,
                     "enable_ipv6": trunkConfig.network?.enable_ipv6 || false
                 },
-                "limits": {
-                    "max_users": maxUsers,
-                    "max_channels": trunkConfig.limits?.max_channels || 500
+                "limits": trunkConfig.limits || {
+                    "max_users": 1000,
+                    "max_channels": 500
                 },
                 "services": {
                     "enabled": true,
