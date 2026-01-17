@@ -949,8 +949,8 @@ badword3"></textarea>
                                             <div class="form-group">
                                                 <label>Server Link Port</label>
                                                 <input type="number" class="form-control" id="branch-link-port" name="link_port"
-                                                       value="7002" min="1" max="65535" required>
-                                                <small>Unique port for server linking (7002, 7003, 7004...)</small>
+                                                       placeholder="Auto-assigned" min="1" max="65535" required>
+                                                <small>Unique port for server linking (auto-increments from existing branches)</small>
                                             </div>
 
                                             <h5 style="margin-top: 15px; color: #666;">Database & Resources</h5>

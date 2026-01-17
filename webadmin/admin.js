@@ -1615,6 +1615,25 @@ console.log("=== admin.js LOADING ===");
             const isHidden = content.style.display === 'none';
             content.style.display = isHidden ? 'block' : 'none';
             chevron.style.transform = isHidden ? 'rotate(90deg)' : 'rotate(0deg)';
+
+            // When opening, auto-populate next available port
+            if (isHidden) {
+                const existingBranches = $$('.branch-entry');
+                let nextPort = 7002;
+
+                if (existingBranches.length > 0) {
+                    const ports = Array.from(existingBranches).map(entry => {
+                        const portInput = entry.querySelector('.branch-port');
+                        return parseInt(portInput?.value) || 0;
+                    }).filter(p => p > 0);
+
+                    if (ports.length > 0) {
+                        nextPort = Math.max(...ports) + 1;
+                    }
+                }
+
+                $('#branch-link-port').value = nextPort;
+            }
         });
 
         // Generate secure password
@@ -2255,7 +2274,22 @@ console.log("=== admin.js LOADING ===");
         // Add branch button
         if ($('#cfg-linking-add-branch')) {
             $('#cfg-linking-add-branch').addEventListener('click', () => {
-                addBranchEntry();
+                // Calculate next available port
+                const existingBranches = $$('.branch-entry');
+                let nextPort = 7002;
+
+                if (existingBranches.length > 0) {
+                    const ports = Array.from(existingBranches).map(entry => {
+                        const portInput = entry.querySelector('.branch-port');
+                        return parseInt(portInput?.value) || 0;
+                    }).filter(p => p > 0);
+
+                    if (ports.length > 0) {
+                        nextPort = Math.max(...ports) + 1;
+                    }
+                }
+
+                addBranchEntry('', '', nextPort);
             });
         }
 
