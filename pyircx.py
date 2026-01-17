@@ -3429,16 +3429,43 @@ class pyIRCXServer:
 
         # Check if user authenticated via SASL
         if user.sasl_authenticated and user.sasl_account:
-            try:
-                async with aiosqlite.connect(CONFIG.get('database', 'path')) as db:
-                    async with db.execute("SELECT level FROM users WHERE username=?",
-                                         (user.sasl_account,)) as cursor:
-                        row = await cursor.fetchone()
-                        if row:
-                            auth, level = True, row[0]
-            except Exception as e:
-                if self.debug_mode:
-                    logger.error(f"SASL auth lookup error: {e}")
+            # Check if we should route to trunk for authentication
+            services_mode = CONFIG.get('services', 'mode', default='local')
+            is_services_hub = CONFIG.get('services', 'is_services_hub', default=False)
+
+            # If centralized mode and we're NOT the trunk, route to trunk
+            if services_mode == 'centralized' and not is_services_hub:
+                # Branch server - route SASL auth to trunk
+                if self.link_manager and self.link_manager.enabled:
+                    # SASL has already authenticated the user, so we pass special marker
+                    # The trunk will look up the account without password verification
+                    auth_result = await self.link_manager.route_staff_auth(user.sasl_account, '*SASL*', user)
+                    if auth_result:
+                        auth, level = auth_result['authenticated'], auth_result['level']
+                        if auth:
+                            user.staff_email = auth_result.get('email')
+                            user.staff_realname = auth_result.get('realname')
+                            user.force_staff_realname = auth_result.get('force_realname', False)
+                            logger.info(f"SASL staff auth via trunk: {user.sasl_account} as {level}")
+                    else:
+                        # Trunk not available - deny staff authentication
+                        logger.warning(f"SASL staff auth failed: Trunk unavailable for {user.sasl_account}")
+                        auth, level = False, "USER"
+                else:
+                    logger.warning(f"SASL staff auth failed: Link manager not available for {user.sasl_account}")
+                    auth, level = False, "USER"
+            else:
+                # Trunk server or local mode - authenticate locally
+                try:
+                    async with aiosqlite.connect(CONFIG.get('database', 'path')) as db:
+                        async with db.execute("SELECT level FROM users WHERE username=?",
+                                             (user.sasl_account,)) as cursor:
+                            row = await cursor.fetchone()
+                            if row:
+                                auth, level = True, row[0]
+                except Exception as e:
+                    if self.debug_mode:
+                        logger.error(f"SASL auth lookup error: {e}")
 
         # Fall back to PASS-based authentication
         elif user.provided_pass:

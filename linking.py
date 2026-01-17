@@ -778,8 +778,17 @@ class ServerLinkManager:
                 (username,)
             )
             if row:
-                # Verify password
-                if await check_password_async(password, row[0]):
+                # Check if this is SASL authentication (already verified by branch)
+                if password == '*SASL*':
+                    # SASL has already authenticated - just look up staff level
+                    authenticated = True
+                    level = row[1]
+                    email = row[2]
+                    realname = row[3]
+                    force_realname = bool(row[4])
+                    logger.info(f"Trunk: SASL staff auth SUCCESS for {username} ({level})")
+                # Verify password for PASS authentication
+                elif await check_password_async(password, row[0]):
                     authenticated = True
                     level = row[1]
                     email = row[2]
