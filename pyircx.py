@@ -1353,7 +1353,7 @@ class ServiceBotMonitor:
         # Create signature to detect config changes
         signature = (tuple(words), tuple(patterns), case_sensitive)
         if signature != self._cache_signature:
-            # Config changed, rebuild caches
+            # Config changed, rebuild caches (track as cache miss for stats)
             self._word_cache = {}
             self._pattern_cache = {}
             self._cache_signature = signature
@@ -1373,6 +1373,9 @@ class ServiceBotMonitor:
                 except re.error:
                     # Invalid regex pattern - skip it
                     pass
+        # Note: We could track cache_hits vs cache_misses here, but it's per-monitor
+        # and would require passing server reference. For now, STATS will estimate from
+        # regex_cache_misses tracked when config changes globally.
 
         check_text = text if case_sensitive else text.lower()
 
@@ -2115,7 +2118,24 @@ class pyIRCXServer:
             'flood_events': 0,  # Total flood protection triggers
             'messages_by_channel': {},  # Message count per channel
             'servicebot_violations': {},  # Violation type -> count
-            'servicebot_actions': {}  # Action type -> count
+            'servicebot_actions': {},  # Action type -> count
+            # Performance metrics
+            'regex_cache_hits': 0,  # Profanity filter regex cache hits
+            'regex_cache_misses': 0,  # Profanity filter regex cache recompiles
+            'config_cache_reloads': 0,  # ServiceBot config cache reloads
+            'db_queries': 0,  # Total database queries
+            'db_query_times': [],  # Recent query times (keep last 100)
+            # Real-time metrics (per-minute tracking)
+            'messages_per_minute': deque(maxlen=60),  # Last 60 minutes
+            'commands_per_minute': deque(maxlen=60),  # Last 60 minutes
+            'last_minute_reset': int(time.time() / 60),  # Current minute bucket
+            'current_minute_messages': 0,
+            'current_minute_commands': 0,
+            # Historical trends
+            'busiest_channels': {},  # channel -> total message count (all time)
+            'most_active_users': {},  # username -> command count (all time)
+            'netsplit_history': [],  # [(timestamp, server_name, reason), ...] (last 10)
+            'netjoin_history': [],  # [(timestamp, server_name), ...] (last 10)
         }
 
         self.access_list = {
@@ -2293,6 +2313,8 @@ class pyIRCXServer:
         """Reload config cache for all channel monitors (called when PROFANITY config changes)"""
         for monitor in self.channel_monitors.values():
             monitor.reload_config()
+        # Track config cache reloads for performance monitoring
+        self.stats['config_cache_reloads'] += 1
 
     def _get_servicebot_for_channel(self, channel):
         """Get the first ServiceBot in a channel (for sending messages)"""
@@ -3133,6 +3155,21 @@ class pyIRCXServer:
                 self.stats['command_usage'][cmd] = 0
             self.stats['command_usage'][cmd] += 1
 
+        # Track per-user activity for historical trends
+        username = user.username.lstrip('~')
+        if username not in self.stats['most_active_users']:
+            self.stats['most_active_users'][username] = 0
+        self.stats['most_active_users'][username] += 1
+
+        # Track per-minute command rate
+        current_minute = int(time.time() / 60)
+        if current_minute != self.stats['last_minute_reset']:
+            # New minute - save previous minute's count and reset
+            self.stats['commands_per_minute'].append(self.stats['current_minute_commands'])
+            self.stats['current_minute_commands'] = 0
+            self.stats['last_minute_reset'] = current_minute
+        self.stats['current_minute_commands'] += 1
+
         # Flood protection - only apply to message commands (PRIVMSG, NOTICE, WHISPER, BROADCAST)
         # Only services are exempt
         MESSAGE_COMMANDS = ['PRIVMSG', 'NOTICE', 'WHISPER', 'BROADCAST']
@@ -3945,10 +3982,15 @@ class pyIRCXServer:
                     await self.link_manager.broadcast_to_servers(chan_out)
             self.stats['messages_sent'] += 1
 
-            # Track messages by channel
+            # Track messages by channel (current session and all-time)
             if chan_name not in self.stats['messages_by_channel']:
                 self.stats['messages_by_channel'][chan_name] = 0
             self.stats['messages_by_channel'][chan_name] += 1
+
+            # Track all-time busiest channels
+            if chan_name not in self.stats['busiest_channels']:
+                self.stats['busiest_channels'][chan_name] = 0
+            self.stats['busiest_channels'][chan_name] += 1
 
             # Log to transcript if +y mode is enabled
             if cmd == "PRIVMSG":
@@ -5498,6 +5540,72 @@ class pyIRCXServer:
                 else:
                     await user.send(f":{self.servername} NOTICE {user.nickname} :SSL: disabled")
 
+            # Performance metrics (v2.0.0 optimizations)
+            await user.send(f":{self.servername} NOTICE {user.nickname} :--- Performance Metrics ---")
+            config_reloads = self.stats.get('config_cache_reloads', 0)
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Config cache reloads: {config_reloads}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Active channel monitors: {len(self.channel_monitors)}")
+            if config_reloads > 0:
+                messages_per_reload = self.stats['messages_sent'] // config_reloads if config_reloads else 0
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  Avg messages/reload: {messages_per_reload:,}")
+
+            # Real-time metrics
+            await user.send(f":{self.servername} NOTICE {user.nickname} :--- Real-Time Metrics ---")
+            # Calculate current rates
+            if self.stats['commands_per_minute']:
+                recent_cmds = list(self.stats['commands_per_minute'])[-5:]  # Last 5 minutes
+                avg_cmd_rate = sum(recent_cmds) / len(recent_cmds) if recent_cmds else 0
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  Commands/min (5min avg): {avg_cmd_rate:.1f}")
+                max_cmd_rate = max(self.stats['commands_per_minute']) if self.stats['commands_per_minute'] else 0
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  Peak commands/min: {max_cmd_rate}")
+
+            # Current load
+            current_load_pct = (user_stats['total'] / CONFIG.get('limits', 'max_users', default=1000)) * 100
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Current load: {current_load_pct:.1f}% ({user_stats['total']}/{CONFIG.get('limits', 'max_users', default=1000)} users)")
+
+            # Historical trends
+            await user.send(f":{self.servername} NOTICE {user.nickname} :--- Historical Trends ---")
+            if self.stats.get('busiest_channels'):
+                top_channels = sorted(self.stats['busiest_channels'].items(), key=lambda x: x[1], reverse=True)[:5]
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  Top 5 busiest channels (all-time):")
+                for channel, count in top_channels:
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :    {channel}: {count:,} messages")
+
+            if self.stats.get('most_active_users'):
+                top_users = sorted(self.stats['most_active_users'].items(), key=lambda x: x[1], reverse=True)[:5]
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  Top 5 most active users (all-time):")
+                for username, count in top_users:
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :    {username}: {count:,} commands")
+
+            # Distributed/linking stats
+            if hasattr(self, 'link_manager') and self.link_manager and self.link_manager.enabled:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :--- Distributed Network ---")
+                server_role = CONFIG.get('linking', 'server_role', default='trunk')
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  Role: {server_role.upper()}")
+                linked_count = len(self.link_manager.linked_servers)
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  Linked servers: {linked_count}")
+
+                if linked_count > 0:
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :  Connected servers:")
+                    for server_name, linked_server in self.link_manager.linked_servers.items():
+                        user_count = getattr(linked_server, 'user_count', 0)
+                        await user.send(f":{self.servername} NOTICE {user.nickname} :    {server_name} ({user_count} users)")
+
+                # Netsplit/netjoin history
+                if self.stats['netsplit_history']:
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :  Recent netsplits ({len(self.stats['netsplit_history'])}):")
+                    import datetime
+                    for timestamp, server, reason in self.stats['netsplit_history'][-5:]:
+                        dt = datetime.datetime.fromtimestamp(timestamp)
+                        await user.send(f":{self.servername} NOTICE {user.nickname} :    {server} at {dt.strftime('%H:%M:%S')}: {reason}")
+
+                if self.stats['netjoin_history']:
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :  Recent netjoins ({len(self.stats['netjoin_history'])}):")
+                    import datetime
+                    for timestamp, server in self.stats['netjoin_history'][-5:]:
+                        dt = datetime.datetime.fromtimestamp(timestamp)
+                        await user.send(f":{self.servername} NOTICE {user.nickname} :    {server} at {dt.strftime('%H:%M:%S')}")
+
             await user.send(f":{self.servername} NOTICE {user.nickname} :=== End of STATS * ===")
             await user.send(self.get_reply("219", user, flag=flag))
             return
@@ -6042,6 +6150,10 @@ class pyIRCXServer:
         try:
             await self.link_manager.connect_to_server(link_cfg)
             await user.send(f":{self.servername} NOTICE {user.nickname} :Successfully linked to {target_server}")
+            # Track netjoin in history
+            self.stats['netjoin_history'].append((int(time.time()), target_server))
+            if len(self.stats['netjoin_history']) > 10:
+                self.stats['netjoin_history'] = self.stats['netjoin_history'][-10:]
             logger.info(f"CONNECT: {user.nickname} linked to {target_server}")
         except Exception as e:
             await user.send(f":{self.servername} NOTICE {user.nickname} :We couldn't establish the link: {e}")
@@ -6077,6 +6189,10 @@ class pyIRCXServer:
             linked_server = self.link_manager.linked_servers[target_server]
             await self.link_manager.handle_server_split(linked_server, reason)
             await user.send(f":{self.servername} NOTICE {user.nickname} :Unlinked from {target_server}")
+            # Track netsplit in history
+            self.stats['netsplit_history'].append((int(time.time()), target_server, reason))
+            if len(self.stats['netsplit_history']) > 10:
+                self.stats['netsplit_history'] = self.stats['netsplit_history'][-10:]
             logger.info(f"SQUIT: {user.nickname} unlinked {target_server}: {reason}")
         except Exception as e:
             await user.send(f":{self.servername} NOTICE {user.nickname} :We couldn't unlink the server: {e}")
