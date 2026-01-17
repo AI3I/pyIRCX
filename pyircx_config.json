@@ -46,6 +46,10 @@
     "max_channels_per_user": 20
   },
   "services": {
+    "enabled": true,
+    "mode": "local",
+    "is_services_hub": false,
+    "hub_server": null,
     "servicebot_count": 10,
     "servicebot_max_channels": 10
   },
@@ -163,8 +167,12 @@
   },
   "linking": {
     "enabled": false,
+    "server_role": "standalone",
     "bind_host": "0.0.0.0",
     "bind_port": 7001,
     "links": []
+  },
+  "comments": {
+    "server_role": "Server role in network: 'standalone', 'trunk' (hub/services host), or 'branch' (leaf)"
   }
 }

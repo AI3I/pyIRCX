@@ -34,11 +34,12 @@ class LinkedServer:
     """Represents a linked server in the network"""
 
     def __init__(self, name: str, hopcount: int, description: str,
-                 writer: Optional[asyncio.StreamWriter] = None):
+                 writer: Optional[asyncio.StreamWriter] = None, role: str = 'unknown'):
         self.name = name
         self.hopcount = hopcount
         self.description = description
         self.writer = writer
+        self.role = role  # 'hub', 'leaf', 'standalone', or 'unknown'
         self.connected_at = time.time()
         self.is_direct = writer is not None  # Direct connection vs. downstream
         self.users: Set[str] = set()  # Nicknames from this server
@@ -71,10 +72,54 @@ class ServerLinkManager:
         self.servers: Dict[str, LinkedServer] = {}  # servername -> LinkedServer
         self.linked_servers = self.servers  # Alias for compatibility
         self.enabled = CONFIG.get('linking', 'enabled', default=False)
+        self.server_role = CONFIG.get('linking', 'server_role', default='standalone')
         self.bind_host = CONFIG.get('linking', 'bind_host', default='0.0.0.0')
         self.bind_port = CONFIG.get('linking', 'bind_port', default=7001)
         self.links_config = CONFIG.get('linking', 'links', default=[])
         self.link_server = None
+
+        # Validate server role
+        valid_roles = ['standalone', 'trunk', 'branch']
+        if self.server_role not in valid_roles:
+            logger.error(f"Invalid server_role '{self.server_role}'. Must be one of: {valid_roles}")
+            self.server_role = 'standalone'
+
+    def validate_link_roles(self, my_role: str, remote_role: str) -> Tuple[bool, str]:
+        """
+        Validate if two servers can link based on their roles.
+        Returns (is_valid, error_message)
+
+        Rules:
+        - standalone cannot link to anything
+        - trunk can only link to branch
+        - branch can only link to trunk
+        - This enforces a flat trunk-and-branch topology (no multi-tier)
+        """
+        # Standalone servers don't link
+        if my_role == 'standalone':
+            return False, "This server is configured as standalone (linking disabled)"
+
+        if remote_role == 'standalone':
+            return False, f"Remote server is configured as standalone"
+
+        # Trunk-to-Trunk not allowed (prevents complex hierarchies)
+        if my_role == 'trunk' and remote_role == 'trunk':
+            return False, "Trunk-to-Trunk linking not allowed (would create multi-tier topology)"
+
+        # Branch-to-Branch not allowed
+        if my_role == 'branch' and remote_role == 'branch':
+            return False, "Branch-to-Branch linking not allowed (branches must connect to trunk)"
+
+        # Trunk can link to branch
+        if my_role == 'trunk' and remote_role == 'branch':
+            return True, ""
+
+        # Branch can link to trunk
+        if my_role == 'branch' and remote_role == 'trunk':
+            return True, ""
+
+        # Anything else is invalid
+        return False, f"Invalid role combination: {my_role} <-> {remote_role}"
 
     async def start(self):
         """Start the linking subsystem"""
@@ -127,12 +172,13 @@ class ServerLinkManager:
                 if not line:
                     continue
 
-                parts = line.split(' ', 4)
-                if parts[0] == 'SERVER' and len(parts) >= 4:
+                parts = line.split(' ', 5)
+                if parts[0] == 'SERVER' and len(parts) >= 5:
                     servername = parts[1]
                     password = parts[2]
                     hopcount = int(parts[3])
-                    description = parts[4].lstrip(':') if len(parts) > 4 else ''
+                    remote_role = parts[4]
+                    description = parts[5].lstrip(':') if len(parts) > 5 else ''
 
                     # Authenticate
                     if not await self.authenticate_server(servername, password):
@@ -141,15 +187,25 @@ class ServerLinkManager:
                         writer.close()
                         return
 
+                    # Validate role compatibility
+                    valid, error_msg = self.validate_link_roles(self.server_role, remote_role)
+                    if not valid:
+                        logger.warning(f"Role validation failed for {servername}: {error_msg}")
+                        await self.send_to_writer(writer, f"ERROR :Link rejected - {error_msg}")
+                        writer.close()
+                        return
+
+                    logger.info(f"Role validation passed: {self.server_role} <-> {remote_role}")
+
                     # Create linked server
-                    server = LinkedServer(servername, hopcount, description, writer)
+                    server = LinkedServer(servername, hopcount, description, writer, remote_role)
                     self.servers[servername] = server
 
-                    # Send our SERVER line
+                    # Send our SERVER line with role
                     network_name = CONFIG.get('server', 'network', default='IRCX Network')
                     await self.send_to_writer(
                         writer,
-                        f"SERVER {self.irc_server.servername} {password} 0 :{network_name}"
+                        f"SERVER {self.irc_server.servername} {password} 0 {self.server_role} :{network_name}"
                     )
 
                     # Burst our state
@@ -180,25 +236,36 @@ class ServerLinkManager:
             logger.info(f"Connecting to {servername} at {host}:{port}")
             reader, writer = await asyncio.open_connection(host, port)
 
-            # Send SERVER command
+            # Send SERVER command with role
             network_name = CONFIG.get('server', 'network', default='IRCX Network')
             await self.send_to_writer(
                 writer,
-                f"SERVER {self.irc_server.servername} {password} 0 :{network_name}"
+                f"SERVER {self.irc_server.servername} {password} 0 {self.server_role} :{network_name}"
             )
 
             # Wait for SERVER response
             line = await asyncio.wait_for(reader.readline(), timeout=30.0)
             line = line.decode('utf-8', errors='replace').strip()
-            parts = line.split(' ', 4)
+            parts = line.split(' ', 5)
 
-            if parts[0] == 'SERVER':
+            if parts[0] == 'SERVER' and len(parts) >= 5:
                 remote_name = parts[1]
+                # parts[2] is password (we already know it)
                 hopcount = int(parts[3])
-                description = parts[4].lstrip(':') if len(parts) > 4 else ''
+                remote_role = parts[4]
+                description = parts[5].lstrip(':') if len(parts) > 5 else ''
+
+                # Validate role compatibility
+                valid, error_msg = self.validate_link_roles(self.server_role, remote_role)
+                if not valid:
+                    logger.error(f"Role validation failed for {remote_name}: {error_msg}")
+                    writer.close()
+                    return
+
+                logger.info(f"Role validation passed: {self.server_role} <-> {remote_role}")
 
                 # Create linked server
-                server = LinkedServer(remote_name, hopcount, description, writer)
+                server = LinkedServer(remote_name, hopcount, description, writer, remote_role)
                 self.servers[remote_name] = server
 
                 # Burst our state
@@ -219,7 +286,23 @@ class ServerLinkManager:
 
     async def burst_to_server(self, server: LinkedServer):
         """Send full state burst to a newly linked server"""
-        # Burst all users
+        # Check if we're a services hub - if so, burst services to leaf servers
+        is_services_hub = CONFIG.get('services', 'is_services_hub', default=False)
+        services_mode = CONFIG.get('services', 'mode', default='local')
+
+        # Burst services if we're a hub and in centralized mode
+        if is_services_hub and services_mode == 'centralized':
+            for nickname, user in self.irc_server.users.items():
+                if user.is_virtual and user.has_mode('s'):
+                    # Service user - burst with special SVCNICK command
+                    modes = user.get_mode_str()
+                    await server.send(
+                        f"SVCNICK {nickname} 1 {int(user.signon_time)} {user.username} "
+                        f"{user.host} {self.irc_server.servername} +{modes} :{user.realname}"
+                    )
+                    logger.info(f"Bursting service {nickname} to {server.name}")
+
+        # Burst all regular users
         for nickname, user in self.irc_server.users.items():
             if not user.is_virtual and not hasattr(user, 'from_server'):
                 # NICK <nick> <hop> <ts> <user> <host> <server> <modes> :<real>
@@ -288,7 +371,10 @@ class ServerLinkManager:
         cmd = parts[0].upper()
 
         # Handle server commands
-        if cmd == 'NICK':
+        if cmd == 'SVCNICK':
+            # Service nickname from hub
+            await self.handle_service_nick(server, parts)
+        elif cmd == 'NICK':
             await self.handle_remote_nick(server, parts)
         elif cmd == 'SJOIN':
             await self.handle_remote_sjoin(server, parts)
@@ -307,6 +393,46 @@ class ServerLinkManager:
         elif line.startswith(':'):
             # Prefixed message from remote user/server
             await self.handle_prefixed_message(server, line)
+
+    async def handle_service_nick(self, server: LinkedServer, parts: list):
+        """Handle SVCNICK (service user) from services hub"""
+        if len(parts) < 9:
+            return
+
+        # SVCNICK <nick> <hop> <ts> <user> <host> <server> <modes> :<real>
+        nickname = parts[1]
+        timestamp = int(parts[3])
+        username = parts[4]
+        hostname = parts[5]
+        origin_server = parts[6]
+        modes = parts[7].lstrip('+')
+        realname = ' '.join(parts[8:]).lstrip(':')
+
+        # Create service user object (import here to avoid circular dependency)
+        from pyircx import User
+
+        service = User(None, None, is_virtual=True)
+        service.nickname = nickname
+        service.username = username
+        service.host = hostname
+        service.realname = realname
+        service.signon_time = timestamp
+        service.registered = True
+        service.staff_level = "SERVICE"
+
+        # Parse modes string
+        for mode_char in modes.lstrip('+'):
+            if mode_char in service.modes:
+                service.modes[mode_char] = True
+
+        service.from_server = origin_server
+        service.is_remote = True
+        service.is_service_proxy = True  # Mark as service proxy from hub
+
+        self.irc_server.users[nickname] = service
+        server.add_user(nickname)
+
+        logger.info(f"Added remote service {nickname} from hub {origin_server}")
 
     async def handle_remote_nick(self, server: LinkedServer, parts: list):
         """Handle NICK introduction from remote server"""
@@ -538,6 +664,31 @@ class ServerLinkManager:
                     return password_hash == password
 
         return False
+
+    def get_services_hub(self) -> Optional[LinkedServer]:
+        """Get the services hub server connection"""
+        hub_name = CONFIG.get('services', 'hub_server')
+        if not hub_name:
+            return None
+        return self.servers.get(hub_name)
+
+    async def route_to_services_hub(self, message: str) -> bool:
+        """
+        Route a message to the services hub.
+        Returns True if routed successfully, False otherwise.
+        """
+        hub = self.get_services_hub()
+        if hub and hub.is_direct:
+            await hub.send(message)
+            return True
+        return False
+
+    def is_service_user(self, nickname: str) -> bool:
+        """Check if a nickname is a service user"""
+        user = self.irc_server.users.get(nickname)
+        if not user:
+            return False
+        return user.is_virtual and user.has_mode('s')
 
     @staticmethod
     async def send_to_writer(writer: asyncio.StreamWriter, message: str):

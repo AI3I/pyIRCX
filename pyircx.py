@@ -668,6 +668,20 @@ class User:
 
     async def send(self, msg):
         """Send message to client with backpressure control"""
+        # Handle remote users (from linked servers) - route back through link
+        if hasattr(self, 'is_remote') and self.is_remote and hasattr(self, 'from_server'):
+            # This is a user from a remote server - route message back through link
+            if hasattr(self, 'server') and self.server and hasattr(self.server, 'link_manager'):
+                link_manager = self.server.link_manager
+                if link_manager and link_manager.enabled:
+                    # Find the server this user is from
+                    for server_name, linked_server in link_manager.servers.items():
+                        if self.from_server == server_name and linked_server.is_direct:
+                            # Route message to that server
+                            await linked_server.send(msg.rstrip('\r\n'))
+                            return
+            return
+
         if self.is_virtual or not self.writer:
             return
         max_len = CONFIG.get('limits', 'msg_length', default=512)
@@ -2634,48 +2648,72 @@ class pyIRCXServer:
         # Channels are now dynamic - only loaded when users join
         # Registered channels restore their properties from registered_channels table
 
-        self.channels["#System"] = Channel("#System")
-        self.channels["#System"].registered = True
-        self.channels["#System"].account_uuid = str(uuid.uuid4())
+        # Check if we should create local services
+        services_enabled = CONFIG.get('services', 'enabled', default=True)
+        services_mode = CONFIG.get('services', 'mode', default='local')
+        is_services_hub = CONFIG.get('services', 'is_services_hub', default=False)
 
-        # Create System virtual user
-        sys_user = self._create_virtual_service('System', 'System', "Network Services")
-        self.channels["#System"].members[sys_user.nickname] = sys_user
-        self.channels["#System"].owners.add(sys_user.nickname)
-        logger.info("#System channel created")
+        # Only create services if:
+        # 1. Services are globally enabled, AND
+        # 2. We're in "local" mode OR we're designated as the services hub
+        should_create_services = services_enabled and (services_mode == 'local' or is_services_hub)
 
-        # Create Registrar service - handles nick/channel registration
-        registrar = self._create_virtual_service('Registrar', 'Registrar', "Registration Services")
-        self.channels["#System"].members[registrar.nickname] = registrar
-        self.channels["#System"].owners.add(registrar.nickname)
-        logger.info("Registrar service created")
+        if should_create_services:
+            self.channels["#System"] = Channel("#System")
+            self.channels["#System"].registered = True
+            self.channels["#System"].account_uuid = str(uuid.uuid4())
 
-        # Create Messenger service - handles mailbox and global messages
-        messenger = self._create_virtual_service('Messenger', 'Messenger', "Message Services")
-        self.channels["#System"].members[messenger.nickname] = messenger
-        self.channels["#System"].owners.add(messenger.nickname)
-        logger.info("Messenger service created")
+            # Create System virtual user
+            sys_user = self._create_virtual_service('System', 'System', "Network Services")
+            self.channels["#System"].members[sys_user.nickname] = sys_user
+            self.channels["#System"].owners.add(sys_user.nickname)
+            logger.info("#System channel created")
 
-        # Create NewsFlash alias - part of Messenger for rotating/push messages
-        newsflash = self._create_virtual_service('NewsFlash', 'NewsFlash', "News Broadcast Services")
-        self.channels["#System"].members[newsflash.nickname] = newsflash
-        self.channels["#System"].owners.add(newsflash.nickname)
-        logger.info("NewsFlash service created")
+            # Create Registrar service - handles nick/channel registration
+            registrar = self._create_virtual_service('Registrar', 'Registrar', "Registration Services")
+            self.channels["#System"].members[registrar.nickname] = registrar
+            self.channels["#System"].owners.add(registrar.nickname)
+            logger.info("Registrar service created")
 
-        # Create ServiceBots - configurable count
-        self.servicebots = {}
-        bot_count = CONFIG.get('services', 'servicebot_count', default=10)
-        for i in range(1, bot_count + 1):
-            bot_name = f"ServiceBot{i:02d}"
-            bot = self._create_virtual_service(bot_name, 'ServiceBot', f"Service Bot #{i}", is_servicebot=True)
-            self.servicebots[bot_name] = bot
-        logger.info(f"{bot_count} ServiceBots created")
+            # Create Messenger service - handles mailbox and global messages
+            messenger = self._create_virtual_service('Messenger', 'Messenger', "Message Services")
+            self.channels["#System"].members[messenger.nickname] = messenger
+            self.channels["#System"].owners.add(messenger.nickname)
+            logger.info("Messenger service created")
 
-        # Create ServiceBot dispatcher - virtual user that routes to available bots
-        servicebot_dispatcher = self._create_virtual_service('ServiceBot', 'ServiceBot', "ServiceBot Pool Dispatcher")
-        self.channels["#System"].members[servicebot_dispatcher.nickname] = servicebot_dispatcher
-        self.channels["#System"].owners.add(servicebot_dispatcher.nickname)
-        logger.info("ServiceBot dispatcher created")
+            # Create NewsFlash alias - part of Messenger for rotating/push messages
+            newsflash = self._create_virtual_service('NewsFlash', 'NewsFlash', "News Broadcast Services")
+            self.channels["#System"].members[newsflash.nickname] = newsflash
+            self.channels["#System"].owners.add(newsflash.nickname)
+            logger.info("NewsFlash service created")
+
+            # Create ServiceBots - configurable count
+            self.servicebots = {}
+            bot_count = CONFIG.get('services', 'servicebot_count', default=10)
+            for i in range(1, bot_count + 1):
+                bot_name = f"ServiceBot{i:02d}"
+                bot = self._create_virtual_service(bot_name, 'ServiceBot', f"Service Bot #{i}", is_servicebot=True)
+                self.servicebots[bot_name] = bot
+            logger.info(f"{bot_count} ServiceBots created")
+
+            # Create ServiceBot dispatcher - virtual user that routes to available bots
+            servicebot_dispatcher = self._create_virtual_service('ServiceBot', 'ServiceBot', "ServiceBot Pool Dispatcher")
+            self.channels["#System"].members[servicebot_dispatcher.nickname] = servicebot_dispatcher
+            self.channels["#System"].owners.add(servicebot_dispatcher.nickname)
+            logger.info("ServiceBot dispatcher created")
+
+            logger.info(f"Services initialized in {services_mode} mode" +
+                       (" (services hub)" if is_services_hub else ""))
+        else:
+            # No local services - we're a branch server in centralized mode
+            self.servicebots = {}
+            if services_mode == 'centralized' and not is_services_hub:
+                logger.info("Services disabled: Running as branch server in centralized mode")
+                logger.info(f"Services will be provided by trunk: {CONFIG.get('services', 'hub_server', default='(not configured)')}")
+            elif not services_enabled:
+                logger.info("Services disabled by configuration")
+            else:
+                logger.warning("Services configuration error - check services.mode and services.is_services_hub")
 
         # Initialize DNSBL and connection security checkers
         global DNSBL_CHECKER, PROXY_DETECTOR, CONNECTION_SCORER
@@ -3525,6 +3563,31 @@ class pyIRCXServer:
         if len(text) > max_msg_len:
             text = text[:max_msg_len]
             await user.send(f":{self.servername} NOTICE {user.nickname} :Message truncated to {max_msg_len} characters")
+
+        # Check if we need to route to services hub (centralized services mode)
+        services_mode = CONFIG.get('services', 'mode', default='local')
+        is_services_hub = CONFIG.get('services', 'is_services_hub', default=False)
+
+        # List of service names that should be routed
+        service_names = ['system', 'registrar', 'messenger', 'newsflash',
+                        'nickserv', 'chanserv', 'memoserv'] + \
+                       [bot.lower() for bot in self.servicebots.keys()]
+
+        # If we're in centralized mode and NOT the hub, route to hub
+        if services_mode == 'centralized' and not is_services_hub:
+            if target.lower() in service_names:
+                # Route to services hub
+                if self.link_manager and self.link_manager.enabled:
+                    source = f":{user.prefix()}"
+                    message = f"{source} {cmd} {target} :{text}"
+                    routed = await self.link_manager.route_to_services_hub(message)
+                    if routed:
+                        logger.debug(f"Routed service message from {user.nickname} to {target} via trunk")
+                        return
+                    else:
+                        # Trunk not available - inform user
+                        await user.send(f":{self.servername} NOTICE {user.nickname} :Services temporarily unavailable (trunk offline)")
+                        return
 
         # System service - provide help about available services
         if target.lower() == CONFIG.get('system', 'nick', default='System').lower():

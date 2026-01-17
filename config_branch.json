@@ -1,0 +1,53 @@
+{
+  "server": {
+    "name": "branch.testnet.local",
+    "network": "TestNet",
+    "motd": [
+      "Welcome to TestNet Branch Server",
+      "Services provided by trunk.testnet.local"
+    ]
+  },
+  "network": {
+    "listen_addr": "127.0.0.1",
+    "listen_ports": [6668],
+    "enable_ipv6": false
+  },
+  "database": {
+    "path": "branch_pyircx.db",
+    "pool_size": 10
+  },
+  "limits": {
+    "max_users": 1000,
+    "max_channels": 500
+  },
+  "services": {
+    "enabled": true,
+    "mode": "centralized",
+    "is_services_hub": false,
+    "hub_server": "trunk.testnet.local",
+    "servicebot_count": 0,
+    "servicebot_max_channels": 10
+  },
+  "linking": {
+    "enabled": true,
+    "server_role": "branch",
+    "bind_host": "127.0.0.1",
+    "bind_port": 7002,
+    "links": [
+      {
+        "name": "trunk.testnet.local",
+        "host": "127.0.0.1",
+        "port": 7001,
+        "password": "testlink123",
+        "autoconnect": true
+      }
+    ]
+  },
+  "admin": {
+    "default_username": "admin",
+    "default_password": "changeme"
+  },
+  "ssl": {
+    "enabled": false
+  }
+}
