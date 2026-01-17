@@ -2238,7 +2238,7 @@ console.log("=== admin.js LOADING ===");
                 if (branchSettings) branchSettings.style.display = 'none';
 
                 // Load trunk settings
-                setVal('#cfg-linking-servicebot-count', config.services?.servicebot_count || 5);
+                setVal('#cfg-linking-servicebot-count', config.services?.servicebot_count || 10);
 
                 // Load branch list
                 const branchesList = $('#cfg-linking-branches-list');
@@ -2402,7 +2402,7 @@ console.log("=== admin.js LOADING ===");
             // Trunk settings
             newConfig.services.is_services_hub = true;
             newConfig.services.hub_server = null;
-            newConfig.services.servicebot_count = parseInt(getVal('#cfg-linking-servicebot-count')) || 5;
+            newConfig.services.servicebot_count = parseInt(getVal('#cfg-linking-servicebot-count')) || 10;
 
             // Collect branch links
             newConfig.linking.links = [];

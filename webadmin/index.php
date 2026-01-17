@@ -899,14 +899,14 @@ badword3"></textarea>
                                     <option value="trunk">Trunk (Services Hub)</option>
                                     <option value="branch">Branch (Access Point)</option>
                                 </select>
-                                <small><strong>Trunk:</strong> Hosts services (Registrar, Messenger, ServiceBots) and routes messages between branches. <strong>Branch:</strong> Connects to trunk, routes service requests, provides client access points.</small>
+                                <small><strong>Trunk:</strong> Hosts services (Registrar, Messenger, ServiceBots) and routes messages between branches. <strong>Branch:</strong> Connects to trunk, routes service requests, provides client access points. <strong style="color: #2980b9;">Note:</strong> For standalone servers (not part of a network), select <strong>Trunk</strong>.</small>
                             </div>
 
                             <h4 style="margin-top: 20px;">Network Connection</h4>
                             <div class="form-group">
                                 <label>Bind Host</label>
-                                <input type="text" class="form-control" id="cfg-linking-host" placeholder="0.0.0.0">
-                                <small>IP address to bind for server-to-server connections. Default: 0.0.0.0 (all IPv4 interfaces). Use specific IP for multi-homed servers.</small>
+                                <input type="text" class="form-control" id="cfg-linking-host" placeholder="0.0.0.0 or ::">
+                                <small>IP address to bind for server-to-server connections. Default: 0.0.0.0 (all IPv4) or :: (all IPv6). Use specific IP for multi-homed servers. Examples: 0.0.0.0, ::, 10.0.1.1, 2001:db8::1</small>
                             </div>
                             <div class="form-group">
                                 <label>Bind Port</label>
@@ -924,8 +924,8 @@ badword3"></textarea>
                                 </div>
                                 <div class="form-group">
                                     <label>Trunk Host</label>
-                                    <input type="text" class="form-control" id="cfg-linking-trunk-host" placeholder="10.0.1.1">
-                                    <small>IP address or hostname of trunk server for linking</small>
+                                    <input type="text" class="form-control" id="cfg-linking-trunk-host" placeholder="10.0.1.1 or 2001:db8::1">
+                                    <small>IPv4 address, IPv6 address, or hostname of trunk server for linking. Examples: 10.0.1.1, 2001:db8::1, trunk.example.com</small>
                                 </div>
                                 <div class="form-group">
                                     <label>Trunk Port</label>
@@ -948,8 +948,8 @@ badword3"></textarea>
                                 <h4 style="margin-top: 20px;">Trunk Configuration</h4>
                                 <div class="form-group">
                                     <label>ServiceBot Count</label>
-                                    <input type="number" class="form-control" id="cfg-linking-servicebot-count" placeholder="5" value="5">
-                                    <small>Number of ServiceBots to create for channel monitoring. Trunk hosts all ServiceBots for the network. Default: 5</small>
+                                    <input type="number" class="form-control" id="cfg-linking-servicebot-count" placeholder="10" value="10">
+                                    <small>Number of ServiceBots to create for channel monitoring. Trunk hosts all ServiceBots for the network. Default: 10</small>
                                 </div>
 
                                 <h4 style="margin-top: 20px;">Branch Servers</h4>
