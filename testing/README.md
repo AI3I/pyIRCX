@@ -470,3 +470,57 @@ python3 testing/stress_test.py --quick
 ```
 
 ---
+
+### Network Splits & Joins
+
+#### `netsplit.py` - Network Split/Join Tests (15+ tests)
+Critical tests for server disconnections and reconnections (netsplits/netjoins).
+
+**Test Categories:**
+
+1. **Basic Split Tests** (4 tests)
+   - SQUIT disconnects server
+   - Users disappear after split
+   - Channels lose users
+   - Empty channels removed
+
+2. **Netjoin Tests** (2 tests)
+   - CONNECT rejoins server
+   - Users reappear after rejoin
+
+3. **Channel State** (2 tests)
+   - Channel modes preserved during split
+   - Channel topic preserved during split
+
+4. **User Collisions** (1 test)
+   - Duplicate nick detection on netjoin
+
+5. **Services During Split** (2 tests)
+   - Services unavailable on branch during split
+   - Staff auth unavailable during split
+
+6. **Edge Cases** (3 tests)
+   - Multiple split/join cycles
+   - No messaging across split
+   - Server state consistency
+
+**Why Critical:**
+Netsplits are one of the most complex scenarios in distributed IRC:
+- Users suddenly disappear
+- Channels change membership
+- Services become unavailable
+- State must be reconciled on rejoin
+
+**Example:**
+```bash
+python3 testing/netsplit.py
+```
+
+**Common Issues Caught:**
+- Memory leaks during split cleanup
+- Channel state corruption
+- Duplicate user entries on rejoin
+- Service routing failures
+- Orphaned channel references
+
+---
