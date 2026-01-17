@@ -957,8 +957,8 @@ badword3"></textarea>
                                             <div class="form-group">
                                                 <label>Database Filename</label>
                                                 <input type="text" class="form-control" id="branch-db" name="db_path"
-                                                       placeholder="branch1_pyircx.db" required>
-                                                <small>SQLite database file (must be unique per branch)</small>
+                                                       placeholder="pyircx.db" required>
+                                                <small>SQLite database file. Each branch on its own server can use the same filename (default: pyircx.db).</small>
                                             </div>
 
                                             <div class="form-group">
