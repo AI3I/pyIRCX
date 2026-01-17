@@ -2079,7 +2079,16 @@ console.log("=== admin.js LOADING ===");
     }
 
     // Add a branch server entry (for trunk config)
-    function addBranchEntry(name = '', host = '', port = '', password = '', autoconnect = false) {
+    function generateSecurePassword() {
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
+        let password = '';
+        for (let i = 0; i < 24; i++) {
+            password += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return password;
+    }
+
+    function addBranchEntry(name = '', host = '', port = '', password = '', autoconnect = false, maxusers = 10000) {
         const list = $('#cfg-linking-branches-list');
         if (!list) return;
 
@@ -2088,18 +2097,22 @@ console.log("=== admin.js LOADING ===");
         div.className = 'branch-entry';
         div.style.cssText = 'border: 1px solid #ddd; padding: 10px; margin-bottom: 10px; border-radius: 4px; background: #f9f9f9;';
         div.innerHTML = `
-            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 10px; align-items: end;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr 1fr; gap: 10px; align-items: end;">
                 <div>
                     <label style="font-size: 12px; font-weight: bold;">Branch Name</label>
                     <input type="text" class="form-control branch-name" value="${escapeHtml(name)}" placeholder="branch1.example.com">
                 </div>
                 <div>
                     <label style="font-size: 12px; font-weight: bold;">Host/IP</label>
-                    <input type="text" class="form-control branch-host" value="${escapeHtml(host)}" placeholder="10.0.1.2">
+                    <input type="text" class="form-control branch-host" value="${escapeHtml(host)}" placeholder="10.0.1.2 or 2001:db8::1">
                 </div>
                 <div>
                     <label style="font-size: 12px; font-weight: bold;">Port</label>
                     <input type="number" class="form-control branch-port" value="${port || 7001}" placeholder="7001">
+                </div>
+                <div>
+                    <label style="font-size: 12px; font-weight: bold;">Max Connections</label>
+                    <input type="number" class="form-control branch-maxusers" value="${maxusers || 10000}" placeholder="10000">
                 </div>
                 <div>
                     <label style="font-size: 12px; font-weight: bold;">Password</label>
@@ -2107,14 +2120,24 @@ console.log("=== admin.js LOADING ===");
                 </div>
             </div>
             <div style="margin-top: 10px; display: flex; gap: 10px; align-items: center;">
-                <label style="font-size: 12px;"><input type="checkbox" class="branch-autoconnect" ${autoconnect ? 'checked' : ''}> Auto-connect</label>
+                <label style="font-size: 12px;"><input type="checkbox" class="branch-autoconnect" ${autoconnect ? 'checked' : ''}> Automatically connect (and reconnect)</label>
                 <div style="margin-left: auto; display: flex; gap: 10px;">
-                    <button type="button" class="btn btn-sm btn-primary branch-gen-config-btn">Generate Configuration</button>
-                    <button type="button" class="btn btn-sm btn-danger branch-delete-btn">Delete Server</button>
+                    <button type="button" class="btn btn-sm btn-secondary branch-gen-password-btn">🔑 Generate Secure Password</button>
+                    <button type="button" class="btn btn-sm btn-primary branch-gen-config-btn">📄 Generate Configuration</button>
+                    <button type="button" class="btn btn-sm btn-danger branch-delete-btn">🗑️ Delete Server</button>
                 </div>
             </div>
         `;
         list.appendChild(div);
+
+        // Add password generator handler
+        const genPassBtn = div.querySelector('.branch-gen-password-btn');
+        genPassBtn?.addEventListener('click', () => {
+            const passwordField = div.querySelector('.branch-password');
+            passwordField.value = generateSecurePassword();
+            passwordField.type = 'text'; // Show the generated password
+            setTimeout(() => { passwordField.type = 'password'; }, 3000); // Hide after 3 seconds
+        });
 
         // Add config generator handler
         const genBtn = div.querySelector('.branch-gen-config-btn');
@@ -2134,6 +2157,7 @@ console.log("=== admin.js LOADING ===");
         const branchName = branchEntryDiv.querySelector('.branch-name').value;
         const branchHost = branchEntryDiv.querySelector('.branch-host').value;
         const linkPort = parseInt(branchEntryDiv.querySelector('.branch-port').value) || 7001;
+        const maxUsers = parseInt(branchEntryDiv.querySelector('.branch-maxusers').value) || 10000;
         const linkPassword = branchEntryDiv.querySelector('.branch-password').value;
 
         if (!branchName || !branchHost || !linkPassword) {
@@ -2169,7 +2193,7 @@ console.log("=== admin.js LOADING ===");
                     "enable_ipv6": trunkConfig.network?.enable_ipv6 || false
                 },
                 "limits": {
-                    "max_users": 10000,
+                    "max_users": maxUsers,
                     "max_channels": trunkConfig.limits?.max_channels || 500
                 },
                 "services": {
@@ -2248,6 +2272,7 @@ console.log("=== admin.js LOADING ===");
             setVal('#cfg-server-name', config.server?.name || '');
             setVal('#cfg-server-network', config.server?.network || '');
             setVal('#cfg-server-staff-message', config.server?.staff_login_message || '');
+            setCheck('#cfg-server-restrict-staff', config.server?.restrict_to_staff_only || false);
 
             // Network settings
             setVal('#cfg-network-addr', config.network?.listen_addr || '');
@@ -2385,6 +2410,7 @@ console.log("=== admin.js LOADING ===");
         newConfig.server.name = getVal('#cfg-server-name');
         newConfig.server.network = getVal('#cfg-server-network');
         newConfig.server.staff_login_message = getVal('#cfg-server-staff-message');
+        newConfig.server.restrict_to_staff_only = getCheck('#cfg-server-restrict-staff');
 
         // Network settings
         newConfig.network.listen_addr = getVal('#cfg-network-addr');

@@ -500,6 +500,10 @@ $csrf_token = $_SESSION['csrf_token'];
                                 <input type="text" class="form-control" id="cfg-server-staff-message">
                                 <small>Message shown to staff members when they authenticate</small>
                             </div>
+                            <div class="form-group">
+                                <label><input type="checkbox" id="cfg-server-restrict-staff"> Allow authenticated and staff connections only</label>
+                                <small>Restrict server access to authenticated users and staff only. Regular users without authentication will be denied access.</small>
+                            </div>
 
                             <h4 style="margin-top: 20px;">Network Settings</h4>
                             <div class="form-group">
