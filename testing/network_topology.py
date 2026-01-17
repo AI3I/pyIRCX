@@ -484,7 +484,7 @@ async def test_no_messaging_across_split():
 if __name__ == "__main__":
     print("pyIRCX v2.0.0 Network Split/Join Test Suite")
     print("=" * 80)
-    print("Testing netsplits, network convergences, and edge cases")
+    print("Testing network divergences, network convergences, and edge cases")
     print()
     
     asyncio.run(runner.run_all())

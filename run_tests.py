@@ -130,8 +130,8 @@ def main():
         },
         {
             'name': 'Network Topology Tests',
-            'path': 'testing/netsplit.py',
-            'description': 'Server splits (SQUIT), rejoins (CONNECT), channel/user state during splits'
+            'path': 'testing/network_topology.py',
+            'description': 'Server divergences (SQUIT), convergences (CONNECT), channel/user state during topology changes'
         },
     ]
     
