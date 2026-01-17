@@ -371,7 +371,16 @@ class ServerLinkManager:
         cmd = parts[0].upper()
 
         # Handle server commands
-        if cmd == 'SVCNICK':
+        if cmd == 'STAFFAUTH':
+            # Staff authentication request from branch
+            await self.handle_staff_auth_request(server, parts)
+        elif cmd == 'STAFFOK':
+            # Staff authentication success response from trunk
+            await self.handle_staff_auth_response(server, parts, success=True)
+        elif cmd == 'STAFFFAIL':
+            # Staff authentication failure response from trunk
+            await self.handle_staff_auth_response(server, parts, success=False)
+        elif cmd == 'SVCNICK':
             # Service nickname from hub
             await self.handle_service_nick(server, parts)
         elif cmd == 'NICK':
@@ -393,6 +402,107 @@ class ServerLinkManager:
         elif line.startswith(':'):
             # Prefixed message from remote user/server
             await self.handle_prefixed_message(server, line)
+
+    async def handle_staff_auth_request(self, server: LinkedServer, parts: list):
+        """Handle STAFFAUTH request from branch server (trunk only)"""
+        if len(parts) < 4:
+            return
+
+        # STAFFAUTH <auth_id> <username> <password>
+        auth_id = parts[1]
+        username = parts[2]
+        password = parts[3]
+
+        # Authenticate against local database
+        authenticated = False
+        level = "USER"
+        email = None
+        realname = None
+        force_realname = False
+
+        try:
+            from pyircx import check_password_async
+            row = await self.irc_server.db_pool.execute_one(
+                "SELECT password_hash, level, email, realname, force_realname FROM users WHERE username=?",
+                (username,)
+            )
+            if row:
+                # Verify password
+                if await check_password_async(password, row[0]):
+                    authenticated = True
+                    level = row[1]
+                    email = row[2]
+                    realname = row[3]
+                    force_realname = bool(row[4])
+                    logger.info(f"Trunk: Staff auth SUCCESS for {username} ({level})")
+                else:
+                    logger.info(f"Trunk: Staff auth FAILED for {username} (bad password)")
+            else:
+                logger.info(f"Trunk: Staff auth FAILED for {username} (not found)")
+        except Exception as e:
+            logger.error(f"Trunk: Staff auth error for {username}: {e}")
+
+        # Send response back to branch
+        if authenticated:
+            # STAFFOK <auth_id> <level> <email> <realname> <force_realname>
+            email_str = email if email else ""
+            realname_str = realname if realname else ""
+            await server.send(f"STAFFOK {auth_id} {level} {email_str} {realname_str} {int(force_realname)}")
+        else:
+            # STAFFFAIL <auth_id>
+            await server.send(f"STAFFFAIL {auth_id}")
+
+    async def handle_staff_auth_response(self, server: LinkedServer, parts: list, success: bool):
+        """Handle STAFFOK/STAFFFAIL response from trunk (branch only)"""
+        if not hasattr(self, '_pending_staff_auth'):
+            return
+
+        if len(parts) < 2:
+            return
+
+        auth_id = parts[1]
+
+        if auth_id not in self._pending_staff_auth:
+            logger.warning(f"Received staff auth response for unknown ID: {auth_id}")
+            return
+
+        pending = self._pending_staff_auth[auth_id]
+        future = pending['future']
+
+        if success:
+            # STAFFOK <auth_id> <level> <email> <realname> <force_realname>
+            if len(parts) < 3:
+                future.set_result(None)
+                del self._pending_staff_auth[auth_id]
+                return
+
+            level = parts[2]
+            email = parts[3] if len(parts) > 3 and parts[3] else None
+            realname = parts[4] if len(parts) > 4 and parts[4] else None
+            force_realname = bool(int(parts[5])) if len(parts) > 5 else False
+
+            result = {
+                'authenticated': True,
+                'level': level,
+                'email': email,
+                'realname': realname,
+                'force_realname': force_realname
+            }
+            future.set_result(result)
+            logger.info(f"Branch: Staff auth SUCCESS via trunk for {pending['username']} ({level})")
+        else:
+            # STAFFFAIL
+            result = {
+                'authenticated': False,
+                'level': 'USER',
+                'email': None,
+                'realname': None,
+                'force_realname': False
+            }
+            future.set_result(result)
+            logger.info(f"Branch: Staff auth FAILED via trunk for {pending['username']}")
+
+        del self._pending_staff_auth[auth_id]
 
     async def handle_service_nick(self, server: LinkedServer, parts: list):
         """Handle SVCNICK (service user) from services hub"""
@@ -689,6 +799,59 @@ class ServerLinkManager:
         if not user:
             return False
         return user.is_virtual and user.has_mode('s')
+
+    async def route_staff_auth(self, username: str, password: str, user_obj) -> Optional[dict]:
+        """
+        Route staff authentication request to trunk server.
+        Returns dict with auth result or None if trunk unavailable.
+
+        Result dict: {
+            'authenticated': bool,
+            'level': str,  # 'ADMIN', 'SYSOP', 'GUIDE', or 'USER'
+            'email': str,
+            'realname': str,
+            'force_realname': bool
+        }
+        """
+        trunk = self.get_services_hub()
+        if not trunk or not trunk.is_direct:
+            logger.warning(f"Staff auth routing failed: No trunk connection")
+            return None
+
+        # Create a unique ID for this auth request
+        import uuid
+        auth_id = str(uuid.uuid4())[:8]
+
+        # Store pending auth request
+        if not hasattr(self, '_pending_staff_auth'):
+            self._pending_staff_auth = {}
+
+        # Create future for response
+        future = asyncio.Future()
+        self._pending_staff_auth[auth_id] = {
+            'future': future,
+            'username': username,
+            'user_obj': user_obj
+        }
+
+        # Send STAFFAUTH request to trunk
+        # Format: STAFFAUTH <auth_id> <username> <password>
+        await trunk.send(f"STAFFAUTH {auth_id} {username} {password}")
+        logger.debug(f"Sent staff auth request to trunk: {username} (id: {auth_id})")
+
+        try:
+            # Wait for response with timeout
+            result = await asyncio.wait_for(future, timeout=5.0)
+            return result
+        except asyncio.TimeoutError:
+            logger.error(f"Staff auth timeout for {username}")
+            del self._pending_staff_auth[auth_id]
+            return None
+        except Exception as e:
+            logger.error(f"Staff auth error for {username}: {e}")
+            if auth_id in self._pending_staff_auth:
+                del self._pending_staff_auth[auth_id]
+            return None
 
     @staticmethod
     async def send_to_writer(writer: asyncio.StreamWriter, message: str):

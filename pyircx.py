@@ -3432,37 +3432,59 @@ class pyIRCXServer:
 
         # Fall back to PASS-based authentication
         elif user.provided_pass:
-            # Try localhost admin token first (for Cockpit API)
-            if user.ip in ['127.0.0.1', '::1', '::ffff:127.0.0.1']:
-                try:
-                    with open('/etc/pyircx/cockpit_admin_token', 'r') as f:
-                        admin_token = f.read().strip()
-                    if user.provided_pass == admin_token:
-                        auth, level = True, "ADMIN"
-                        logger.info(f"Cockpit admin token accepted from localhost for {user.username}")
-                except (FileNotFoundError, PermissionError, IOError):
-                    pass  # Token file doesn't exist or can't be read
-            
-            # If admin token didn't match, try normal password authentication
-            if not auth:
-                try:
-                    row = await self.db_pool.execute_one(
-                        "SELECT password_hash, level, email, realname, force_realname FROM users WHERE username=?",
-                        (user.username,)
-                    )
-                    if row:
-                        # Use non-blocking bcrypt check
-                        if await check_password_async(user.provided_pass, row[0]):
-                            auth, level = True, row[1]
-                            user.staff_email = row[2]
-                            user.staff_realname = row[3]
-                            user.force_staff_realname = bool(row[4])
-                            self.failed_auth_tracker.record_success(user.ip)
-                        else:
-                            self.failed_auth_tracker.record_failure(user.ip)
-                except Exception as e:
-                    if self.debug_mode:
-                        logger.error(f"Auth error: {e}")
+            # Check if we should route to trunk for authentication
+            services_mode = CONFIG.get('services', 'mode', default='local')
+            is_services_hub = CONFIG.get('services', 'is_services_hub', default=False)
+
+            # If centralized mode and we're NOT the trunk, route to trunk
+            if services_mode == 'centralized' and not is_services_hub:
+                # Branch server - route staff auth to trunk
+                if self.link_manager and self.link_manager.enabled:
+                    auth_result = await self.link_manager.route_staff_auth(user.username, user.provided_pass, user)
+                    if auth_result:
+                        auth, level = auth_result['authenticated'], auth_result['level']
+                        if auth:
+                            user.staff_email = auth_result.get('email')
+                            user.staff_realname = auth_result.get('realname')
+                            user.force_staff_realname = auth_result.get('force_realname', False)
+                            logger.info(f"Staff auth via trunk: {user.username} as {level}")
+                    else:
+                        # Trunk not available - deny authentication
+                        logger.warning(f"Staff auth failed: Trunk unavailable for {user.username}")
+                        auth, level = False, "USER"
+            else:
+                # Trunk server or local mode - authenticate locally
+                # Try localhost admin token first (for Cockpit API)
+                if user.ip in ['127.0.0.1', '::1', '::ffff:127.0.0.1']:
+                    try:
+                        with open('/etc/pyircx/cockpit_admin_token', 'r') as f:
+                            admin_token = f.read().strip()
+                        if user.provided_pass == admin_token:
+                            auth, level = True, "ADMIN"
+                            logger.info(f"Cockpit admin token accepted from localhost for {user.username}")
+                    except (FileNotFoundError, PermissionError, IOError):
+                        pass  # Token file doesn't exist or can't be read
+
+                # If admin token didn't match, try normal password authentication
+                if not auth:
+                    try:
+                        row = await self.db_pool.execute_one(
+                            "SELECT password_hash, level, email, realname, force_realname FROM users WHERE username=?",
+                            (user.username,)
+                        )
+                        if row:
+                            # Use non-blocking bcrypt check
+                            if await check_password_async(user.provided_pass, row[0]):
+                                auth, level = True, row[1]
+                                user.staff_email = row[2]
+                                user.staff_realname = row[3]
+                                user.force_staff_realname = bool(row[4])
+                                self.failed_auth_tracker.record_success(user.ip)
+                            else:
+                                self.failed_auth_tracker.record_failure(user.ip)
+                    except Exception as e:
+                        if self.debug_mode:
+                            logger.error(f"Auth error: {e}")
 
         if auth and level in ["ADMIN", "SYSOP", "GUIDE"]:
             user.host = self.servername
