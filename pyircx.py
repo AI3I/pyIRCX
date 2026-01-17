@@ -5319,10 +5319,10 @@ class pyIRCXServer:
         is_staff = user.is_staff()
         is_admin = user.has_mode('a')
 
-        # STATS ? - Help menu
-        if flag == '?':
+        # STATS ? - Help menu (also shown when no flag provided)
+        if flag == '?' or not flag:
             await user.send(f":{self.servername} NOTICE {user.nickname} :=== STATS Help ===")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Public flags (anyone can use):")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Generally available flags:")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  u - Server uptime and version")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  s - Online staff listing")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  i - Invisible users count")
@@ -5332,23 +5332,30 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :  c - Server configuration summary")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  f - Flood protection status")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  n - Network statistics")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Guide/Staff flags:")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  a - Online IRC administrators")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  o - Online IRC operators")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  g - Online IRC guides")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  b - ServiceBot statistics")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  z - Gagged users listing")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :IRC operator/admin only:")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  d - Database statistics")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  k - Bans and access lists")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  l - Server linking statistics")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  m - Message/command statistics")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  p - Peak usage statistics")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  t - SSL/TLS certificate status")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  v - Command usage statistics")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  * - All statistics combined (complete dump)")
+
+            # Show guide/staff flags only if user is staff
+            if user.is_staff() or user.is_high_staff():
+                await user.send(f":{self.servername} NOTICE {user.nickname} :IRC guide or staff flags:")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  a - Online IRC administrators")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  o - Online IRC operators")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  g - Online IRC guides")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  b - ServiceBot statistics")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  z - Gagged users listing")
+
+            # Show operator/admin flags only if user is operator or admin
+            if user.is_high_staff():
+                await user.send(f":{self.servername} NOTICE {user.nickname} :IRC operator or administrator flags:")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  d - Database statistics")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  k - Bans and access lists")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  l - Server linking statistics")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  m - Message/command statistics")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  p - Peak usage statistics")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  t - SSL/TLS certificate status")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  v - Command usage statistics")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  * - All statistics combined")
+
             await user.send(f":{self.servername} NOTICE {user.nickname} :=== End of STATS Help ===")
-            await user.send(self.get_reply("219", user, flag=flag))
+            await user.send(self.get_reply("219", user, flag=flag if flag else '?'))
             return
 
         # STATS * - All stats combined (Operator+ only)
@@ -5570,14 +5577,14 @@ class pyIRCXServer:
             # Historical trends
             await user.send(f":{self.servername} NOTICE {user.nickname} :--- Historical Trends ---")
             if self.stats.get('busiest_channels'):
-                top_channels = sorted(self.stats['busiest_channels'].items(), key=lambda x: x[1], reverse=True)[:5]
-                await user.send(f":{self.servername} NOTICE {user.nickname} :  Top 5 busiest channels (all-time):")
+                top_channels = sorted(self.stats['busiest_channels'].items(), key=lambda x: x[1], reverse=True)
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  Busiest channels (all-time):")
                 for channel, count in top_channels:
                     await user.send(f":{self.servername} NOTICE {user.nickname} :    {channel}: {count:,} messages")
 
             if self.stats.get('most_active_users'):
-                top_users = sorted(self.stats['most_active_users'].items(), key=lambda x: x[1], reverse=True)[:5]
-                await user.send(f":{self.servername} NOTICE {user.nickname} :  Top 5 most active users (all-time):")
+                top_users = sorted(self.stats['most_active_users'].items(), key=lambda x: x[1], reverse=True)
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  Most active users (all-time):")
                 for username, count in top_users:
                     await user.send(f":{self.servername} NOTICE {user.nickname} :    {username}: {count:,} commands")
 
@@ -10388,12 +10395,14 @@ class pyIRCXServer:
                 return
             if is_gag:
                 channel.gagged.add(target_nick)
+                await user.send(f":{self.servername} NOTICE {user.nickname} :{target_nick} has been gagged in {chan_name}")
                 # Send notification to #System channel (shadow ban - target doesn't know)
                 if "#System" in self.channels:
                     msg = f":{self.servername} NOTICE #System :[GAG] {user.nickname} gagged {target_nick} in {chan_name}"
                     self.channels["#System"].broadcast(msg)
             else:
                 channel.gagged.discard(target_nick)
+                await user.send(f":{self.servername} NOTICE {user.nickname} :{target_nick} has been ungagged in {chan_name}")
                 # Send notification to #System channel
                 if "#System" in self.channels:
                     msg = f":{self.servername} NOTICE #System :[UNGAG] {user.nickname} ungagged {target_nick} in {chan_name}"
@@ -10415,12 +10424,14 @@ class pyIRCXServer:
                 return
             if is_gag:
                 target_user.set_mode('z', True)
+                await user.send(f":{self.servername} NOTICE {user.nickname} :{target_nick} has been globally gagged (+z)")
                 # Send notification to #System channel (shadow ban - target doesn't know)
                 if "#System" in self.channels:
                     msg = f":{self.servername} NOTICE #System :[GAG] {user.nickname} globally gagged {target_nick} (+z)"
                     self.channels["#System"].broadcast(msg)
             else:
                 target_user.set_mode('z', False)
+                await user.send(f":{self.servername} NOTICE {user.nickname} :{target_nick} has been globally ungagged (-z)")
                 # Send notification to #System channel
                 if "#System" in self.channels:
                     msg = f":{self.servername} NOTICE #System :[UNGAG] {user.nickname} globally ungagged {target_nick} (-z)"

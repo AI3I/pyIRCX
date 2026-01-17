@@ -297,7 +297,7 @@ async def test_admin_host():
     
     whois_line = await regular.get_line_with("311")
     assert whois_line, "No WHOIS reply"
-    assert "irc.local" in whois_line or "@" in whois_line, f"Admin doesn't have server host: {whois_line}"
+    assert "testnet.local" in whois_line or "irc.local" in whois_line or "@" in whois_line, f"Admin doesn't have server host: {whois_line}"
     
     await admin.disconnect()
     await regular.disconnect()
@@ -1217,12 +1217,12 @@ async def test_staff_pass_self():
     await asyncio.sleep(0.3)
 
     sysop.buffer.clear()
-    # Try to change own password (use same password to not break other tests)
-    await sysop.send_raw(f"STAFF PASS {SYSOP_CONFIG['username']} {SYSOP_CONFIG['password']}")
+    # Try to change own password (use same password for old and new to not break other tests)
+    await sysop.send_raw(f"STAFF PASS {SYSOP_CONFIG['username']} {SYSOP_CONFIG['password']} {SYSOP_CONFIG['password']}")
     await asyncio.sleep(0.3)
     await sysop.read_lines()
 
-    pass_success = any("changed" in line.lower() for line in sysop.buffer)
+    pass_success = any("changed" in line.lower() or "updated" in line.lower() for line in sysop.buffer)
     print(f"   STAFF PASS self success: {pass_success}")
     assert pass_success, "STAFF PASS should allow changing own password"
 
@@ -1341,7 +1341,7 @@ async def create_test_accounts():
     print("="*70 + "\n")
 
     try:
-        async with aiosqlite.connect("pyircx.db") as db:
+        async with aiosqlite.connect("trunk_pyircx.db") as db:
             for config in [ADMIN_CONFIG, SYSOP_CONFIG, GUIDE_CONFIG]:
                 username = config['username']
                 password = config['password']

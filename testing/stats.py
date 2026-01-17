@@ -46,7 +46,7 @@ async def test_stats_p_basic():
     """Test STATS p returns peak usage data"""
     client = IRCTestClient("stats_p_test")
 
-    await client.connect("StatsPTest")
+    await client.connect("StatsPTest", username="admin", password="testpass")
 
     client.buffer.clear()
     await client.send_raw("STATS p")
@@ -132,7 +132,7 @@ async def test_stats_m_basic():
     """Test STATS m returns message statistics"""
     client = IRCTestClient("stats_m_test")
 
-    await client.connect("StatsMTest")
+    await client.connect("StatsMTest", username="admin", password="testpass")
 
     # Send some messages to generate stats
     await client.send_raw("JOIN #test")
@@ -197,7 +197,7 @@ async def test_stats_b_basic():
     """Test STATS b returns ServiceBot statistics"""
     client = IRCTestClient("stats_b_test")
 
-    await client.connect("StatsBTest")
+    await client.connect("StatsBTest", username="guide", password="testpass")
 
     client.buffer.clear()
     await client.send_raw("STATS b")
