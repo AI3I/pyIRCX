@@ -3527,6 +3527,21 @@ class pyIRCXServer:
                     await self.quit_user(user)
                     return
 
+        # Staff-only trunk mode check
+        restrict_to_staff = CONFIG.get('server', 'restrict_to_staff_only', default=False)
+        is_services_hub = CONFIG.get('services', 'is_services_hub', default=False)
+
+        if restrict_to_staff and is_services_hub:
+            # Trunk is configured for staff-only access
+            if not auth or level not in ["ADMIN", "SYSOP", "GUIDE"]:
+                # User is not authenticated as staff
+                await user.send(f":{self.servername} NOTICE {user.nickname} :This server is restricted to staff members only")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Regular users should connect to a branch server")
+                await user.send(f"ERROR :Closing Link: {user.nickname} (Staff-only server)")
+                logger.info(f"Rejected non-staff connection attempt: {user.nickname} ({user.ip})")
+                await self.quit_user(user)
+                return
+
         await user.send(self.get_reply("001", user))
         await user.send(self.get_reply("002", user))
         await user.send(self.get_reply("003", user))

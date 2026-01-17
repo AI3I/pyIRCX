@@ -5,7 +5,8 @@
     "motd": [
       "Welcome to TestNet Trunk Server",
       "This is the services trunk"
-    ]
+    ],
+    "restrict_to_staff_only": false
   },
   "network": {
     "listen_addr": "127.0.0.1",
