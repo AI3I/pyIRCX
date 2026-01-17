@@ -2167,8 +2167,11 @@ console.log("=== admin.js LOADING ===");
 
         try {
             // Fetch trunk config
-            const response = await callAPI('CONFIG_GET');
-            const trunkConfig = JSON.parse(response);
+            const trunkConfig = await callAPI('full-config');
+            if (trunkConfig.error) {
+                showToast('Error', 'Failed to fetch trunk config: ' + trunkConfig.error, 'error');
+                return;
+            }
 
             const networkName = trunkConfig.server?.network || 'IRC Network';
             const trunkName = trunkConfig.server?.name || 'trunk.network.local';
