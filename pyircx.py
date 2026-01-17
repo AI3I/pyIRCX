@@ -2635,6 +2635,20 @@ class pyIRCXServer:
                 read INTEGER DEFAULT 0
             )""")
 
+            # Create indexes for performance optimization
+            # Nickname lookups (IDENTIFY, registration checks)
+            await db.execute("CREATE INDEX IF NOT EXISTS idx_reg_nicks_nickname ON registered_nicks(nickname)")
+            # Channel registration lookups
+            await db.execute("CREATE INDEX IF NOT EXISTS idx_reg_chans_name ON registered_channels(channel_name)")
+            # Offline message lookups by recipient
+            await db.execute("CREATE INDEX IF NOT EXISTS idx_mailbox_recipient ON mailbox(recipient_uuid)")
+            # Memo lookups by recipient
+            await db.execute("CREATE INDEX IF NOT EXISTS idx_memos_recipient ON memos(recipient)")
+            # Staff user lookups
+            await db.execute("CREATE INDEX IF NOT EXISTS idx_staff_username ON staff_users(username)")
+            # Access list pattern lookups
+            await db.execute("CREATE INDEX IF NOT EXISTS idx_access_pattern ON server_access(pattern)")
+
                 await db.commit()
             logger.info("Database initialized (trunk)")
         else:
@@ -2996,7 +3010,7 @@ class pyIRCXServer:
         self.max_users_seen = max(self.max_users_seen, len(self.users))
 
         # Track peak users
-        current_users = len([u for u in self.users.values() if not u.is_virtual])
+        current_users = sum(1 for u in self.users.values() if not u.is_virtual)
         if current_users > self.stats['peak_users']:
             self.stats['peak_users'] = current_users
             self.stats['peak_time'] = int(time.time())
@@ -5264,41 +5278,63 @@ class pyIRCXServer:
             secs = uptime_secs % 60
             await user.send(f":{self.servername} NOTICE {user.nickname} :Uptime: {days}d {hours}:{mins:02d}:{secs:02d}")
 
-            # User counts
-            total_users = sum(1 for u in self.users.values() if not u.is_virtual)
-            invisible = sum(1 for u in self.users.values() if u.has_mode('i') and not u.is_virtual)
-            ircx_users = sum(1 for u in self.users.values() if u.is_ircx and not u.is_virtual)
-            auth_users = sum(1 for u in self.users.values() if u.authenticated and not u.is_virtual)
-            anon_users = sum(1 for u in self.users.values() if u.username.startswith('~') and not u.is_virtual)
-            gagged = sum(1 for u in self.users.values() if u.has_mode('z') and not u.is_virtual)
+            # User counts - Single iteration for performance
+            user_stats = {
+                'total': 0, 'invisible': 0, 'ircx': 0, 'auth': 0,
+                'anon': 0, 'gagged': 0, 'admins': 0, 'sysops': 0, 'guides': 0
+            }
+
+            for u in self.users.values():
+                if u.is_virtual:
+                    continue
+
+                user_stats['total'] += 1
+                if u.has_mode('i'):
+                    user_stats['invisible'] += 1
+                if u.is_ircx:
+                    user_stats['ircx'] += 1
+                if u.authenticated:
+                    user_stats['auth'] += 1
+                if u.username.startswith('~'):
+                    user_stats['anon'] += 1
+                if u.has_mode('z'):
+                    user_stats['gagged'] += 1
+                if u.has_mode('a'):
+                    user_stats['admins'] += 1
+                elif u.has_mode('o'):
+                    user_stats['sysops'] += 1
+                if u.has_mode('g'):
+                    user_stats['guides'] += 1
 
             await user.send(f":{self.servername} NOTICE {user.nickname} :--- User Statistics ---")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  Total users: {total_users}")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  Invisible (+i): {invisible}")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  IRCX (+x): {ircx_users}")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  Authenticated: {auth_users}")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  Anonymous (~): {anon_users}")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  Gagged (+z): {gagged}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Total users: {user_stats['total']}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Invisible (+i): {user_stats['invisible']}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  IRCX (+x): {user_stats['ircx']}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Authenticated: {user_stats['auth']}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Anonymous (~): {user_stats['anon']}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Gagged (+z): {user_stats['gagged']}")
 
-            # Staff counts
-            admins = sum(1 for u in self.users.values() if u.has_mode('a') and not u.is_virtual)
-            sysops = sum(1 for u in self.users.values() if u.has_mode('o') and not u.has_mode('a') and not u.is_virtual)
-            guides = sum(1 for u in self.users.values() if u.has_mode('g') and not u.is_virtual)
+            # Staff counts (already collected above)
 
             await user.send(f":{self.servername} NOTICE {user.nickname} :--- Staff Online ---")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  IRC Administrators: {admins}")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  IRC Operators: {sysops}")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  IRC Guides: {guides}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  IRC Administrators: {user_stats['admins']}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  IRC Operators: {user_stats['sysops']}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  IRC Guides: {user_stats['guides']}")
 
-            # Channel stats
-            total_channels = len([c for c in self.channels.values() if not c.name.startswith('&')])
-            local_channels = len([c for c in self.channels.values() if c.name.startswith('&')])
-            registered_channels = sum(1 for c in self.channels.values() if c.registered)
+            # Channel stats - Single iteration for performance
+            chan_stats = {'global': 0, 'local': 0, 'registered': 0}
+            for c in self.channels.values():
+                if c.name.startswith('&'):
+                    chan_stats['local'] += 1
+                else:
+                    chan_stats['global'] += 1
+                if c.registered:
+                    chan_stats['registered'] += 1
 
             await user.send(f":{self.servername} NOTICE {user.nickname} :--- Channel Statistics ---")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  Global channels (#): {total_channels}")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  Local channels (&): {local_channels}")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  Registered: {registered_channels}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Global channels (#): {chan_stats['global']}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Local channels (&): {chan_stats['local']}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Registered: {chan_stats['registered']}")
 
             # Access lists
             deny_count = len(self.access_list['DENY'])
@@ -5452,18 +5488,24 @@ class pyIRCXServer:
             await user.send(self.get_reply("219", user, flag=flag))
             return
 
-        # Staff listing - public for everyone
+        # Staff listing - public for everyone (optimized single pass)
         if flag == 's':
             await user.send(f":{self.servername} NOTICE {user.nickname} :--- Online Staff ---")
+            staff_found = False
             for u in self.users.values():
                 if u.is_virtual:
                     continue
                 if u.has_mode('a'):
                     await user.send(f":{self.servername} NOTICE {user.nickname} :{u.nickname} (IRC Administrator)")
+                    staff_found = True
                 elif u.has_mode('o'):
                     await user.send(f":{self.servername} NOTICE {user.nickname} :{u.nickname} (IRC Operator)")
+                    staff_found = True
                 elif u.has_mode('g'):
                     await user.send(f":{self.servername} NOTICE {user.nickname} :{u.nickname} (IRC Guide)")
+                    staff_found = True
+            if not staff_found:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :No staff currently online")
             await user.send(f":{self.servername} NOTICE {user.nickname} :--- End of Staff ---")
             await user.send(self.get_reply("219", user, flag=flag))
             return
@@ -5685,7 +5727,7 @@ class pyIRCXServer:
                 import datetime
                 peak_dt = datetime.datetime.fromtimestamp(self.stats['peak_time'])
                 await user.send(f":{self.servername} NOTICE {user.nickname} :Peak time: {peak_dt.strftime('%Y-%m-%d %H:%M:%S')}")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Current users: {len([u for u in self.users.values() if not u.is_virtual])}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Current users: {sum(1 for u in self.users.values() if not u.is_virtual)}")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Max users (all time): {self.max_users_seen}")
             await user.send(f":{self.servername} NOTICE {user.nickname} :--- End ---")
 
@@ -5758,11 +5800,11 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :Network: {CONFIG.get('server', 'network')}")
 
             # Totals
-            total_users = len([u for u in self.users.values() if not u.is_virtual])
+            total_users = sum(1 for u in self.users.values() if not u.is_virtual)
             total_channels = len(self.channels)
             await user.send(f":{self.servername} NOTICE {user.nickname} :Users: {total_users}")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Channels: {total_channels}")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Services: {len([u for u in self.users.values() if u.is_virtual])}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Services: {sum(1 for u in self.users.values() if u.is_virtual)}")
 
             # Server version
             await user.send(f":{self.servername} NOTICE {user.nickname} :Version: {__version__}")
@@ -6086,6 +6128,17 @@ class pyIRCXServer:
                 if not rows:
                     await user.send(f":{self.servername} NOTICE {user.nickname} :No staff accounts configured")
                 else:
+                    # Build online staff map in single pass (performance optimization)
+                    online_staff = {}
+                    for u in self.users.values():
+                        username = u.username.lstrip('~')
+                        if u.has_mode('a'):
+                            online_staff[username] = 'ADMIN'
+                        elif u.has_mode('o'):
+                            online_staff[username] = 'SYSOP'
+                        elif u.has_mode('g'):
+                            online_staff[username] = 'GUIDE'
+
                     # Group by level
                     admins = [r[0] for r in rows if r[1] == 'ADMIN']
                     sysops = [r[0] for r in rows if r[1] == 'SYSOP']
@@ -6095,23 +6148,19 @@ class pyIRCXServer:
                         await user.send(f":{self.servername} NOTICE {user.nickname} :")
                         await user.send(f":{self.servername} NOTICE {user.nickname} :ADMIN ({len(admins)}):")
                         for admin in admins:
-                            # Check if online
-                            online_user = next((u for u in self.users.values() if u.username.lstrip('~') == admin and u.has_mode('a')), None)
-                            status = " [ONLINE]" if online_user else ""
+                            status = " [ONLINE]" if admin in online_staff and online_staff[admin] == 'ADMIN' else ""
                             await user.send(f":{self.servername} NOTICE {user.nickname} :  {admin}{status}")
                     if sysops:
                         await user.send(f":{self.servername} NOTICE {user.nickname} :")
                         await user.send(f":{self.servername} NOTICE {user.nickname} :SYSOP ({len(sysops)}):")
                         for sysop in sysops:
-                            online_user = next((u for u in self.users.values() if u.username.lstrip('~') == sysop and u.has_mode('o')), None)
-                            status = " [ONLINE]" if online_user else ""
+                            status = " [ONLINE]" if sysop in online_staff and online_staff[sysop] == 'SYSOP' else ""
                             await user.send(f":{self.servername} NOTICE {user.nickname} :  {sysop}{status}")
                     if guides:
                         await user.send(f":{self.servername} NOTICE {user.nickname} :")
                         await user.send(f":{self.servername} NOTICE {user.nickname} :GUIDE ({len(guides)}):")
                         for guide in guides:
-                            online_user = next((u for u in self.users.values() if u.username.lstrip('~') == guide and u.has_mode('g')), None)
-                            status = " [ONLINE]" if online_user else ""
+                            status = " [ONLINE]" if guide in online_staff and online_staff[guide] == 'GUIDE' else ""
                             await user.send(f":{self.servername} NOTICE {user.nickname} :  {guide}{status}")
 
                 await user.send(f":{self.servername} NOTICE {user.nickname} :=== End of Staff Accounts ===")
