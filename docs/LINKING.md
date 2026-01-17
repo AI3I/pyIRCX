@@ -184,8 +184,26 @@ ERROR :Clock skew 125s exceeds 60s limit. Synchronize clocks with NTP (same time
 
 When converting a standalone server to a branch:
 - Local database has existing registrations (REGISTER, channels, memos)
+- Local database has staff accounts (for server administration)
 - Trunk has a separate database
 - **Conflict:** Two independent registration systems!
+
+### Critical Distinction: Staff vs Users
+
+**Staff accounts and user registrations serve DIFFERENT purposes:**
+
+| Feature | Purpose | Scope | Location |
+|---------|---------|-------|----------|
+| **Staff accounts** | Server administration (`/CONFIG`, `/KILL`, etc.) | Local server | **Local DB (each server)** |
+| **User registrations** | Network identity (`/REGISTER`, `/IDENTIFY`) | Network-wide | **Trunk DB (centralized)** |
+
+**Key point:** When migrating to centralized services, **KEEP staff accounts local**, clear user registrations.
+
+Each branch needs its own admin accounts for:
+- Local `/CONFIG` commands (server-specific settings)
+- Local `/KILL` commands (managing local users)
+- Local troubleshooting and maintenance
+- Emergency access if trunk is down
 
 ### Example Scenario
 
@@ -205,20 +223,37 @@ Convert to branch and link to trunk:
 
 ### Solutions
 
-**Option A: Fresh Start (Recommended for new deployments)**
+**Option A: Keep Staff, Clear Users (Recommended)**
 ```bash
 # Before linking as branch:
+
 # 1. Backup local database
 cp branch_pyircx.db branch_pyircx.db.backup
 
-# 2. Clear local registrations (optional - depends on use case)
-rm branch_pyircx.db
+# 2. Export user registrations (optional - if migrating to trunk)
+sqlite3 branch_pyircx.db "SELECT * FROM registered_nicks;" > migrate_nicks.sql
+sqlite3 branch_pyircx.db "SELECT * FROM registered_channels;" > migrate_channels.sql
 
-# 3. Configure as branch with centralized services
-# 4. Link to trunk
+# 3. Clear ONLY user-related tables, KEEP staff accounts
+sqlite3 branch_pyircx.db <<EOF
+DELETE FROM registered_nicks;
+DELETE FROM registered_channels;
+DELETE FROM memos;
+EOF
 
-# Result: Clean slate, all new registrations go to trunk
+# 4. Verify staff accounts still exist
+sqlite3 branch_pyircx.db "SELECT username, level FROM staff;"
+
+# 5. Configure as branch with centralized services
+# 6. Link to trunk
+
+# Result:
+# - Local admin access RETAINED (staff table intact)
+# - User registrations route to trunk (centralized)
+# - Clean separation of concerns
 ```
+
+**IMPORTANT:** Do NOT delete the entire database or staff table! You need local admin access.
 
 **Option B: Run Local Services Mode (No centralization)**
 ```json
@@ -249,8 +284,46 @@ sqlite3 branch_pyircx.db "SELECT * FROM registered_channels;"
 
 **Start servers in their intended role from day one:**
 - Servers intended as branches should be configured as branches from initial deployment
-- Don't run standalone with registrations if you plan to link later
+- Don't run standalone with user registrations if you plan to link later
+- **Always create local staff accounts** on each server (trunk AND branches)
 - Use centralized services mode consistently across the network
+
+### Architecture Clarity
+
+```
+Trunk Server:
+├── Local Staff DB:
+│   ├── admin_trunk (administers trunk server)
+│   └── sysop_trunk (assists with trunk)
+└── Centralized Services DB:
+    ├── User registrations (alice, bob, charlie...)
+    ├── Channel registrations (#lobby, #chat...)
+    └── Memos (user mailboxes)
+
+Branch Server:
+├── Local Staff DB:
+│   ├── admin_branch1 (administers branch1 server)
+│   └── sysop_branch1 (assists with branch1)
+└── Services: Routes to trunk (no local user DB)
+
+User Flow:
+- User connects to branch1
+- /REGISTER → routed to trunk Registrar service
+- /IDENTIFY → routed to trunk Registrar service
+- Registration stored in trunk DB
+
+Admin Flow:
+- Admin connects to branch1
+- /STAFF admin_branch1 password → checks branch1 LOCAL staff table
+- /CONFIG SET key value → modifies branch1 LOCAL config
+- /KILL localuser → manages branch1 LOCAL users
+
+Network Admin:
+- Connect to trunk OR any branch
+- Each server has its own admin account
+- Network-wide changes require logging into each server
+- Alternative: Use same username/password on all servers
+```
 
 ---
 
