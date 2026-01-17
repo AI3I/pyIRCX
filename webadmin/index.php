@@ -80,6 +80,10 @@ $csrf_token = $_SESSION['csrf_token'];
                     <span class="nav-icon">⚙️</span>
                     <span class="nav-label">Configuration</span>
                 </a>
+                <a href="#branchgen" class="nav-item" data-page="branchgen">
+                    <span class="nav-icon">🌿</span>
+                    <span class="nav-label">Branch Config</span>
+                </a>
                 <a href="#logs" class="nav-item" data-page="logs">
                     <span class="nav-icon">📄</span>
                     <span class="nav-label">Logs</span>
@@ -992,6 +996,145 @@ badword3"></textarea>
                                 <small>How often to save state (in seconds). Default: 300 (5 minutes). Lower values = less data loss risk, but more disk I/O.</small>
                             </div>
 
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Branch Config Generator Page -->
+            <div class="page" id="page-branchgen">
+                <div class="page-header">
+                    <h2>Branch Server Config Generator</h2>
+                    <p>Generate configuration files for branch servers in centralized mode</p>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3>🌿 Generate Branch Configuration</h3>
+                    </div>
+                    <div class="card-body">
+                        <form id="branch-config-form">
+                            <div class="form-section">
+                                <h4>Server Identity</h4>
+                                <div class="form-group">
+                                    <label for="branch-name">Server Name</label>
+                                    <input type="text" id="branch-name" name="server_name"
+                                           placeholder="branch1.network.local" required>
+                                    <small>Fully qualified domain name for this branch server</small>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="branch-desc">Description</label>
+                                    <input type="text" id="branch-desc" name="server_desc"
+                                           placeholder="East Coast Branch Server">
+                                    <small>Friendly description for MOTD and server info</small>
+                                </div>
+                            </div>
+
+                            <div class="form-section">
+                                <h4>Network Configuration</h4>
+                                <div class="form-group">
+                                    <label for="branch-ip">Listen IP Address</label>
+                                    <input type="text" id="branch-ip" name="listen_addr"
+                                           value="0.0.0.0" required>
+                                    <small>IP address to bind (0.0.0.0 for all interfaces)</small>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="branch-port">Client Port</label>
+                                    <input type="number" id="branch-port" name="client_port"
+                                           value="6667" min="1" max="65535" required>
+                                    <small>Port for client connections (default: 6667)</small>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="branch-link-port">Server Link Port</label>
+                                    <input type="number" id="branch-link-port" name="link_port"
+                                           value="7002" min="1" max="65535" required>
+                                    <small>Unique port for server linking (7002, 7003, 7004...)</small>
+                                </div>
+                            </div>
+
+                            <div class="form-section">
+                                <h4>Database & Resources</h4>
+                                <div class="form-group">
+                                    <label for="branch-db">Database Filename</label>
+                                    <input type="text" id="branch-db" name="db_path"
+                                           placeholder="branch1_pyircx.db" required>
+                                    <small>SQLite database file (must be unique per branch)</small>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="branch-max-users">Max Users</label>
+                                    <input type="number" id="branch-max-users" name="max_users"
+                                           value="10000" min="100" max="100000">
+                                    <small>Maximum concurrent users for this branch</small>
+                                </div>
+                            </div>
+
+                            <div class="form-section">
+                                <h4>Trunk Connection</h4>
+                                <div class="form-group">
+                                    <label for="trunk-name">Trunk Server Name</label>
+                                    <input type="text" id="trunk-name" name="trunk_name"
+                                           placeholder="trunk.network.local" required>
+                                    <small>Hostname of the trunk server to connect to</small>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="trunk-ip">Trunk IP Address</label>
+                                    <input type="text" id="trunk-ip" name="trunk_ip"
+                                           placeholder="10.0.1.1" required>
+                                    <small>IP address of the trunk server</small>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="trunk-port">Trunk Link Port</label>
+                                    <input type="number" id="trunk-port" name="trunk_port"
+                                           value="7001" min="1" max="65535" required>
+                                    <small>Server link port on the trunk</small>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="link-password">Link Password</label>
+                                    <input type="text" id="link-password" name="link_password"
+                                           placeholder="Generate secure password" required>
+                                    <button type="button" id="gen-password-btn" class="btn btn-secondary"
+                                            style="margin-top: 5px;">🎲 Generate Password</button>
+                                    <small>Shared secret for server linking (use strong password)</small>
+                                </div>
+
+                                <div class="form-group">
+                                    <label>
+                                        <input type="checkbox" id="auto-connect" name="autoconnect" checked>
+                                        Auto-connect to trunk on startup
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="button-group">
+                                <button type="submit" class="btn btn-primary">🌿 Generate Config</button>
+                                <button type="button" id="reset-form-btn" class="btn btn-secondary">🔄 Reset Form</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Generated Config Output -->
+                <div class="card" id="generated-config-card" style="display: none;">
+                    <div class="card-header">
+                        <h3>📄 Generated Configuration</h3>
+                    </div>
+                    <div class="card-body">
+                        <p>Save this as <code id="config-filename">config_branch.json</code> on your branch server:</p>
+                        <div style="position: relative;">
+                            <pre id="config-output" style="background: #2c3e50; color: #ecf0f1; padding: 15px; border-radius: 5px; overflow-x: auto; max-height: 500px;"></pre>
+                            <button type="button" id="copy-config-btn" class="btn btn-secondary"
+                                    style="position: absolute; top: 10px; right: 10px;">📋 Copy to Clipboard</button>
+                        </div>
+                        <div class="button-group" style="margin-top: 15px;">
+                            <button type="button" id="download-config-btn" class="btn btn-primary">💾 Download File</button>
+                            <button type="button" id="new-config-btn" class="btn btn-secondary">➕ Generate Another</button>
                         </div>
                     </div>
                 </div>

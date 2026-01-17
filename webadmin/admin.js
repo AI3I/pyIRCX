@@ -1591,8 +1591,180 @@ console.log("=== admin.js LOADING ===");
             case 'access': loadAccessList(); break;
             case 'newsflash': loadNewsflash(); loadNewsflashSettings(); break;
             case 'mailbox': loadMailbox(); break;
+            case 'branchgen': initBranchConfigGenerator(); break;
             case 'logs': loadLogs(); break;
         }
+    }
+
+    // Branch Config Generator
+    function initBranchConfigGenerator() {
+        const form = $('#branch-config-form');
+        const genPassBtn = $('#gen-password-btn');
+        const resetBtn = $('#reset-form-btn');
+        const outputCard = $('#generated-config-card');
+        const configOutput = $('#config-output');
+        const copyBtn = $('#copy-config-btn');
+        const downloadBtn = $('#download-config-btn');
+        const newConfigBtn = $('#new-config-btn');
+        const configFilename = $('#config-filename');
+
+        // Generate secure password
+        genPassBtn?.addEventListener('click', () => {
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*-_=+';
+            let password = '';
+            for (let i = 0; i < 32; i++) {
+                password += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            $('#link-password').value = password;
+            showToast('Password Generated', 'Secure link password generated', 'success');
+        });
+
+        // Reset form
+        resetBtn?.addEventListener('click', () => {
+            form.reset();
+            outputCard.style.display = 'none';
+        });
+
+        // Generate config
+        form?.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const formData = new FormData(form);
+            const branchName = formData.get('server_name');
+            const branchDesc = formData.get('server_desc') || 'Branch Server';
+            const listenAddr = formData.get('listen_addr');
+            const clientPort = parseInt(formData.get('client_port'));
+            const linkPort = parseInt(formData.get('link_port'));
+            const dbPath = formData.get('db_path');
+            const maxUsers = parseInt(formData.get('max_users'));
+            const trunkName = formData.get('trunk_name');
+            const trunkIp = formData.get('trunk_ip');
+            const trunkPort = parseInt(formData.get('trunk_port'));
+            const linkPassword = formData.get('link_password');
+            const autoconnect = formData.get('autoconnect') === 'on';
+
+            // Fetch trunk config to get network name
+            try {
+                const response = await callAPI('CONFIG_GET');
+                const trunkConfig = JSON.parse(response);
+                const networkName = trunkConfig.server?.network || 'IRC Network';
+
+                // Generate branch config
+                const branchConfig = {
+                    "server": {
+                        "name": branchName,
+                        "network": networkName,
+                        "motd": [
+                            `Welcome to ${networkName}`,
+                            branchDesc,
+                            `Services provided by ${trunkName}`
+                        ],
+                        "restrict_to_staff_only": false
+                    },
+                    "network": {
+                        "listen_addr": listenAddr,
+                        "listen_ports": [clientPort],
+                        "enable_ipv6": false
+                    },
+                    "database": {
+                        "path": dbPath,
+                        "pool_size": 10
+                    },
+                    "limits": {
+                        "max_users": maxUsers,
+                        "max_channels": trunkConfig.limits?.max_channels || 500
+                    },
+                    "services": {
+                        "enabled": true,
+                        "mode": "centralized",
+                        "is_services_hub": false,
+                        "hub_server": trunkName,
+                        "servicebot_count": 0,
+                        "servicebot_max_channels": 10
+                    },
+                    "linking": {
+                        "enabled": true,
+                        "server_role": "branch",
+                        "bind_host": listenAddr,
+                        "bind_port": linkPort,
+                        "links": [
+                            {
+                                "name": trunkName,
+                                "host": trunkIp,
+                                "port": trunkPort,
+                                "password": linkPassword,
+                                "autoconnect": autoconnect
+                            }
+                        ]
+                    },
+                    "admin": {
+                        "default_username": "admin",
+                        "default_password": "changeme"
+                    },
+                    "ssl": {
+                        "enabled": false
+                    },
+                    "webadmin": {
+                        "enabled": false
+                    }
+                };
+
+                // Display generated config
+                const configJson = JSON.stringify(branchConfig, null, 2);
+                configOutput.textContent = configJson;
+
+                // Update filename suggestion
+                const filenameSuggestion = `config_${branchName.split('.')[0]}.json`;
+                configFilename.textContent = filenameSuggestion;
+
+                // Show output card
+                outputCard.style.display = 'block';
+                outputCard.scrollIntoView({ behavior: 'smooth' });
+
+                showToast('Config Generated', `Configuration for ${branchName} generated successfully`, 'success');
+
+                // Store config for download
+                outputCard.dataset.config = configJson;
+                outputCard.dataset.filename = filenameSuggestion;
+
+            } catch (error) {
+                showToast('Error', 'Failed to generate config: ' + error.message, 'error');
+            }
+        });
+
+        // Copy to clipboard
+        copyBtn?.addEventListener('click', () => {
+            const config = configOutput.textContent;
+            navigator.clipboard.writeText(config).then(() => {
+                showToast('Copied', 'Configuration copied to clipboard', 'success');
+            }).catch(err => {
+                showToast('Error', 'Failed to copy to clipboard', 'error');
+            });
+        });
+
+        // Download file
+        downloadBtn?.addEventListener('click', () => {
+            const config = outputCard.dataset.config;
+            const filename = outputCard.dataset.filename;
+
+            const blob = new Blob([config], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            showToast('Downloaded', `Configuration saved as ${filename}`, 'success');
+        });
+
+        // Generate another
+        newConfigBtn?.addEventListener('click', () => {
+            outputCard.style.display = 'none';
+            form.scrollIntoView({ behavior: 'smooth' });
+        });
     }
 
     document.addEventListener('DOMContentLoaded', function() {
