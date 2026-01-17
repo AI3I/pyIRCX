@@ -1801,7 +1801,7 @@ RESPONSES = {
     "433": "{target} :Nickname is already in use",
     "441": "{target} {channel} :They aren't on that channel",
     "442": "{target} :You're not on that channel",
-    "443": "{target} {channel} :is already on channel",
+    "443": "{target} {channel} :They are already on that channel",
     "451": "You have not registered (use NICK and USER commands)",
     "461": "{command} :You did not provide enough parameters. See /HELP {command} for usage.",
     "462": "You may not reregister",
@@ -1921,7 +1921,7 @@ RESPONSES = {
     "909": ":Memo operation failed. Please check your parameters and try again.",
     # IRCX Service Messages (910-919)
     "910": ":Commands: {commands}",
-    "911": ":Unknown command: {cmd}. Try: {suggestions}",
+    "911": ":That command is not recognized: {cmd}. Try: {suggestions}",
     "912": ":{service} service is temporarily unavailable",
     "913": ":No memos waiting",
     "914": ":You have {count} memo(s) waiting",
@@ -7871,7 +7871,7 @@ class pyIRCXServer:
                         await user.send(f":{self.servername} NOTICE {user.nickname} :MFA is now enabled")
                         logger.info(f"MFA: {user.nickname} enabled")
                     else:
-                        await user.send(f":{self.servername} NOTICE {user.nickname} :Invalid code - MFA setup cancelled")
+                        await user.send(f":{self.servername} NOTICE {user.nickname} :That code is not valid - MFA setup cancelled")
                         await db.execute("UPDATE registered_nicks SET mfa_secret = NULL WHERE nickname = ?",
                                         (user.nickname,))
                         await db.commit()
@@ -9884,14 +9884,14 @@ class pyIRCXServer:
                         adding = False
                     elif char in 'aogsr':
                         # Cannot set or unset +a/+o/+g/+s/+r (server-controlled)
-                        await user.send(f":{self.servername} NOTICE {user.nickname} :Cannot manually set or unset mode +{char}")
+                        await user.send(f":{self.servername} NOTICE {user.nickname} :You cannot manually set or unset mode +{char}")
                     elif char == 'x':
                         # +x can only be set (already set via IRCX command), cannot be unset
                         if not adding:
-                            await user.send(f":{self.servername} NOTICE {user.nickname} :Cannot unset +x mode")
+                            await user.send(f":{self.servername} NOTICE {user.nickname} :You cannot unset +x mode")
                     elif char == 'z':
                         # +z cannot be set or unset manually (staff-controlled via GAG/UNGAG)
-                        await user.send(f":{self.servername} NOTICE {user.nickname} :Cannot manually set or unset +z mode (staff-controlled)")
+                        await user.send(f":{self.servername} NOTICE {user.nickname} :You cannot manually set or unset +z mode (staff-controlled)")
                     elif char == 'i':
                         # +i can be toggled by user
                         user.set_mode('i', adding)
