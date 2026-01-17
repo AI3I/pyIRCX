@@ -942,8 +942,8 @@ badword3"></textarea>
                                             <div class="form-group">
                                                 <label>Listen IP Address</label>
                                                 <input type="text" class="form-control" id="branch-ip" name="listen_addr"
-                                                       value="0.0.0.0" required>
-                                                <small>IP address to bind (0.0.0.0 for all interfaces)</small>
+                                                       placeholder="0.0.0.0 or ::" required>
+                                                <small>IP address to bind. Examples: 0.0.0.0 (all IPv4), :: (all IPv6), 10.0.1.1 (specific IPv4), 2001:db8::1 (specific IPv6)</small>
                                             </div>
 
                                             <div class="form-group">
