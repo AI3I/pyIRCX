@@ -72,8 +72,9 @@ class IRCTestClient:
                 await self.send_raw(f"USER {username or nickname} 0 * :{nickname}")
 
             # Wait for registration
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.75)  # Increased delay to reduce connection floods
             await self.read_lines()
+            await asyncio.sleep(0.1)  # Allow server to finish processing
 
             return True
         except Exception as e:
@@ -123,8 +124,10 @@ class IRCTestClient:
         if self.connected:
             try:
                 await self.send_raw("QUIT :Test completed")
+                await asyncio.sleep(0.05)  # Give server time to process QUIT
                 self.writer.close()
                 await self.writer.wait_closed()
+                await asyncio.sleep(0.05)  # Allow connection cleanup
             except Exception:
                 pass  # Connection already closed
             self.connected = False
@@ -150,12 +153,12 @@ class TestRunner:
         print("\n" + "="*70)
         print("pyIRCX REGRESSION TEST SUITE")
         print("="*70 + "\n")
-        
+
         for name, func in self.tests:
             print(f"\n{'='*70}")
             print(f"TEST: {name}")
             print('='*70)
-            
+
             try:
                 await func()
                 self.passed += 1
@@ -170,6 +173,9 @@ class TestRunner:
                 print(f"   Exception: {e}")
                 import traceback
                 traceback.print_exc()
+
+            # Brief delay between tests to avoid connection floods
+            await asyncio.sleep(0.1)
         
         # Summary
         print("\n" + "="*70)
