@@ -41,6 +41,18 @@ import uuid
 import pyotp
 import base64
 import socket
+
+# Compiled regex patterns for performance (avoid recompiling in hot paths)
+_IPV4_PATTERN = re.compile(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$')
+_IPV6_PATTERN = re.compile(r'^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}$|^::$|^::1$|^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$')
+_HOSTNAME_PATTERN = re.compile(r'^[\w-]+\.[\w.-]+$')
+_CLONE_CHANNEL_PATTERN = re.compile(r'^(.+?)(\d+)$')
+_GENERIC_HOST_PATTERNS = [
+    re.compile(r'\d+[-\.]\d+[-\.]\d+[-\.]\d+'),  # IP in hostname
+    re.compile(r'^(dsl|cable|dial|dynamic|dhcp|pool|client|user|host|node)'),
+    re.compile(r'\.(dsl|cable|dynamic|dhcp)\.'),
+    re.compile(r'(comcast|verizon|charter|cox|att|centurylink|frontier).*\d'),
+]
 import signal
 import argparse
 import os
@@ -220,13 +232,6 @@ def validate_username(username: str) -> tuple:
 
 def _looks_like_ip_or_host(s: str) -> bool:
     """Check if string looks like IP address or hostname (IPv4 or IPv6)"""
-    # IPv4 pattern: digits and dots only, 4 octets
-    ipv4_pattern = r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$'
-    # IPv6 pattern: hex digits and colons, with optional :: compression
-    # Matches full form, compressed form, and mixed IPv4/IPv6
-    ipv6_pattern = r'^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}$|^::$|^::1$|^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$'
-    # Hostname pattern: word characters with dots (like foo.bar.com)
-    hostname_pattern = r'^[\w-]+\.[\w.-]+$'
     # Also check using ipaddress module for robust IPv6 detection
     if ':' in s:
         try:
@@ -235,7 +240,7 @@ def _looks_like_ip_or_host(s: str) -> bool:
             return True
         except ValueError:
             pass
-    return bool(re.match(ipv4_pattern, s) or re.match(ipv6_pattern, s) or re.match(hostname_pattern, s))
+    return bool(_IPV4_PATTERN.match(s) or _IPV6_PATTERN.match(s) or _HOSTNAME_PATTERN.match(s))
 
 
 # Reserved service names - these are virtual aliases pointing to System
@@ -1017,15 +1022,9 @@ class ConnectionScorer:
 
     def _is_generic_hostname(self, hostname):
         """Check if hostname looks like a generic ISP-assigned name."""
-        generic_patterns = [
-            r'\d+[-\.]\d+[-\.]\d+[-\.]\d+',  # IP in hostname
-            r'^(dsl|cable|dial|dynamic|dhcp|pool|client|user|host|node)',
-            r'\.(dsl|cable|dynamic|dhcp)\.',
-            r'(comcast|verizon|charter|cox|att|centurylink|frontier).*\d',
-        ]
         hostname_lower = hostname.lower()
-        for pattern in generic_patterns:
-            if re.search(pattern, hostname_lower):
+        for pattern in _GENERIC_HOST_PATTERNS:
+            if pattern.search(hostname_lower):
                 return True
         return False
 
@@ -1291,6 +1290,10 @@ class ServiceBotMonitor:
         # Per-user tracking for malicious detection
         # Format: {nickname: {'messages': [(timestamp, text), ...], 'urls': [timestamp, ...]}}
         self.user_history = {}
+        # Cached compiled regex patterns for profanity filter (performance optimization)
+        self._pattern_cache = {}
+        self._word_cache = {}
+        self._cache_signature = None  # Track when to invalidate cache
 
     def _get_user_history(self, nickname):
         """Get or create user history entry"""
@@ -1314,6 +1317,7 @@ class ServiceBotMonitor:
         Check if text contains profanity.
         Supports both exact words and regex patterns.
         Returns (contains_profanity, matched_word/pattern) tuple.
+        Uses cached compiled patterns for performance.
         """
         if not CONFIG.get('servicebot', 'profanity_filter', 'enabled', default=True):
             return False, None
@@ -1322,25 +1326,41 @@ class ServiceBotMonitor:
         patterns = CONFIG.get('servicebot', 'profanity_filter', 'patterns', default=[])
         case_sensitive = CONFIG.get('servicebot', 'profanity_filter', 'case_sensitive', default=False)
 
+        # Create signature to detect config changes
+        signature = (tuple(words), tuple(patterns), case_sensitive)
+        if signature != self._cache_signature:
+            # Config changed, rebuild caches
+            self._word_cache = {}
+            self._pattern_cache = {}
+            self._cache_signature = signature
+
+            # Precompile word patterns
+            for word in words:
+                check_word = word if case_sensitive else word.lower()
+                pattern_str = r'\b' + re.escape(check_word) + r'\b'
+                flags = 0 if case_sensitive else re.IGNORECASE
+                self._word_cache[word] = re.compile(pattern_str, flags)
+
+            # Precompile regex patterns
+            for pattern_str in patterns:
+                try:
+                    flags = 0 if case_sensitive else re.IGNORECASE
+                    self._pattern_cache[pattern_str] = re.compile(pattern_str, flags)
+                except re.error:
+                    # Invalid regex pattern - skip it
+                    pass
+
         check_text = text if case_sensitive else text.lower()
 
-        # Check exact words with word boundaries
-        for word in words:
-            check_word = word if case_sensitive else word.lower()
-            # Word boundary matching to avoid false positives
-            pattern = r'\b' + re.escape(check_word) + r'\b'
-            if re.search(pattern, check_text, re.IGNORECASE if not case_sensitive else 0):
+        # Check exact words with cached compiled patterns
+        for word, compiled_pattern in self._word_cache.items():
+            if compiled_pattern.search(check_text):
                 return True, word
 
-        # Check regex patterns (more flexible)
-        for pattern_str in patterns:
-            try:
-                flags = 0 if case_sensitive else re.IGNORECASE
-                if re.search(pattern_str, text, flags):
-                    return True, f"pattern:{pattern_str}"
-            except re.error:
-                # Invalid regex pattern - skip it
-                continue
+        # Check regex patterns with cached compiled patterns
+        for pattern_str, compiled_pattern in self._pattern_cache.items():
+            if compiled_pattern.search(text):
+                return True, f"pattern:{pattern_str}"
 
         return False, None
 
@@ -2112,9 +2132,8 @@ class pyIRCXServer:
         Returns (original_channel, base_name) if found, or (None, None).
         E.g., #lobby1 -> returns (#lobby channel, "#lobby") if #lobby has +d mode.
         """
-        import re
         # Check if name ends with digits (potential clone pattern)
-        match = re.match(r'^(.+?)(\d+)$', channel_name)
+        match = _CLONE_CHANNEL_PATTERN.match(channel_name)
         if not match:
             return None, None
         base_name = match.group(1)
