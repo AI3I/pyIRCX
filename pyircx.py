@@ -8059,6 +8059,20 @@ class pyIRCXServer:
 
     async def _memo_send(self, user, target_nick, message):
         """Send a memo to a user"""
+        # Check if branch in centralized mode - proxy to trunk
+        if not CONFIG.get('services', 'is_services_hub') and \
+           CONFIG.get('services', 'mode') == 'centralized':
+            if self.link_manager and self.link_manager.servers:
+                trunk_server = next((s for s in self.link_manager.servers.values() if s.role == 'trunk'), None)
+                if trunk_server:
+                    # Escape message to prevent protocol issues
+                    escaped_message = message.replace('\r', '').replace('\n', ' ')
+                    await trunk_server.send(f"MEMOCMD {user.nickname} SEND {target_nick} :{escaped_message}")
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :Memo request sent to services. Please wait...")
+                    return
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Error: Services unavailable (trunk not connected)")
+            return
+
         try:
             async with aiosqlite.connect(CONFIG.get('database', 'path')) as db:
                 # Check if target is a registered nick
@@ -8091,6 +8105,17 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :You must identify first")
             return
 
+        # Check if branch in centralized mode - proxy to trunk
+        if not CONFIG.get('services', 'is_services_hub') and \
+           CONFIG.get('services', 'mode') == 'centralized':
+            if self.link_manager and self.link_manager.servers:
+                trunk_server = next((s for s in self.link_manager.servers.values() if s.role == 'trunk'), None)
+                if trunk_server:
+                    await trunk_server.send(f"MEMOCMD {user.nickname} LIST")
+                    return
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Error: Services unavailable (trunk not connected)")
+            return
+
         try:
             async with aiosqlite.connect(CONFIG.get('database', 'path')) as db:
                 async with db.execute("""
@@ -8118,6 +8143,20 @@ class pyIRCXServer:
         """Read memo(s)"""
         if not user.has_mode('r'):
             await user.send(f":{self.servername} NOTICE {user.nickname} :You must identify first")
+            return
+
+        # Check if branch in centralized mode - proxy to trunk
+        if not CONFIG.get('services', 'is_services_hub') and \
+           CONFIG.get('services', 'mode') == 'centralized':
+            if self.link_manager and self.link_manager.servers:
+                trunk_server = next((s for s in self.link_manager.servers.values() if s.role == 'trunk'), None)
+                if trunk_server:
+                    if memo_id:
+                        await trunk_server.send(f"MEMOCMD {user.nickname} READ {memo_id}")
+                    else:
+                        await trunk_server.send(f"MEMOCMD {user.nickname} READ")
+                    return
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Error: Services unavailable (trunk not connected)")
             return
 
         try:
@@ -8163,6 +8202,18 @@ class pyIRCXServer:
         """Delete memo(s)"""
         if not user.has_mode('r'):
             await user.send(f":{self.servername} NOTICE {user.nickname} :You must identify first")
+            return
+
+        # Check if branch in centralized mode - proxy to trunk
+        if not CONFIG.get('services', 'is_services_hub') and \
+           CONFIG.get('services', 'mode') == 'centralized':
+            if self.link_manager and self.link_manager.servers:
+                trunk_server = next((s for s in self.link_manager.servers.values() if s.role == 'trunk'), None)
+                if trunk_server:
+                    await trunk_server.send(f"MEMOCMD {user.nickname} DEL {target}")
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :Memo deletion request sent to services. Please wait...")
+                    return
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Error: Services unavailable (trunk not connected)")
             return
 
         try:

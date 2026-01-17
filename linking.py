@@ -721,6 +721,12 @@ class ServerLinkManager:
         elif cmd == 'REGREPLY':
             # Registration command reply from trunk to user on branch
             await self.handle_registration_reply(server, parts)
+        elif cmd == 'MEMOCMD':
+            # Memo command proxy from branch to trunk
+            await self.handle_memo_command_proxy(server, parts)
+        elif cmd == 'MEMOREPLY':
+            # Memo command reply from trunk to user on branch
+            await self.handle_memo_reply(server, parts)
         elif cmd == 'SVCNICK':
             # Service nickname from trunk
             await self.handle_service_nick(server, parts)
@@ -1383,6 +1389,172 @@ class ServerLinkManager:
             await user.send(f":{self.irc_server.servername} NOTICE {nickname} :{message}")
         else:
             logger.warning(f"REGREPLY for unknown user {nickname}")
+
+    async def handle_memo_command_proxy(self, server: LinkedServer, parts: list):
+        """Handle MEMOCMD proxy from branch (trunk only)"""
+        if len(parts) < 3:
+            logger.warning(f"Invalid MEMOCMD from {server.name}: {parts}")
+            return
+
+        # MEMOCMD <nickname> <subcmd> [args...]
+        nickname = parts[1]
+        subcmd = parts[2].upper()
+
+        # Find the user on trunk (they're connected to branch)
+        user = self.irc_server.users_by_nick.get(nickname)
+        if not user:
+            logger.warning(f"MEMOCMD for unknown user {nickname} from {server.name}")
+            await server.send(f"MEMOREPLY {nickname} :Error: User not found on trunk")
+            return
+
+        try:
+            import aiosqlite
+            import time
+
+            if subcmd == 'SEND':
+                # MEMOCMD <nickname> SEND <target> :<message>
+                if len(parts) < 5:
+                    await server.send(f"MEMOREPLY {nickname} :Error: Invalid MEMO SEND syntax")
+                    return
+
+                target_nick = parts[3]
+                message = ' '.join(parts[4:]).lstrip(':')
+
+                async with aiosqlite.connect(CONFIG.get('database', 'path')) as db:
+                    # Check if target is registered
+                    async with db.execute("SELECT uuid FROM registered_nicks WHERE nickname = ?",
+                                         (target_nick,)) as cursor:
+                        if not await cursor.fetchone():
+                            await server.send(f"MEMOREPLY {nickname} :Error: Nickname {target_nick} is not registered")
+                            return
+
+                    # Store memo
+                    await db.execute("""
+                        INSERT INTO memos (recipient, sender, message, sent_at, read)
+                        VALUES (?, ?, ?, ?, 0)
+                    """, (target_nick.lower(), nickname, message, int(time.time())))
+                    await db.commit()
+
+                    # Send success reply
+                    await server.send(f"MEMOREPLY {nickname} :Memo sent to {target_nick}")
+                    logger.info(f"Memo sent: {nickname} -> {target_nick} via {server.name}")
+
+                    # If recipient is online and identified, notify them
+                    target_user = self.irc_server.users_by_nick.get(target_nick)
+                    if target_user and target_user.has_mode('r'):
+                        # Find which server target_user is on
+                        if hasattr(target_user, 'from_server') and target_user.from_server:
+                            target_server = self.servers.get(target_user.from_server)
+                            if target_server:
+                                await target_server.send(f"MEMOREPLY {target_nick} :You have a new memo from {nickname}. Use MEMO READ to view.")
+                        else:
+                            # User on trunk
+                            await target_user.send(f":{self.irc_server.servername} NOTICE {target_nick} :You have a new memo from {nickname}. Use MEMO READ to view.")
+
+            elif subcmd == 'LIST':
+                # MEMOCMD <nickname> LIST
+                async with aiosqlite.connect(CONFIG.get('database', 'path')) as db:
+                    async with db.execute("""
+                        SELECT id, sender, sent_at, read FROM memos
+                        WHERE recipient = ? ORDER BY sent_at DESC LIMIT 20
+                    """, (nickname.lower(),)) as cursor:
+                        memos = await cursor.fetchall()
+
+                    if not memos:
+                        await server.send(f"MEMOREPLY {nickname} :You have no memos")
+                    else:
+                        await server.send(f"MEMOREPLY {nickname} :You have {len(memos)} memo(s):")
+                        for mid, sender, sent_at, is_read in memos:
+                            timestamp = time.strftime("%Y-%m-%d %H:%M", time.localtime(sent_at))
+                            read_status = "[READ]" if is_read else "[NEW]"
+                            await server.send(f"MEMOREPLY {nickname} :  #{mid} from {sender} {read_status} ({timestamp})")
+
+            elif subcmd == 'READ':
+                # MEMOCMD <nickname> READ [memo_id]
+                memo_id = None
+                if len(parts) > 3 and parts[3].isdigit():
+                    memo_id = int(parts[3])
+
+                async with aiosqlite.connect(CONFIG.get('database', 'path')) as db:
+                    if memo_id:
+                        async with db.execute("""
+                            SELECT id, sender, message, sent_at FROM memos
+                            WHERE recipient = ? AND id = ?
+                        """, (nickname.lower(), memo_id)) as cursor:
+                            row = await cursor.fetchone()
+                        if not row:
+                            await server.send(f"MEMOREPLY {nickname} :Memo #{memo_id} not found")
+                            return
+                        memos = [row]
+                    else:
+                        # Read all unread memos
+                        async with db.execute("""
+                            SELECT id, sender, message, sent_at FROM memos
+                            WHERE recipient = ? AND read = 0 ORDER BY sent_at
+                        """, (nickname.lower(),)) as cursor:
+                            memos = await cursor.fetchall()
+
+                    if not memos:
+                        await server.send(f"MEMOREPLY {nickname} :No unread memos")
+                        return
+
+                    for mid, sender, message, sent_at in memos:
+                        timestamp = time.strftime("%Y-%m-%d %H:%M", time.localtime(sent_at))
+                        await server.send(f"MEMOREPLY {nickname} :Memo #{mid} from {sender} ({timestamp}):")
+                        await server.send(f"MEMOREPLY {nickname} :{message}")
+
+                    # Mark as read
+                    ids = [m[0] for m in memos]
+                    placeholders = ",".join("?" * len(ids))
+                    await db.execute(f"UPDATE memos SET read = 1 WHERE id IN ({placeholders})", ids)
+                    await db.commit()
+
+            elif subcmd == 'DEL':
+                # MEMOCMD <nickname> DEL <id|ALL>
+                if len(parts) < 4:
+                    await server.send(f"MEMOREPLY {nickname} :Error: Invalid MEMO DEL syntax")
+                    return
+
+                target = parts[3]
+
+                async with aiosqlite.connect(CONFIG.get('database', 'path')) as db:
+                    if target.upper() == "ALL":
+                        await db.execute("DELETE FROM memos WHERE recipient = ?", (nickname.lower(),))
+                        await db.commit()
+                        await server.send(f"MEMOREPLY {nickname} :All memos deleted")
+                    elif target.isdigit():
+                        cursor = await db.execute("DELETE FROM memos WHERE recipient = ? AND id = ?",
+                                                 (nickname.lower(), int(target)))
+                        await db.commit()
+                        if cursor.rowcount > 0:
+                            await server.send(f"MEMOREPLY {nickname} :Memo #{target} deleted")
+                        else:
+                            await server.send(f"MEMOREPLY {nickname} :Memo #{target} not found")
+                    else:
+                        await server.send(f"MEMOREPLY {nickname} :Error: Invalid memo ID")
+
+            else:
+                await server.send(f"MEMOREPLY {nickname} :Error: Unknown memo command {subcmd}")
+
+        except Exception as e:
+            logger.error(f"Error processing MEMOCMD {subcmd} from {server.name}: {e}")
+            await server.send(f"MEMOREPLY {nickname} :Error: Command failed - {e}")
+
+    async def handle_memo_reply(self, server: LinkedServer, parts: list):
+        """Handle MEMOREPLY from trunk to user on branch (branch only)"""
+        if len(parts) < 3:
+            return
+
+        # MEMOREPLY <nickname> :<message>
+        nickname = parts[1]
+        message = ' '.join(parts[2:]).lstrip(':')
+
+        # Find user on this branch
+        user = self.irc_server.users_by_nick.get(nickname)
+        if user:
+            await user.send(f":{self.irc_server.servername} NOTICE {nickname} :{message}")
+        else:
+            logger.warning(f"MEMOREPLY for unknown user {nickname}")
 
     async def handle_service_nick(self, server: LinkedServer, parts: list):
         """Handle SVCNICK (service user) from services hub"""
