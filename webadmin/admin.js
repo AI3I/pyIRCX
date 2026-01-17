@@ -1616,23 +1616,9 @@ console.log("=== admin.js LOADING ===");
             content.style.display = isHidden ? 'block' : 'none';
             chevron.style.transform = isHidden ? 'rotate(90deg)' : 'rotate(0deg)';
 
-            // When opening, auto-populate next available port
-            if (isHidden) {
-                const existingBranches = $$('.branch-entry');
-                let nextPort = 7002;
-
-                if (existingBranches.length > 0) {
-                    const ports = Array.from(existingBranches).map(entry => {
-                        const portInput = entry.querySelector('.branch-port');
-                        return parseInt(portInput?.value) || 0;
-                    }).filter(p => p > 0);
-
-                    if (ports.length > 0) {
-                        nextPort = Math.max(...ports) + 1;
-                    }
-                }
-
-                $('#branch-link-port').value = nextPort;
+            // When opening, set default port (production scenario: each branch on own server)
+            if (isHidden && !$('#branch-link-port').value) {
+                $('#branch-link-port').value = 7001;
             }
         });
 
@@ -2274,22 +2260,7 @@ console.log("=== admin.js LOADING ===");
         // Add branch button
         if ($('#cfg-linking-add-branch')) {
             $('#cfg-linking-add-branch').addEventListener('click', () => {
-                // Calculate next available port
-                const existingBranches = $$('.branch-entry');
-                let nextPort = 7002;
-
-                if (existingBranches.length > 0) {
-                    const ports = Array.from(existingBranches).map(entry => {
-                        const portInput = entry.querySelector('.branch-port');
-                        return parseInt(portInput?.value) || 0;
-                    }).filter(p => p > 0);
-
-                    if (ports.length > 0) {
-                        nextPort = Math.max(...ports) + 1;
-                    }
-                }
-
-                addBranchEntry('', '', nextPort);
+                addBranchEntry('', '', 7001);
             });
         }
 
@@ -2318,7 +2289,7 @@ console.log("=== admin.js LOADING ===");
                 </div>
                 <div>
                     <label style="font-size: 12px; font-weight: bold;">Port</label>
-                    <input type="number" class="form-control branch-port" value="${port || 7002}" placeholder="7002">
+                    <input type="number" class="form-control branch-port" value="${port || 7001}" placeholder="7001">
                 </div>
                 <div>
                     <label style="font-size: 12px; font-weight: bold;">Password</label>

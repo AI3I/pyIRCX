@@ -949,8 +949,8 @@ badword3"></textarea>
                                             <div class="form-group">
                                                 <label>Server Link Port</label>
                                                 <input type="number" class="form-control" id="branch-link-port" name="link_port"
-                                                       placeholder="Auto-assigned" min="1" max="65535" required>
-                                                <small>Unique port for server linking (auto-increments from existing branches)</small>
+                                                       placeholder="7001" min="1" max="65535" required>
+                                                <small>Port for server-to-server connections on this branch. Each branch on its own server can use the same port (default: 7001).</small>
                                             </div>
 
                                             <h5 style="margin-top: 15px; color: #666;">Database & Resources</h5>
