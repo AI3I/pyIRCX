@@ -473,8 +473,8 @@ python3 testing/stress_test.py --quick
 
 ### Network Splits & Joins
 
-#### `netsplit.py` - Network Split/Join Tests (15+ tests)
-Critical tests for server disconnections and reconnections (netsplits/netjoins).
+#### `network divergence.py` - Network Split/Join Tests (15+ tests)
+Critical tests for server disconnections and reconnections (network divergences/network convergences).
 
 **Test Categories:**
 
@@ -484,7 +484,7 @@ Critical tests for server disconnections and reconnections (netsplits/netjoins).
    - Channels lose users
    - Empty channels removed
 
-2. **Netjoin Tests** (2 tests)
+2. **Network convergence Tests** (2 tests)
    - CONNECT rejoins server
    - Users reappear after rejoin
 
@@ -493,7 +493,7 @@ Critical tests for server disconnections and reconnections (netsplits/netjoins).
    - Channel topic preserved during split
 
 4. **User Collisions** (1 test)
-   - Duplicate nick detection on netjoin
+   - Duplicate nick detection on network convergence
 
 5. **Services During Split** (2 tests)
    - Services unavailable on branch during split
@@ -505,7 +505,7 @@ Critical tests for server disconnections and reconnections (netsplits/netjoins).
    - Server state consistency
 
 **Why Critical:**
-Netsplits are one of the most complex scenarios in distributed IRC:
+Network divergences are one of the most complex scenarios in distributed IRC:
 - Users suddenly disappear
 - Channels change membership
 - Services become unavailable
@@ -513,7 +513,7 @@ Netsplits are one of the most complex scenarios in distributed IRC:
 
 **Example:**
 ```bash
-python3 testing/netsplit.py
+python3 testing/network divergence.py
 ```
 
 **Common Issues Caught:**

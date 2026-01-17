@@ -95,7 +95,7 @@ PONG <source> <target>
 - Older timestamp = authoritative
 - Merge modes/hosts based on timestamp
 
-## Splits (Netsplits)
+## Splits (Network divergences)
 
 When a server disconnects:
 1. Send SQUIT to remaining servers

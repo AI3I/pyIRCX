@@ -2134,8 +2134,8 @@ class pyIRCXServer:
             # Historical trends
             'busiest_channels': {},  # channel -> total message count (all time)
             'most_active_users': {},  # username -> command count (all time)
-            'netsplit_history': [],  # [(timestamp, server_name, reason), ...] (last 10)
-            'netjoin_history': [],  # [(timestamp, server_name), ...] (last 10)
+            'network_divergence_history': [],  # [(timestamp, server_name, reason), ...] (last 10)
+            'network_convergence_history': [],  # [(timestamp, server_name), ...] (last 10)
         }
 
         self.access_list = {
@@ -5591,18 +5591,18 @@ class pyIRCXServer:
                         user_count = getattr(linked_server, 'user_count', 0)
                         await user.send(f":{self.servername} NOTICE {user.nickname} :    {server_name} ({user_count} users)")
 
-                # Netsplit/netjoin history
-                if self.stats['netsplit_history']:
-                    await user.send(f":{self.servername} NOTICE {user.nickname} :  Recent netsplits ({len(self.stats['netsplit_history'])}):")
+                # Network divergence/convergence history
+                if self.stats['network_divergence_history']:
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :  Recent network divergences ({len(self.stats['network_divergence_history'])}):")
                     import datetime
-                    for timestamp, server, reason in self.stats['netsplit_history'][-5:]:
+                    for timestamp, server, reason in self.stats['network_divergence_history'][-5:]:
                         dt = datetime.datetime.fromtimestamp(timestamp)
                         await user.send(f":{self.servername} NOTICE {user.nickname} :    {server} at {dt.strftime('%H:%M:%S')}: {reason}")
 
-                if self.stats['netjoin_history']:
-                    await user.send(f":{self.servername} NOTICE {user.nickname} :  Recent netjoins ({len(self.stats['netjoin_history'])}):")
+                if self.stats['network_convergence_history']:
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :  Recent network convergences ({len(self.stats['network_convergence_history'])}):")
                     import datetime
-                    for timestamp, server in self.stats['netjoin_history'][-5:]:
+                    for timestamp, server in self.stats['network_convergence_history'][-5:]:
                         dt = datetime.datetime.fromtimestamp(timestamp)
                         await user.send(f":{self.servername} NOTICE {user.nickname} :    {server} at {dt.strftime('%H:%M:%S')}")
 
@@ -6150,10 +6150,10 @@ class pyIRCXServer:
         try:
             await self.link_manager.connect_to_server(link_cfg)
             await user.send(f":{self.servername} NOTICE {user.nickname} :Successfully linked to {target_server}")
-            # Track netjoin in history
-            self.stats['netjoin_history'].append((int(time.time()), target_server))
-            if len(self.stats['netjoin_history']) > 10:
-                self.stats['netjoin_history'] = self.stats['netjoin_history'][-10:]
+            # Track network convergence in history
+            self.stats['network_convergence_history'].append((int(time.time()), target_server))
+            if len(self.stats['network_convergence_history']) > 10:
+                self.stats['network_convergence_history'] = self.stats['network_convergence_history'][-10:]
             logger.info(f"CONNECT: {user.nickname} linked to {target_server}")
         except Exception as e:
             await user.send(f":{self.servername} NOTICE {user.nickname} :We couldn't establish the link: {e}")
@@ -6189,10 +6189,10 @@ class pyIRCXServer:
             linked_server = self.link_manager.linked_servers[target_server]
             await self.link_manager.handle_server_split(linked_server, reason)
             await user.send(f":{self.servername} NOTICE {user.nickname} :Unlinked from {target_server}")
-            # Track netsplit in history
-            self.stats['netsplit_history'].append((int(time.time()), target_server, reason))
-            if len(self.stats['netsplit_history']) > 10:
-                self.stats['netsplit_history'] = self.stats['netsplit_history'][-10:]
+            # Track network divergence in history
+            self.stats['network_divergence_history'].append((int(time.time()), target_server, reason))
+            if len(self.stats['network_divergence_history']) > 10:
+                self.stats['network_divergence_history'] = self.stats['network_divergence_history'][-10:]
             logger.info(f"SQUIT: {user.nickname} unlinked {target_server}: {reason}")
         except Exception as e:
             await user.send(f":{self.servername} NOTICE {user.nickname} :We couldn't unlink the server: {e}")

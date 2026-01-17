@@ -2545,7 +2545,7 @@ class ServerLinkManager:
             await user.send(message)
 
     async def handle_server_split(self, server: LinkedServer):
-        """Handle a server disconnecting (netsplit)"""
+        """Handle a server disconnecting (network divergence)"""
         logger.warning(f"Server {server.name} disconnected (split)")
 
         # Remove the server

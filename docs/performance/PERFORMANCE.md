@@ -188,13 +188,13 @@ bcrypt hash:        Very High (~100ms per operation)
 **Benefits:**
 - Distribute load across multiple machines
 - Geographic distribution (lower latency)
-- Redundancy (netsplit recovery)
+- Redundancy (network divergence recovery)
 - True multi-core utilization (multiple processes)
 
 **Limitations:**
 - Message routing overhead (~10-20%)
 - State synchronization latency (~50-100ms)
-- Netsplit handling complexity
+- Network divergence handling complexity
 
 **Recommended Topology:**
 - 1 hub server (high bandwidth)

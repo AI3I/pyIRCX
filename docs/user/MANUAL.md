@@ -2012,7 +2012,7 @@ AUTHENTICATE <base64-credentials>   - Send credentials
 - Server-to-server linking protocol with password authentication
 - State synchronization (users and channels sync across servers)
 - Message routing across the network
-- Netsplit handling with graceful recovery
+- Network divergence handling with graceful recovery
 - Nick/channel collision resolution (timestamp-based)
 - CONNECT, SQUIT, LINKS admin commands
 

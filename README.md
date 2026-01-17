@@ -101,7 +101,7 @@ Build IRC networks that scale with **trunk-and-branch topology** and **seamless 
 - **Authentication** — Password-protected server links with bcrypt support
 - **State Burst** — Full user/channel synchronization on link, including service users
 - **Role Validation** — Enforces flat topology (trunk↔branch only, prevents multi-tier)
-- **Netsplit Handling** — Automatic cleanup and recovery
+- **Network divergence Handling** — Automatic cleanup and recovery
 - **Collision Detection** — Timestamp-based nick collision resolution
 
 #### Seamless Cross-Server Operations (Phase 2) 🎉
@@ -256,7 +256,7 @@ The linking system enables distributed IRC networks:
 │  2. State Burst        — Sync all users and channels         │
 │  3. Message Routing    — Propagate messages across network   │
 │  4. Collision Handling — Timestamp-based nick resolution     │
-│  5. Netsplit Recovery  — Automatic cleanup and rejoins       │
+│  5. Network divergence Recovery  — Automatic cleanup and rejoins       │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -264,7 +264,7 @@ The linking system enables distributed IRC networks:
 - Password-authenticated server connections
 - Full state synchronization on link establishment
 - Efficient message routing with loop prevention
-- Automatic netsplit detection and cleanup
+- Automatic network divergence detection and cleanup
 - Nick/channel timestamp collision resolution
 
 ### Database Layer

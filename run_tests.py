@@ -129,7 +129,7 @@ def main():
             'description': 'Trunk/branch topology, cross-server operations, 3-server network'
         },
         {
-            'name': 'Network Split/Join Tests',
+            'name': 'Network Topology Tests',
             'path': 'testing/netsplit.py',
             'description': 'Server splits (SQUIT), rejoins (CONNECT), channel/user state during splits'
         },
