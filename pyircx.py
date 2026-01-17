@@ -1852,7 +1852,7 @@ RESPONSES = {
     "845": "{channel} :Transcript mode not enabled (+y)",
     "846": "{channel} :{prop} is read-only",
     "847": "{target} :ServiceBot has reached max channels ({max})",
-    "848": ":Only IRC administrators and operators can invite ServiceBots",
+    "848": ":Only staff members can invite ServiceBots",
     # IRCX Access Control (850-859)
     "850": ":Invalid access level - valid: {levels}",
     "851": "{mask} :Mask already in {level} list",
@@ -3787,11 +3787,11 @@ class pyIRCXServer:
         source = f":{user.prefix()}"
         out = f"{source} {cmd} {target} {params[1] + ' ' if cmd in ['WHISPER', 'DATA'] and len(params) > 2 else ''}:{text}"
 
-        # ADMIN wildcard broadcast (PRIVMSG/NOTICE * only)
+        # High staff wildcard broadcast (PRIVMSG/NOTICE * only)
         if target == '*':
             if cmd not in ['PRIVMSG', 'NOTICE']:
                 return
-            if not user.has_mode('a'):
+            if not user.is_high_staff():
                 await user.send(self.get_reply("481", user))
                 return
 
@@ -3953,10 +3953,10 @@ class pyIRCXServer:
                 return
             # Return all visible users (staff can see ServiceBots)
             for member in self.users.values():
-                # Skip virtual users unless requester is staff (ADMIN/SYSOP/GUIDE)
-                if member.is_virtual and not is_staff:
+                # Skip virtual users unless requester is high staff (ADMIN/SYSOP)
+                if member.is_virtual and not is_high_staff:
                     continue
-                if member.has_mode('i') and not is_staff and user != member:
+                if member.has_mode('i') and not is_high_staff and user != member:
                     continue
                 flags = "G" if member.away_msg else "H"
                 if member.has_mode('i'):
@@ -4571,10 +4571,10 @@ class pyIRCXServer:
             await user.send(self.get_reply("403", user, target=channel_name))
             return
 
-        # Check permissions - must be channel owner/host or staff
-        is_chanop = user.nickname in channel.owners or user.nickname in channel.hosts
-        is_staff = user.is_high_staff()
-        if not (is_chanop or is_staff):
+        # Check permissions - must be channel owner or high staff (operator/admin)
+        is_owner = user.nickname in channel.owners
+        is_high_staff = user.is_high_staff()
+        if not (is_owner or is_high_staff):
             await user.send(self.get_reply("482", user, target=chan_name))
             return
 
@@ -4742,6 +4742,10 @@ class pyIRCXServer:
                                          prop='HOSTKEY', value=value))
                 return
             elif prop_upper == 'OWNERKEY':
+                # Only owners can view OWNERKEY
+                if user.nickname not in channel.owners and not user.has_mode('a'):
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :Only channel owners can view OWNERKEY")
+                    return
                 value = channel.owner_key or ""
                 await user.send(self.get_reply("817", user, target=chan_name,
                                          prop='OWNERKEY', value=value))
@@ -4761,9 +4765,8 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :Property {prop_name} is read-only")
             return
 
-        if not (user.nickname in channel.owners or
-                user.nickname in channel.hosts or
-                user.has_mode('a')):
+        # Only channel owners or admins can set properties
+        if not (user.nickname in channel.owners or user.has_mode('a')):
             await user.send(self.get_reply("482", user, target=chan_name))
             return
 
@@ -4876,7 +4879,7 @@ class pyIRCXServer:
 
         # ServiceBot dispatcher - pick available bot from pool
         if target_nick == "ServiceBot":
-            if not (user.is_admin() or user.is_sysop()):
+            if not user.is_staff():
                 await user.send(self.get_reply("848", user))
                 return
 
@@ -4905,9 +4908,9 @@ class pyIRCXServer:
             logger.info(f"ServiceBot dispatcher assigned {bot_name} to {chan_name} via INVITE from {user.nickname}")
             return
 
-        # ServiceBot invitation - ADMIN/SYSOP only, not GUIDE (specific bot)
+        # ServiceBot invitation - Staff only (guide/operator/admin)
         if target_nick in self.servicebots:
-            if not (user.is_admin() or user.is_sysop()):
+            if not user.is_staff():
                 await user.send(self.get_reply("848", user))
                 return
             bot = self.servicebots[target_nick]
@@ -5258,16 +5261,16 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :  x - IRCX users count")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  y - Anonymous users count")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  z - Gagged users")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :IRC administrator only:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :IRC operator and above:")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  * - All statistics combined")
             await user.send(f":{self.servername} NOTICE {user.nickname} :=== End of STATS Help ===")
             await user.send(self.get_reply("219", user, flag=flag))
             return
 
-        # STATS * - All stats combined (ADMIN only)
+        # STATS * - All stats combined (Operator+ only)
         if flag == '*':
-            if not is_admin:
-                await user.send(f":{self.servername} NOTICE {user.nickname} :STATS * requires IRC administrator privileges")
+            if not user.is_high_staff():
+                await user.send(f":{self.servername} NOTICE {user.nickname} :STATS * requires IRC operator or administrator privileges")
                 await user.send(self.get_reply("219", user, flag=flag))
                 return
 
@@ -5451,9 +5454,26 @@ class pyIRCXServer:
             await user.send(self.get_reply("219", user, flag=flag))
             return
 
-        # Staff listing for regular users (combined a/o/g)
-        if flag == 's' and not is_staff:
-            # Show combined staff listing to regular users
+        # Define permission tiers for STATS flags
+        PUBLIC_FLAGS = {'u', 's', 'i', 'x', 'w', 'y', 'c', 'f', 'n'}
+        GUIDE_FLAGS = {'a', 'o', 'g', 'b', 'z'}
+        OPERATOR_FLAGS = {'d', 'k', 'l', 'm', 'p', 't', 'v'}
+
+        # Check permissions based on flag
+        is_high_staff = user.is_high_staff()
+
+        if flag in OPERATOR_FLAGS and not is_high_staff:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :STATS {flag} requires IRC operator or administrator privileges")
+            await user.send(self.get_reply("219", user, flag=flag))
+            return
+
+        if flag in GUIDE_FLAGS and not is_staff:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :STATS {flag} requires staff privileges")
+            await user.send(self.get_reply("219", user, flag=flag))
+            return
+
+        # Staff listing - public for everyone
+        if flag == 's':
             await user.send(f":{self.servername} NOTICE {user.nickname} :--- Online Staff ---")
             for u in self.users.values():
                 if u.is_virtual:
@@ -5465,12 +5485,6 @@ class pyIRCXServer:
                 elif u.has_mode('g'):
                     await user.send(f":{self.servername} NOTICE {user.nickname} :{u.nickname} (IRC Guide)")
             await user.send(f":{self.servername} NOTICE {user.nickname} :--- End of Staff ---")
-            await user.send(self.get_reply("219", user, flag=flag))
-            return
-
-        # Staff-only stats from here on
-        if not is_staff:
-            await user.send(f":{self.servername} NOTICE {user.nickname} :STATS {flag} requires staff privileges")
             await user.send(self.get_reply("219", user, flag=flag))
             return
 
@@ -5783,16 +5797,13 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :--- End ---")
 
         elif flag == 'v':
-            # Command usage statistics (GUIDE+)
-            if not is_staff:
-                await user.send(f":{self.servername} NOTICE {user.nickname} :STATS v requires staff privileges")
-            else:
-                await user.send(f":{self.servername} NOTICE {user.nickname} :--- Command Usage Statistics ---")
-                if self.stats['command_usage']:
-                    # Sort by usage count (descending)
-                    sorted_cmds = sorted(self.stats['command_usage'].items(), key=lambda x: x[1], reverse=True)
-                    for cmd, count in sorted_cmds:
-                        await user.send(f":{self.servername} NOTICE {user.nickname} :{cmd}: {count}")
+            # Command usage statistics (Operator+)
+            await user.send(f":{self.servername} NOTICE {user.nickname} :--- Command Usage Statistics ---")
+            if self.stats['command_usage']:
+                # Sort by usage count (descending)
+                sorted_cmds = sorted(self.stats['command_usage'].items(), key=lambda x: x[1], reverse=True)
+                for cmd, count in sorted_cmds:
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :{cmd}: {count}")
                 else:
                     await user.send(f":{self.servername} NOTICE {user.nickname} :No command usage data available")
                 await user.send(f":{self.servername} NOTICE {user.nickname} :Total commands: {self.stats['commands_processed']}")
@@ -5927,9 +5938,9 @@ class pyIRCXServer:
         """
         CONNECT command - Connect to a remote server.
         Syntax: CONNECT <servername>
-        Requires ADMIN or SYSOP privileges.
+        Requires ADMIN privileges.
         """
-        if not user.is_high_staff():
+        if not user.is_admin():
             await user.send(self.get_reply("481", user))
             return
 
@@ -5974,9 +5985,9 @@ class pyIRCXServer:
         """
         SQUIT command - Disconnect a linked server.
         Syntax: SQUIT <servername> :<reason>
-        Requires ADMIN or SYSOP privileges.
+        Requires ADMIN privileges.
         """
-        if not user.is_high_staff():
+        if not user.is_admin():
             await user.send(self.get_reply("481", user))
             return
 
@@ -6417,8 +6428,8 @@ class pyIRCXServer:
           PROFANITY DISABLE                 - Disable profanity filter
           PROFANITY TEST <text>             - Test if text would be caught
         """
-        if not user.is_admin():
-            await user.send(f":{self.servername} NOTICE {user.nickname} :PROFANITY command requires ADMIN privileges")
+        if not user.is_high_staff():
+            await user.send(f":{self.servername} NOTICE {user.nickname} :PROFANITY command requires IRC operator or administrator privileges")
             return
 
         if not params:
@@ -6667,7 +6678,7 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :  +d - Cloneable: Allows users to create channel clones")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  +e - Clone: This channel is a clone of another channel")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  +f - No formatting: Formatting codes are removed from messages")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  +g - Guide access: IRC guides automatically receive host (@) status")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  +g - Guide access: IRC guides automatically receive owner (.) status")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  +h - Hidden: JOIN/PART/QUIT messages are not shown")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  +j - No invites: INVITE command is disabled")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  +r - Registered: Channel is registered (auto-set)")
@@ -9829,6 +9840,10 @@ class pyIRCXServer:
         if target.is_service() and not user.is_high_staff():
             await user.send(self.get_reply("821", user, target=target_nick))
             return
+        # Cannot kick staff members unless you're also staff
+        if target.is_staff() and not user.is_staff():
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Cannot kick staff members")
+            return
         msg = f":{user.prefix()} KICK {chan_name} {target_nick} :{reason}"
         # Broadcast to LOCAL channel members only (exclude remote users to avoid routing loops)
         for member in channel.members.values():
@@ -9974,17 +9989,24 @@ class pyIRCXServer:
                     ban_mask = mode_params[param_idx]
                     param_idx += 1
                     if adding:
-                        # Check if ban would affect any service
+                        # Check if ban would affect any service or staff
                         import fnmatch
                         would_ban_service = False
+                        would_ban_staff = False
                         for nick, member in channel.members.items():
-                            if member.is_service():
-                                user_mask = f"{nick}!{member.username}@{member.host}"
-                                if fnmatch.fnmatch(user_mask.lower(), ban_mask.lower()) or fnmatch.fnmatch(nick.lower(), ban_mask.lower()):
+                            user_mask = f"{nick}!{member.username}@{member.host}"
+                            matches = fnmatch.fnmatch(user_mask.lower(), ban_mask.lower()) or fnmatch.fnmatch(nick.lower(), ban_mask.lower())
+                            if matches:
+                                if member.is_service():
                                     would_ban_service = True
+                                    break
+                                if member.is_staff() and not user.is_staff():
+                                    would_ban_staff = True
                                     break
                         if would_ban_service:
                             await user.send(self.get_reply("822", user, target=ban_mask))
+                        elif would_ban_staff:
+                            await user.send(f":{self.servername} NOTICE {user.nickname} :Cannot ban staff members")
                         elif ban_mask not in channel.ban_list:
                             channel.ban_list.append(ban_mask)
                             sign = '+' if adding else '-'
