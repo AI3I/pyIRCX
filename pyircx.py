@@ -1955,7 +1955,7 @@ SERVER_MESSAGES = {
     "ungag_global": "{target} has been globally ungagged (-z)",
 
     # WHO/LIST restrictions
-    "who_requires_staff": "WHO * requires SYSOP or ADMIN privileges. Try using a pattern like *nick* or *@host* instead",
+    "who_requires_staff": "WHO * requires IRC operator or administrator privileges. Try using a pattern like *nick* or *@host* instead",
     "who_truncated": "WHO results truncated at {limit} entries. Use a more specific pattern for complete results.",
 
     # Message handling
@@ -1989,7 +1989,7 @@ SERVER_MESSAGES = {
     "registrar_mfa_verify_success": "MFA verification successful!",
 
     # Messenger service
-    "messenger_help": "Commands: SEND <nick> <message>, LIST, READ <id>, DELETE <id>, CLEAR, COUNT, PUSH <message> (ADMIN only)",
+    "messenger_help": "Commands: SEND <nick> <message>, LIST, READ <id>, DELETE <id>, CLEAR, COUNT, PUSH <message> (IRC administrator only)",
     "messenger_sent": "Message sent to {target}",
     "messenger_deleted": "Memo {id} deleted",
     "messenger_cleared": "All your memos have been cleared",
@@ -2004,7 +2004,7 @@ SERVER_MESSAGES = {
     "messenger_push_sent": "Message pushed to {count} user(s)",
 
     # NewsFlash service
-    "newsflash_help": "Commands: LIST, READ <id>, DELETE <id> (staff), PUSH <message> (ADMIN only)",
+    "newsflash_help": "Commands: LIST, READ <id>, DELETE <id> (staff), PUSH <message> (IRC administrator only)",
     "newsflash_list_header": "Recent NewsFlash items:",
     "newsflash_list_item": "  [{id}] {time}: {preview}",
     "newsflash_read_header": "NewsFlash {id} from {time}:",
@@ -5238,10 +5238,10 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :Public flags:")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  u - Server uptime")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  s - Online staff listing")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Staff flags (GUIDE+):")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  a - Online ADMINs")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  o - Online SYSOPs")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  g - Online GUIDEs")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Staff flags:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  a - Online IRC administrators")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  o - Online IRC operators")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  g - Online IRC guides")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  b - ServiceBot statistics")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  c - Configuration")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  d - Database statistics")
@@ -5258,7 +5258,7 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :  x - IRCX users count")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  y - Anonymous users count")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  z - Gagged users")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :ADMIN only:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :IRC administrator only:")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  * - All statistics combined")
             await user.send(f":{self.servername} NOTICE {user.nickname} :=== End of STATS Help ===")
             await user.send(self.get_reply("219", user, flag=flag))
@@ -5267,7 +5267,7 @@ class pyIRCXServer:
         # STATS * - All stats combined (ADMIN only)
         if flag == '*':
             if not is_admin:
-                await user.send(f":{self.servername} NOTICE {user.nickname} :STATS * requires ADMIN privileges")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :STATS * requires IRC administrator privileges")
                 await user.send(self.get_reply("219", user, flag=flag))
                 return
 
@@ -5303,9 +5303,9 @@ class pyIRCXServer:
             guides = sum(1 for u in self.users.values() if u.has_mode('g') and not u.is_virtual)
 
             await user.send(f":{self.servername} NOTICE {user.nickname} :--- Staff Online ---")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  ADMINs: {admins}")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  SYSOPs: {sysops}")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  GUIDEs: {guides}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  IRC Administrators: {admins}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  IRC Operators: {sysops}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  IRC Guides: {guides}")
 
             # Channel stats
             total_channels = len([c for c in self.channels.values() if not c.name.startswith('&')])
@@ -5459,11 +5459,11 @@ class pyIRCXServer:
                 if u.is_virtual:
                     continue
                 if u.has_mode('a'):
-                    await user.send(f":{self.servername} NOTICE {user.nickname} :{u.nickname} (ADMIN)")
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :{u.nickname} (IRC Administrator)")
                 elif u.has_mode('o'):
-                    await user.send(f":{self.servername} NOTICE {user.nickname} :{u.nickname} (SYSOP)")
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :{u.nickname} (IRC Operator)")
                 elif u.has_mode('g'):
-                    await user.send(f":{self.servername} NOTICE {user.nickname} :{u.nickname} (GUIDE)")
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :{u.nickname} (IRC Guide)")
             await user.send(f":{self.servername} NOTICE {user.nickname} :--- End of Staff ---")
             await user.send(self.get_reply("219", user, flag=flag))
             return
@@ -5475,43 +5475,43 @@ class pyIRCXServer:
             return
 
         if flag == 'a':
-            # Online ADMINs
+            # Online IRC Administrators
             admins = [u for u in self.users.values() if u.has_mode('a') and not u.is_virtual]
-            await user.send(f":{self.servername} NOTICE {user.nickname} :=== Online ADMINs ({len(admins)}) ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== Online IRC Administrators ({len(admins)}) ===")
             if not admins:
-                await user.send(f":{self.servername} NOTICE {user.nickname} :No ADMINs currently online")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :No IRC administrators currently online")
             else:
                 for u in admins:
                     idle_time = int(time.time() - u.last_activity)
                     idle_str = f"{idle_time // 60}m" if idle_time > 60 else f"{idle_time}s"
                     await user.send(f":{self.servername} NOTICE {user.nickname} :  {u.nickname}!{u.username}@{u.host} (idle: {idle_str})")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :=== End of ADMINs ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== End of IRC Administrators ===")
 
         elif flag == 'o':
-            # Online SYSOPs
+            # Online IRC Operators
             sysops = [u for u in self.users.values() if u.has_mode('o') and not u.has_mode('a') and not u.is_virtual]
-            await user.send(f":{self.servername} NOTICE {user.nickname} :=== Online SYSOPs ({len(sysops)}) ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== Online IRC Operators ({len(sysops)}) ===")
             if not sysops:
-                await user.send(f":{self.servername} NOTICE {user.nickname} :No SYSOPs currently online")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :No IRC operators currently online")
             else:
                 for u in sysops:
                     idle_time = int(time.time() - u.last_activity)
                     idle_str = f"{idle_time // 60}m" if idle_time > 60 else f"{idle_time}s"
                     await user.send(f":{self.servername} NOTICE {user.nickname} :  {u.nickname}!{u.username}@{u.host} (idle: {idle_str})")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :=== End of SYSOPs ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== End of IRC Operators ===")
 
         elif flag == 'g':
-            # Online GUIDEs
+            # Online IRC Guides
             guides = [u for u in self.users.values() if u.has_mode('g') and not u.is_virtual]
-            await user.send(f":{self.servername} NOTICE {user.nickname} :=== Online GUIDEs ({len(guides)}) ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== Online IRC Guides ({len(guides)}) ===")
             if not guides:
-                await user.send(f":{self.servername} NOTICE {user.nickname} :No GUIDEs currently online")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :No IRC guides currently online")
             else:
                 for u in guides:
                     idle_time = int(time.time() - u.last_activity)
                     idle_str = f"{idle_time // 60}m" if idle_time > 60 else f"{idle_time}s"
                     await user.send(f":{self.servername} NOTICE {user.nickname} :  {u.nickname}!{u.username}@{u.host} (idle: {idle_str})")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :=== End of GUIDEs ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== End of IRC Guides ===")
 
         elif flag == 'i':
             # Invisible users count
@@ -6641,9 +6641,9 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :+x - IRCX mode enabled")
             await user.send(f":{self.servername} NOTICE {user.nickname} :+r - Registered nickname (auto-set)")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Staff modes (auto-set):")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  +a - ADMIN (administrator, highest privileges)")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  +o - SYSOP (system operator)")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  +g - GUIDE (helper/moderator)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  +a - IRC administrator (ADMIN)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  +o - IRC operator (SYSOP)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  +g - IRC guide (GUIDE)")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Other modes:")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  +s - SERVICE (server bots)")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  +z - GAGGED (cannot send messages)")
