@@ -3541,7 +3541,11 @@ class pyIRCXServer:
             mode = 'a' if level == "ADMIN" else 'o' if level == "SYSOP" else 'g'
             user.set_mode(mode, True)
             user.set_mode('r', True)  # Set registered mode
-            await user.send(f":{user.nickname} MODE {user.nickname} :+{mode}r")
+            mode_msg = f":{user.nickname} MODE {user.nickname} :+{mode}r"
+            await user.send(mode_msg)
+            # Propagate MODE to linked servers
+            if self.link_manager and self.link_manager.enabled:
+                await self.link_manager.broadcast_to_servers(mode_msg)
             # Dynamic role name for 381
             role = "administrator" if level == "ADMIN" else "operator" if level == "SYSOP" else "guide"
             await user.send(self.get_reply("381", user, role=role))
@@ -3553,6 +3557,17 @@ class pyIRCXServer:
             logger.info(f"Auth: {user.nickname} as {level}")
 
         await self.fire_trap("CONNECT", "USER LOGON", user)
+
+        # Introduce user to linked servers
+        if self.link_manager and self.link_manager.enabled:
+            modes = user.get_mode_str()
+            nick_burst = (
+                f"NICK {user.nickname} 1 {int(user.signon_time)} {user.username} "
+                f"{user.host} {self.servername} +{modes} :{user.realname}"
+            )
+            logger.info(f"Broadcasting NICK burst for {user.nickname} to linked servers: {nick_burst}")
+            await self.link_manager.broadcast_to_servers(nick_burst)
+            logger.info(f"NICK burst sent for {user.nickname}")
 
         # Send newsflash on connect
         await self.send_newsflash_on_connect(user)
@@ -3721,7 +3736,15 @@ class pyIRCXServer:
             # Check if sender is silenced by recipient
             if self.is_silenced(user, recipient):
                 return  # Silently drop the message
-            await recipient.send(out)
+
+            # Check if recipient is a remote user
+            if hasattr(recipient, 'is_remote') and recipient.is_remote:
+                # Route to linked servers for remote user delivery
+                if self.link_manager and self.link_manager.enabled:
+                    await self.link_manager.broadcast_to_servers(out)
+            else:
+                # Local user - send directly
+                await recipient.send(out)
             self.stats['messages_sent'] += 1
         elif is_channel(target):
             channel, chan_name = self.get_channel(target)
@@ -3779,6 +3802,10 @@ class pyIRCXServer:
                 text = self._strip_formatting(text)
                 chan_out = f"{source} {cmd} {chan_name} {params[1] + ' ' if cmd in ['DATA'] and len(params) > 2 else ''}:{text}"
             await channel.broadcast(chan_out, exclude=user)
+            # Propagate channel message to linked servers (if not a remote user)
+            if self.link_manager and self.link_manager.enabled:
+                if not (hasattr(user, 'is_remote') and user.is_remote):
+                    await self.link_manager.broadcast_to_servers(chan_out)
             self.stats['messages_sent'] += 1
 
             # Track messages by channel
@@ -3800,6 +3827,14 @@ class pyIRCXServer:
             # ServiceBot monitoring - check for violations
             if cmd == "PRIVMSG":  # Only check regular messages, not notices
                 await self._check_servicebot_violations(channel, user, text)
+        else:
+            # Target not found locally - try routing to linked servers
+            if self.link_manager and self.link_manager.enabled:
+                # Route to all linked servers (they'll determine if they have the target)
+                await self.link_manager.broadcast_to_servers(out)
+            else:
+                # No linked servers or target not found anywhere
+                await user.send(self.get_reply("401", user, target=target))
 
     async def handle_who(self, user, params):
         target = params[0] if params else "*"
@@ -4239,6 +4274,13 @@ class pyIRCXServer:
         msg = f":{user.prefix()} JOIN {chan_name}"
         await channel.broadcast(msg, exclude=user)
 
+        # Propagate JOIN to linked servers (if not a remote user)
+        if self.link_manager and self.link_manager.enabled:
+            if not (hasattr(user, 'is_remote') and user.is_remote):
+                logger.info(f"Propagating JOIN to linked servers: {msg}")
+                await self.link_manager.broadcast_to_servers(msg)
+                logger.info(f"JOIN propagated for {user.nickname} to {chan_name}")
+
         # Broadcast MODE after JOIN so other clients see the user first
         if grant_owner:
             mode_msg = f":{user.prefix()} MODE {chan_name} +q {user.nickname}"
@@ -4270,6 +4312,10 @@ class pyIRCXServer:
             return
         msg = f":{user.prefix()} PART {chan_name}"
         await channel.broadcast(msg)
+        # Propagate PART to linked servers (if not a remote user)
+        if self.link_manager and self.link_manager.enabled:
+            if not (hasattr(user, 'is_remote') and user.is_remote):
+                await self.link_manager.broadcast_to_servers(msg)
         channel.members.pop(user.nickname, None)
         channel.owners.discard(user.nickname)
         channel.hosts.discard(user.nickname)
@@ -9754,6 +9800,13 @@ class pyIRCXServer:
                         if parent and cn in parent.clone_children:
                             parent.clone_children.remove(cn)
                     del self.channels[cn]
+
+        # Propagate QUIT to linked servers (if not a remote user)
+        if user.registered and self.link_manager and self.link_manager.enabled:
+            if not (hasattr(user, 'is_remote') and user.is_remote):
+                quit_msg = f":{user.prefix()} QUIT :Client exited"
+                await self.link_manager.broadcast_to_servers(quit_msg)
+
         if nick in self.users and self.users[nick] == user:
             del self.users[nick]
         if user.writer and not user.is_virtual:

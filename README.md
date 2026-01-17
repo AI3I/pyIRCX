@@ -23,9 +23,10 @@ If you remember the days of **Microsoft Comic Chat**, chat rooms with real nicks
 
 > **Active Development:** pyIRCX is under active development with frequent updates, enhancements, and bug fixes. New features, security improvements, and performance optimizations are released regularly. See [CHANGELOG.md](CHANGELOG.md) for detailed release notes and version history.
 
-**Current Version:** 1.2.0
+**Current Version:** 1.3.0-dev (trunk/branch implementation)
 
 **Latest Releases:**
+- **v1.3.0-dev** (January 16, 2026) - 🎉 **Centralized Services with Trunk/Branch Topology**: Distributed network architecture with centralized services and staff authentication. Trunk servers host services (Registrar, Messenger, etc.), branch servers route requests to trunk. All tests passing (4/4)! See [TRUNK_BRANCH_PROGRESS.md](TRUNK_BRANCH_PROGRESS.md) and [SERVICES_TRUNK_IMPLEMENTATION.md](SERVICES_TRUNK_IMPLEMENTATION.md)
 - **v1.2.0** (January 16, 2026) - User experience polish: Enhanced help system, command aliases, improved message quality, STATS/STAFF formatting, configurable client timeout, comprehensive webadmin tooltips
 - **v1.1.9** (January 16, 2026) - Traditional IRC service aliases (NickServ/ChanServ/MemoServ)
 - **v1.1.8** (January 16, 2026) - Comprehensive documentation reorganization, Apache/httpd multi-distro setup
@@ -90,13 +91,17 @@ pyIRCX offers feature parity with commercial IRCX servers like [OfficeIRC](https
 
 ### 🌐 Server Linking & Distributed Networks (NEW!)
 
-Build IRC networks that scale:
+Build IRC networks that scale with **trunk-and-branch topology**:
 
-- **Server-to-Server Protocol** — Custom IRCX-aware linking protocol
-- **Authentication** — Password-protected server links
-- **State Burst** — Full user/channel synchronization on link
-- **Message Routing** — Efficient message propagation across the network
+- **Centralized Services** — Trunk servers host services (Registrar, Messenger, ServiceBots)
+- **Branch Routing** — Branch servers automatically route service requests to trunk
+- **Staff Authentication** — Centralized staff credentials on trunk with branch routing
+- **Server-to-Server Protocol** — Custom IRCX-aware linking protocol with role validation
+- **Authentication** — Password-protected server links with bcrypt support
+- **State Burst** — Full user/channel synchronization on link, including service users
+- **Message Routing** — Efficient bi-directional message routing (branch ↔ trunk ↔ branch)
 - **Netsplit Handling** — Automatic cleanup and recovery
+- **Role Validation** — Enforces flat topology (trunk↔branch only, prevents multi-tier)
 - **Admin Commands**:
   - `CONNECT <server>` — Link to a remote server
   - `SQUIT <server>` — Disconnect a linked server
@@ -104,15 +109,25 @@ Build IRC networks that scale:
 - **Collision Detection** — Timestamp-based nick collision resolution
 - **Configurable** — Link configuration via JSON config file
 
-**Example Network Topology:**
+**Example Trunk/Branch Topology:**
 ```
-         hub.example.com (Central Hub)
-                 |
-    +------------+------------+
-    |            |            |
-  leaf1      leaf2        leaf3
-(US-East)  (US-West)    (Europe)
+        ┌──────────────────────┐
+        │   Trunk Server       │
+        │  (Services Hub)      │
+        │  - Registrar         │
+        │  - Messenger         │
+        │  - Staff Auth        │
+        └──────────┬───────────┘
+                   │
+       ┌───────────┼───────────┐
+       │           │           │
+   ┌───▼────┐  ┌──▼─────┐  ┌──▼─────┐
+   │Branch1 │  │Branch2 │  │Branch3 │
+   │US-East │  │US-West │  │Europe  │
+   └────────┘  └────────┘  └────────┘
 ```
+
+**🎉 All automated tests passing!** See [TRUNK_BRANCH_PROGRESS.md](TRUNK_BRANCH_PROGRESS.md) for implementation details.
 
 ### IRCX Protocol Extensions
 

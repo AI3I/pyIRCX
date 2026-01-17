@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 # Will be set by pyircx.py when module is imported
 CONFIG = None
 _User = None  # Cache for User class to avoid reimporting
+_Channel = None  # Cache for Channel class to avoid reimporting
 
 
 class LinkedServer:
@@ -557,11 +558,14 @@ class ServerLinkManager:
 
     async def handle_remote_nick(self, server: LinkedServer, parts: list):
         """Handle NICK introduction from remote server"""
+        logger.info(f"handle_remote_nick called from {server.name} with {len(parts)} parts: {' '.join(parts[:5])}")
         if len(parts) < 9:
+            logger.warning(f"handle_remote_nick: Not enough parts ({len(parts)}), need 9+")
             return
 
         # NICK <nick> <hop> <ts> <user> <host> <server> <modes> :<real>
         nickname = parts[1]
+        logger.info(f"Processing NICK for {nickname} from {server.name}")
         timestamp = int(parts[3])
         username = parts[4]
         hostname = parts[5]
@@ -569,11 +573,18 @@ class ServerLinkManager:
         modes = parts[7].lstrip('+')
         realname = ' '.join(parts[8:]).lstrip(':')
 
-        # Create virtual user object
-        # Create a remote user object (import here to avoid circular dependency)
-        from pyircx import User
+        # Create virtual user object using cached User class
+        global _User
+        if _User is None:
+            import sys
+            if 'pyircx' in sys.modules:
+                _User = sys.modules['pyircx'].User
+            elif '__main__' in sys.modules and hasattr(sys.modules['__main__'], 'User'):
+                _User = sys.modules['__main__'].User
+            else:
+                from pyircx import User as _User
 
-        user = User(None, None, is_virtual=True)
+        user = _User(None, None, is_virtual=True)
         user.nickname = nickname
         user.username = username
         user.host = hostname
@@ -586,11 +597,20 @@ class ServerLinkManager:
                 user.modes[mode_char] = True
         user.from_server = origin_server
         user.is_remote = True
+        user.server = self.irc_server  # Link to server for routing responses
 
         self.irc_server.users[nickname] = user
         server.add_user(nickname)
 
-        logger.debug(f"Added remote user {nickname} from {origin_server}")
+        logger.info(f"✓ Added remote user {nickname} from {origin_server} (total users: {len(self.irc_server.users)})")
+
+        # Forward NICK to all other linked servers (except the one it came from)
+        nick_msg = (
+            f"NICK {nickname} 1 {timestamp} {username} "
+            f"{hostname} {origin_server} +{modes} :{realname}"
+        )
+        await self.broadcast_to_servers(nick_msg, exclude_server=server.name)
+        logger.debug(f"Forwarded NICK for {nickname} to other servers")
 
     async def handle_remote_sjoin(self, server: LinkedServer, parts: list):
         """Handle SJOIN (channel sync) from remote server"""
@@ -603,11 +623,19 @@ class ServerLinkManager:
         modes = parts[3].lstrip('+')
         nicklist = ' '.join(parts[4:]).lstrip(':').split()
 
-        # Get or create channel
+        # Get or create channel using cached class
         channel = self.irc_server.channels.get(chan_name)
         if not channel:
-            from pyircx import Channel
-            channel = Channel(chan_name, self.irc_server)
+            global _Channel
+            if _Channel is None:
+                import sys
+                if 'pyircx' in sys.modules:
+                    _Channel = sys.modules['pyircx'].Channel
+                elif '__main__' in sys.modules and hasattr(sys.modules['__main__'], 'Channel'):
+                    _Channel = sys.modules['__main__'].Channel
+                else:
+                    from pyircx import Channel as _Channel
+            channel = _Channel(chan_name)
             channel.created_at = timestamp
             self.irc_server.channels[chan_name] = channel
 
@@ -727,44 +755,127 @@ class ServerLinkManager:
                     else:
                         logger.error(f"Failed to create/find remote user {nickname}")
                 else:
-                    # Broadcast to local users if target is a channel or remote user
-                    await self.broadcast_to_local(line, exclude_server=server.name)
+                    # Target is not a service - check if it's a local user or channel
+                    # Parse source to get nickname
+                    if '!' in source:
+                        source_nick = source.split('!')[0]
+                    else:
+                        source_nick = source
+
+                    # Check if target is a channel
+                    if target.startswith('#') or target.startswith('&'):
+                        # Message to channel - broadcast to local members
+                        channel = self.irc_server.channels.get(target)
+                        if channel:
+                            # Broadcast to LOCAL channel members only (exclude remote users to avoid loops)
+                            for member in channel.members.values():
+                                if not (hasattr(member, 'is_remote') and member.is_remote):
+                                    await member.send(line)
+                            # Forward to other servers ONLY if we're trunk (hub forwards between branches)
+                            if self.server_role == 'trunk':
+                                await self.broadcast_to_servers(line, exclude_server=server.name)
+                                logger.debug(f"Delivered and forwarded channel message from {source_nick} to {target}")
+                            else:
+                                logger.debug(f"Delivered channel message from {source_nick} to {target}")
+                    else:
+                        # Message to user - check if user is local
+                        target_user = self.irc_server.users.get(target)
+                        if target_user and not (hasattr(target_user, 'is_remote') and target_user.is_remote):
+                            # User is local, deliver message
+                            await target_user.send(line)
+                            logger.debug(f"Delivered private message from {source_nick} to {target}")
+                        else:
+                            # User not found locally - forward to other servers ONLY if we're trunk
+                            if self.server_role == 'trunk':
+                                await self.broadcast_to_servers(line, exclude_server=server.name)
+                                logger.debug(f"Forwarded private message from {source_nick} to {target}")
+                            else:
+                                logger.debug(f"User {target} not found locally on branch server")
         elif cmd == 'JOIN':
             # User joined channel
+            logger.info(f"Processing remote JOIN from {server.name}: {line[:100]}")
             if len(parts) >= 3:
                 chan_name = parts[2].lstrip(':')
-                user = self.irc_server.users.get(source)
+                # Extract nickname from source prefix (nick!user@host)
+                if '!' in source:
+                    nickname = source.split('!')[0]
+                else:
+                    nickname = source
+                user = self.irc_server.users.get(nickname)
+                logger.info(f"JOIN: user={nickname}, channel={chan_name}, user_found={user is not None}")
+
+                # Get or create channel
                 channel = self.irc_server.channels.get(chan_name)
-                if user and channel:
-                    channel.members[source] = user
+                if not channel:
+                    global _Channel
+                    if _Channel is None:
+                        import sys
+                        if 'pyircx' in sys.modules:
+                            _Channel = sys.modules['pyircx'].Channel
+                        elif '__main__' in sys.modules and hasattr(sys.modules['__main__'], 'Channel'):
+                            _Channel = sys.modules['__main__'].Channel
+                        else:
+                            from pyircx import Channel as _Channel
+                    channel = _Channel(chan_name)
+                    self.irc_server.channels[chan_name] = channel
+                    logger.info(f"Created channel {chan_name} for remote JOIN")
+
+                if user:
+                    channel.members[nickname] = user
                     user.channels.add(chan_name)
+                    logger.info(f"Added {nickname} to {chan_name}, broadcasting to local users")
                     await self.broadcast_to_local(line, exclude_server=server.name)
+                    # Forward JOIN to other linked servers ONLY if we're trunk
+                    if self.server_role == 'trunk':
+                        await self.broadcast_to_servers(line, exclude_server=server.name)
+                        logger.info(f"JOIN forwarded to other servers for {nickname} in {chan_name}")
+                    logger.info(f"JOIN processing complete for {nickname} in {chan_name}")
         elif cmd == 'PART':
             # User left channel
             if len(parts) >= 3:
                 chan_name = parts[2]
-                user = self.irc_server.users.get(source)
+                # Extract nickname from source prefix (nick!user@host)
+                if '!' in source:
+                    nickname = source.split('!')[0]
+                else:
+                    nickname = source
+                user = self.irc_server.users.get(nickname)
                 channel = self.irc_server.channels.get(chan_name)
                 if user and channel:
-                    channel.members.pop(source, None)
+                    channel.members.pop(nickname, None)
                     user.channels.discard(chan_name)
                     await self.broadcast_to_local(line, exclude_server=server.name)
+                    # Forward PART to other linked servers ONLY if we're trunk
+                    if self.server_role == 'trunk':
+                        await self.broadcast_to_servers(line, exclude_server=server.name)
         elif cmd == 'QUIT':
             # User quit
-            user = self.irc_server.users.pop(source, None)
+            # Extract nickname from source prefix (nick!user@host)
+            if '!' in source:
+                nickname = source.split('!')[0]
+            else:
+                nickname = source
+            user = self.irc_server.users.pop(nickname, None)
             if user:
                 for chan_name in list(user.channels):
                     channel = self.irc_server.channels.get(chan_name)
                     if channel:
-                        channel.members.pop(source, None)
-                server.remove_user(source)
+                        channel.members.pop(nickname, None)
+                server.remove_user(nickname)
                 await self.broadcast_to_local(line, exclude_server=server.name)
+                # Forward QUIT to other linked servers ONLY if we're trunk
+                if self.server_role == 'trunk':
+                    await self.broadcast_to_servers(line, exclude_server=server.name)
 
     async def broadcast_to_servers(self, message: str, exclude_server: str = None):
         """Broadcast a message to all linked servers"""
+        logger.debug(f"broadcast_to_servers called with message: {message[:80]}...")
+        logger.debug(f"Available servers: {list(self.servers.keys())}")
         for servername, server in self.servers.items():
             if servername != exclude_server and server.is_direct:
+                logger.debug(f"Sending to {servername}: {message[:80]}...")
                 await server.send(message)
+                logger.debug(f"Sent to {servername}")
 
     async def broadcast_to_local(self, message: str, exclude_server: str = None,
                                 exclude_modes: str = None):

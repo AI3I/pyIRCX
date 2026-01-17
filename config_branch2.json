@@ -1,19 +1,19 @@
 {
   "server": {
-    "name": "trunk.testnet.local",
+    "name": "branch2.testnet.local",
     "network": "TestNet",
     "motd": [
-      "Welcome to TestNet Trunk Server",
-      "This is the services trunk"
+      "Welcome to TestNet Branch2 Server",
+      "Services provided by trunk.testnet.local"
     ]
   },
   "network": {
     "listen_addr": "127.0.0.1",
-    "listen_ports": [6667],
+    "listen_ports": [6669],
     "enable_ipv6": false
   },
   "database": {
-    "path": "trunk_pyircx.db",
+    "path": "branch2_pyircx.db",
     "pool_size": 10
   },
   "limits": {
@@ -23,30 +23,23 @@
   "services": {
     "enabled": true,
     "mode": "centralized",
-    "is_services_hub": true,
-    "hub_server": null,
-    "servicebot_count": 5,
+    "is_services_hub": false,
+    "hub_server": "trunk.testnet.local",
+    "servicebot_count": 0,
     "servicebot_max_channels": 10
   },
   "linking": {
     "enabled": true,
-    "server_role": "trunk",
+    "server_role": "branch",
     "bind_host": "127.0.0.1",
-    "bind_port": 7001,
+    "bind_port": 7003,
     "links": [
       {
-        "name": "branch.testnet.local",
+        "name": "trunk.testnet.local",
         "host": "127.0.0.1",
-        "port": 7002,
+        "port": 7001,
         "password": "testlink123",
-        "autoconnect": false
-      },
-      {
-        "name": "branch2.testnet.local",
-        "host": "127.0.0.1",
-        "port": 7003,
-        "password": "testlink123",
-        "autoconnect": false
+        "autoconnect": true
       }
     ]
   },
