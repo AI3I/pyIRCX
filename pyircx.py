@@ -6588,7 +6588,7 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :Channels: JOIN PART KICK INVITE TOPIC NAMES LIST MODE")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Registration: REGISTER IDENTIFY UNREGISTER CHGPASS MFA (see /HELP REGISTER)")
             await user.send(f":{self.servername} NOTICE {user.nickname} :User Info: WHO WHOIS WHOWAS ISON USERHOST AWAY")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Server Info: LUSERS MOTD INFO TIME VERSION STATS LINKS ADMIN")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Server Info: LUSERS MOTD INFO TIME VERSION STATS LINKS MAP ADMIN")
             await user.send(f":{self.servername} NOTICE {user.nickname} :IRCX: IRCX ACCESS PROP EVENT WHISPER KNOCK TRANSCRIPT DATA")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Utility: SILENCE WATCH HELP")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Type /HELP <command> for details (e.g., /HELP WHOWAS)")
@@ -6645,8 +6645,8 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :  +o - IRC operator (SYSOP)")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  +g - IRC guide (GUIDE)")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Other modes:")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  +s - SERVICE (server bots)")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  +z - GAGGED (cannot send messages)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  +s - Service (server bots and service accounts)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  +z - Gagged (cannot send messages to channels or users)")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Example: /MODE yournick +i (to set invisible)")
 
         elif topic == "CHANMODES":
@@ -6667,7 +6667,7 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :  +d - Clone-enabled: Allows users to create channel clones")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  +e - Is-clone: Marks this channel as a clone of another")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  +f - Strip-formatting: Remove formatting codes from messages")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  +g - Guide-op: Server GUIDEs automatically get host (@) status")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  +g - Guide-op: IRC guides automatically get host (@) status")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  +h - Hidden: JOIN/PART/QUIT messages are not shown")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  +j - No-invitations: INVITE command is disabled for this channel")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  +r - Registered: Channel is registered (auto-set)")
@@ -6842,7 +6842,7 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :Only the target user sees the message.")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  /WHISPER #lobby alice Hey, check your messages")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Note: Won't work on channels with +w (no whispers) mode")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Note: Cannot be used in channels with +w mode (whispers disabled)")
 
         elif topic in ["REGISTER", "IDENTIFY", "UNREGISTER"]:
             await user.send(f":{self.servername} NOTICE {user.nickname} :=== Registration Commands ===")
@@ -6894,12 +6894,12 @@ class pyIRCXServer:
         elif topic in ["AWAY", "BACK"]:
             await user.send(f":{self.servername} NOTICE {user.nickname} :=== AWAY Command ===")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /AWAY [message]")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Mark yourself as away or return.")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Mark yourself as away with an optional message, or return from away status.")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  /AWAY - Mark as away (no message)")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  /AWAY Gone for lunch - Set away with message")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  /AWAY - Return from away (toggle)")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :When away, people will see your message when they WHOIS you")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /AWAY Gone for lunch - Mark yourself away with message")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /AWAY - When not away: marks you away with no message")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /AWAY - When already away: returns you from away status")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Note: People will see your away message when they WHOIS you or message you")
 
         elif topic in ["KILL"] and is_staff:
             await user.send(f":{self.servername} NOTICE {user.nickname} :=== KILL Command (IRC administrator/operator only) ===")
@@ -7039,9 +7039,9 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  /SILENCE - List your silence list")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  /SILENCE +bob!*@* - Block all messages from bob")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  /SILENCE -*!*@spammer.com - Block all from host")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /SILENCE +*!*@spammer.com - Block all messages from host")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  /SILENCE -bob!*@* - Unblock bob")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Note: Silenced users can't send you private messages")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Note: Silenced users cannot send you private messages or notices")
 
         elif topic in ["WATCH"]:
             await user.send(f":{self.servername} NOTICE {user.nickname} :=== WATCH Command ===")
@@ -7071,8 +7071,8 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :Change your nickname.")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  /NICK alice - Change your nick to alice")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Rules: 1-30 characters, letters/numbers/_ - only")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Note: Cannot start with a number or special character")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Rules: Must be 1-30 characters, start with a letter, and contain only letters, numbers, -, _, [, ], {{, }}, \\, or |")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Note: Reserved service names (Registrar, NickServ, etc.) cannot be used")
 
         elif topic in ["QUIT", "EXIT", "BYE"]:
             await user.send(f":{self.servername} NOTICE {user.nickname} :=== QUIT Command ===")
@@ -7094,6 +7094,13 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :Display list of linked servers (for networks with multiple servers).")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Shows: Server names, relationships, and connection info")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Note: Single-server networks will show only one entry")
+
+        elif topic in ["MAP"]:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== MAP Command ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /MAP")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Display network topology as a tree structure.")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Shows: Server hierarchy and user counts per server")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Useful for visualizing multi-server network layout")
 
         elif topic in ["CHGPASS", "CHANGEPASS"]:
             await user.send(f":{self.servername} NOTICE {user.nickname} :=== CHGPASS Command ===")
