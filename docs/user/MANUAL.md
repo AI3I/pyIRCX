@@ -1794,43 +1794,43 @@ Server checks in order: OWNERKEY → HOSTKEY → MEMBERKEY
 
 | Code | Description |
 |------|-------------|
-| 401 | No such nick/channel |
+| 401 | That nickname or channel doesn't exist |
 | 402 | No such server |
-| 403 | No such channel |
-| 404 | Cannot send to channel |
+| 403 | That channel doesn't exist |
+| 404 | You cannot send to channel |
 | 405 | Too many channels |
 | 406 | Was no such nick |
 | 407 | Too many targets |
 | 409 | No origin specified |
 | 411 | No recipient given |
 | 412 | No text to send |
-| 421 | Unknown command |
+| 421 | This command is not recognized |
 | 422 | No MOTD |
 | 431 | No nickname given |
-| 432 | Erroneous nickname |
+| 432 | That nickname is not valid |
 | 433 | Nickname in use |
 | 436 | Nickname collision |
 | 441 | User not in channel |
 | 442 | Not on channel |
 | 443 | User already on channel |
 | 451 | Not registered |
-| 461 | Not enough parameters |
+| 461 | You did not provide enough parameters |
 | 462 | Already registered |
 | 463 | No permission (host) |
 | 464 | Password mismatch |
 | 465 | Banned from server |
 | 467 | Channel key already set |
-| 468 | Invalid username |
-| 471 | Channel is full (+l) |
+| 468 | That username is not valid |
+| 471 | You cannot join channel (channel is full) |
 | 472 | Unknown mode char |
-| 473 | Invite only channel (+i) |
-| 474 | Banned from channel (+b) |
+| 473 | You cannot join channel (invite-only) |
+| 474 | You cannot join channel (you are banned) |
 | 475 | Bad channel key (+k) |
 | 476 | Bad channel mask |
 | 477 | Channel doesn't support modes |
 | 478 | Ban list full |
-| 479 | Invalid channel name |
-| 481 | Permission denied |
+| 479 | That channel name is not valid |
+| 481 | You do not have permission |
 | 482 | Not channel host |
 | 483 | Can't kill server |
 | 484 | Connection restricted |
