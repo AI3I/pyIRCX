@@ -1983,18 +1983,18 @@ SERVER_MESSAGES = {
     "registrar_channel_registered": "Channel {channel} is now registered to you",
     "registrar_channel_dropped": "Channel {channel} has been unregistered",
     "registrar_channel_info": "Channel {channel} - Owner: {owner}, Registered: {time}",
-    "registrar_email_updated": "Email address updated",
-    "registrar_password_updated": "Password updated",
-    "registrar_mfa_verify_prompt": "Enter 6-digit MFA code from your authenticator app",
+    "registrar_email_updated": "Your email address has been updated",
+    "registrar_password_updated": "Your password has been updated",
+    "registrar_mfa_verify_prompt": "Please enter the 6-digit MFA code from your authenticator app",
     "registrar_mfa_verify_success": "MFA verification successful!",
 
     # Messenger service
     "messenger_help": "Commands: SEND <nick> <message>, LIST, READ <id>, DELETE <id>, CLEAR, COUNT, PUSH <message> (IRC administrator only)",
     "messenger_sent": "Message sent to {target}",
-    "messenger_deleted": "Memo {id} deleted",
+    "messenger_deleted": "Your memo {id} has been deleted",
     "messenger_cleared": "All your memos have been cleared",
     "messenger_count": "You have {count} memo(s) waiting",
-    "messenger_no_memos": "No memos waiting",
+    "messenger_no_memos": "You have no memos waiting",
     "messenger_list_header": "Your memos:",
     "messenger_list_item": "  [{id}] From {from} at {time}: {preview}",
     "messenger_read_header": "Memo {id} from {from} at {time}:",
@@ -2009,9 +2009,9 @@ SERVER_MESSAGES = {
     "newsflash_list_item": "  [{id}] {time}: {preview}",
     "newsflash_read_header": "NewsFlash {id} from {time}:",
     "newsflash_read_body": "  {message}",
-    "newsflash_deleted": "NewsFlash {id} deleted",
+    "newsflash_deleted": "NewsFlash {id} has been deleted",
     "newsflash_pushed": "NewsFlash sent to {count} user(s)",
-    "newsflash_no_items": "No NewsFlash items available",
+    "newsflash_no_items": "There are no NewsFlash items available",
 
     # ServiceBot messages
     "servicebot_warning": "Warning: {violation}",
@@ -8959,7 +8959,7 @@ class pyIRCXServer:
 
         except Exception as e:
             logger.error(f"Registrar info error: {e}")
-            await self._service_reply("Registrar", user, "Info lookup failed")
+            await self._service_reply("Registrar", user, "We couldn't look up that information")
 
     async def _registrar_register_channel(self, user, channel_name):
         """Register a channel"""
@@ -8970,7 +8970,7 @@ class pyIRCXServer:
         # Case-insensitive channel lookup
         channel, chan_name = self.get_channel(channel_name)
         if not channel:
-            await self._service_reply("Registrar", user, f"Channel {channel_name} does not exist")
+            await self._service_reply("Registrar", user, f"That channel doesn't exist")
             return
 
         if user.nickname not in channel.owners:
@@ -9035,7 +9035,7 @@ class pyIRCXServer:
 
         except Exception as e:
             logger.error(f"Registrar channel register error: {e}")
-            await self._service_reply("Registrar", user, "Channel registration failed")
+            await self._service_reply("Registrar", user, "We couldn't register the channel")
 
     async def _registrar_drop_channel(self, user, channel_name):
         """Drop (unregister) a channel"""
@@ -9069,7 +9069,7 @@ class pyIRCXServer:
                                      (channel_name,)) as cursor:
                     chan_row = await cursor.fetchone()
                     if not chan_row:
-                        await self._service_reply("Registrar", user, f"Channel {channel_name} is not registered")
+                        await self._service_reply("Registrar", user, f"That channel is not registered")
                         return
                     if chan_row[0] != owner_uuid and not user.has_mode('a'):
                         await self._service_reply("Registrar", user, "Only the channel owner or an admin can drop it")
@@ -9087,7 +9087,7 @@ class pyIRCXServer:
 
         except Exception as e:
             logger.error(f"Registrar channel drop error: {e}")
-            await self._service_reply("Registrar", user, "Channel drop failed")
+            await self._service_reply("Registrar", user, "We couldn't drop the channel")
 
     async def _registrar_channel_info(self, user, channel_name):
         """Get info about a registered channel"""
@@ -9101,7 +9101,7 @@ class pyIRCXServer:
                                      (channel_name,)) as cursor:
                     row = await cursor.fetchone()
                     if not row:
-                        await self._service_reply("Registrar", user, f"Channel {channel_name} is not registered")
+                        await self._service_reply("Registrar", user, f"That channel is not registered")
                         return
 
                     chan_uuid, chan_name, reg_at, last_used, desc, owner = row
@@ -9114,7 +9114,7 @@ class pyIRCXServer:
 
         except Exception as e:
             logger.error(f"Registrar channel info error: {e}")
-            await self._service_reply("Registrar", user, "Channel info lookup failed")
+            await self._service_reply("Registrar", user, "We couldn't look up the channel information")
 
     async def _registrar_set(self, user, setting, value):
         """Change registration settings"""
@@ -9143,7 +9143,7 @@ class pyIRCXServer:
 
         except Exception as e:
             logger.error(f"Registrar set error: {e}")
-            await self._service_reply("Registrar", user, "Setting update failed")
+            await self._service_reply("Registrar", user, "We couldn't update the setting")
 
     async def _registrar_mfa_enable(self, user):
         """Enable MFA for a registered nickname"""
@@ -9158,7 +9158,7 @@ class pyIRCXServer:
                                      (user.nickname,)) as cursor:
                     row = await cursor.fetchone()
                     if not row:
-                        await self._service_reply("Registrar", user, "Nickname not found in database")
+                        await self._service_reply("Registrar", user, "That nickname was not found")
                         return
 
                     mfa_enabled, existing_secret = row
@@ -9189,7 +9189,7 @@ class pyIRCXServer:
 
         except Exception as e:
             logger.error(f"Registrar MFA enable error: {e}")
-            await self._service_reply("Registrar", user, "MFA setup failed - please try again later")
+            await self._service_reply("Registrar", user, "We couldn't set up MFA - please try again later")
 
     async def _registrar_mfa_disable(self, user, code):
         """Disable MFA for a registered nickname"""
@@ -9203,7 +9203,7 @@ class pyIRCXServer:
                                      (user.nickname,)) as cursor:
                     row = await cursor.fetchone()
                     if not row:
-                        await self._service_reply("Registrar", user, "Nickname not found in database")
+                        await self._service_reply("Registrar", user, "That nickname was not found")
                         return
 
                     mfa_enabled, mfa_secret = row
@@ -9219,7 +9219,7 @@ class pyIRCXServer:
 
                     totp = pyotp.TOTP(mfa_secret)
                     if not totp.verify(code, valid_window=1):
-                        await self._service_reply("Registrar", user, "Invalid MFA code")
+                        await self._service_reply("Registrar", user, "That MFA code is not valid")
                         return
 
                     # Disable MFA
@@ -9232,7 +9232,7 @@ class pyIRCXServer:
 
         except Exception as e:
             logger.error(f"Registrar MFA disable error: {e}")
-            await self._service_reply("Registrar", user, "MFA disable failed - please try again later")
+            await self._service_reply("Registrar", user, "We couldn't disable MFA - please try again later")
 
     async def _registrar_mfa_verify(self, user, code):
         """Verify MFA code - either to complete login or to enable MFA"""
@@ -9244,7 +9244,7 @@ class pyIRCXServer:
                                          (user.pending_mfa,)) as cursor:
                         row = await cursor.fetchone()
                         if not row:
-                            await self._service_reply("Registrar", user, "MFA verification failed - session expired")
+                            await self._service_reply("Registrar", user, "Your MFA verification failed - your session expired")
                             user.pending_mfa = None
                             return
 
@@ -9262,7 +9262,7 @@ class pyIRCXServer:
                             await self._service_reply("Registrar", user, f"MFA verified. You are now identified as {user.nickname}")
                             logger.info(f"Registrar: {user.nickname} completed MFA identification")
                         else:
-                            await self._service_reply("Registrar", user, "Invalid MFA code. Please try again")
+                            await self._service_reply("Registrar", user, "That MFA code is not valid. Please try again")
                     return
 
                 # Case 2: User is enabling MFA (must be identified)
@@ -9274,7 +9274,7 @@ class pyIRCXServer:
                                      (user.nickname,)) as cursor:
                     row = await cursor.fetchone()
                     if not row:
-                        await self._service_reply("Registrar", user, "Nickname not found in database")
+                        await self._service_reply("Registrar", user, "That nickname was not found")
                         return
 
                     mfa_enabled, mfa_secret = row
@@ -9297,7 +9297,7 @@ class pyIRCXServer:
                         await self._service_reply("Registrar", user, "You will need to provide an MFA code after IDENTIFY from now on")
                         logger.info(f"Registrar: {user.nickname} enabled MFA")
                     else:
-                        await self._service_reply("Registrar", user, "Invalid MFA code. MFA setup cancelled")
+                        await self._service_reply("Registrar", user, "That MFA code is not valid. MFA setup cancelled")
                         # Clear the pending secret since verification failed
                         await db.execute("UPDATE registered_nicks SET mfa_secret = NULL WHERE nickname = ?",
                                         (user.nickname,))
@@ -9355,7 +9355,7 @@ class pyIRCXServer:
                 msg_id = int(parts[1])
                 await self._messenger_delete(user, msg_id)
             except ValueError:
-                await self._service_reply("Messenger", user, "Invalid message ID")
+                await self._service_reply("Messenger", user, "That message ID is not valid")
 
         elif cmd == "COUNT":
             await self._messenger_count(user)
@@ -9379,7 +9379,7 @@ class pyIRCXServer:
                                      (target_nick,)) as cursor:
                     row = await cursor.fetchone()
                     if not row:
-                        await self._service_reply("Messenger", user, f"Nickname {target_nick} is not registered")
+                        await self._service_reply("Messenger", user, f"That nickname is not registered")
                         return
                     recipient_uuid = row[0]
 
@@ -9397,7 +9397,7 @@ class pyIRCXServer:
 
         except Exception as e:
             logger.error(f"Messenger send error: {e}")
-            await self._service_reply("Messenger", user, "Failed to send message")
+            await self._service_reply("Messenger", user, "We couldn't send the message")
 
     async def _messenger_read(self, user):
         """Read messages from mailbox"""
@@ -9435,7 +9435,7 @@ class pyIRCXServer:
 
         except Exception as e:
             logger.error(f"Messenger read error: {e}")
-            await self._service_reply("Messenger", user, "Failed to read messages")
+            await self._service_reply("Messenger", user, "We couldn't read the messages")
 
     async def _messenger_delete(self, user, msg_id):
         """Delete a message from mailbox"""
@@ -9459,11 +9459,11 @@ class pyIRCXServer:
                 if result.rowcount > 0:
                     await self._service_reply("Messenger", user, f"Message {msg_id} deleted")
                 else:
-                    await self._service_reply("Messenger", user, f"Message {msg_id} not found")
+                    await self._service_reply("Messenger", user, f"That message was not found")
 
         except Exception as e:
             logger.error(f"Messenger delete error: {e}")
-            await self._service_reply("Messenger", user, "Failed to delete message")
+            await self._service_reply("Messenger", user, "We couldn't delete the message")
 
     async def _messenger_count(self, user):
         """Count unread messages"""
@@ -9547,7 +9547,7 @@ class pyIRCXServer:
                 msg_id = int(parts[1])
                 await self._newsflash_delete(user, msg_id)
             except ValueError:
-                await self._service_reply("NewsFlash", user, "Invalid message ID")
+                await self._service_reply("NewsFlash", user, "That message ID is not valid")
 
         elif cmd == "PUSH" and user.is_admin():
             if len(parts) < 2:
@@ -9593,7 +9593,7 @@ class pyIRCXServer:
 
         except Exception as e:
             logger.error(f"NewsFlash add error: {e}")
-            await self._service_reply("NewsFlash", user, "Failed to add message")
+            await self._service_reply("NewsFlash", user, "We couldn't add the message")
 
     async def _newsflash_delete(self, user, msg_id):
         """Delete a newsflash message"""
@@ -9605,7 +9605,7 @@ class pyIRCXServer:
 
         except Exception as e:
             logger.error(f"NewsFlash delete error: {e}")
-            await self._service_reply("NewsFlash", user, "Failed to delete message")
+            await self._service_reply("NewsFlash", user, "We couldn't delete the message")
 
     async def _newsflash_push(self, user, message):
         """Push an immediate notice to all users (ADMIN only)"""
