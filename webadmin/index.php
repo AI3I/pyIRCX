@@ -955,6 +955,13 @@ badword3"></textarea>
 
                                             <h5 style="margin-top: 15px; color: #666;">Resources</h5>
                                             <div class="form-group">
+                                                <label>Database Filename</label>
+                                                <input type="text" class="form-control" id="branch-db" name="db_path"
+                                                       placeholder="pyircx.db" required>
+                                                <small>SQLite database file (minimal on branches - auth and services routed to trunk)</small>
+                                            </div>
+
+                                            <div class="form-group">
                                                 <label>Max Users</label>
                                                 <input type="number" class="form-control" id="branch-max-users" name="max_users"
                                                        value="10000" min="100" max="100000">
