@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 
 # Will be set by pyircx.py when module is imported
 CONFIG = None
+_User = None  # Cache for User class to avoid reimporting
 
 
 class LinkedServer:
@@ -215,7 +216,7 @@ class ServerLinkManager:
                     asyncio.create_task(self.read_server_messages(server, reader))
 
                     logger.info(f"Server {servername} linked successfully")
-                    self.broadcast_to_local(f":{self.irc_server.servername} NOTICE * :Server {servername} linked", exclude_modes='a')
+                    await self.broadcast_to_local(f":{self.irc_server.servername} NOTICE * :Server {servername} linked", exclude_modes='a')
                     break
 
         except asyncio.TimeoutError:
@@ -275,7 +276,7 @@ class ServerLinkManager:
                 asyncio.create_task(self.read_server_messages(server, reader))
 
                 logger.info(f"Successfully linked to {remote_name}")
-                self.broadcast_to_local(f":{self.irc_server.servername} NOTICE * :Linked to server {remote_name}", exclude_modes='a')
+                await self.broadcast_to_local(f":{self.irc_server.servername} NOTICE * :Linked to server {remote_name}", exclude_modes='a')
 
             elif parts[0] == 'ERROR':
                 logger.error(f"Link to {servername} rejected: {line}")
@@ -381,7 +382,7 @@ class ServerLinkManager:
             # Staff authentication failure response from trunk
             await self.handle_staff_auth_response(server, parts, success=False)
         elif cmd == 'SVCNICK':
-            # Service nickname from hub
+            # Service nickname from trunk
             await self.handle_service_nick(server, parts)
         elif cmd == 'NICK':
             await self.handle_remote_nick(server, parts)
@@ -518,10 +519,20 @@ class ServerLinkManager:
         modes = parts[7].lstrip('+')
         realname = ' '.join(parts[8:]).lstrip(':')
 
-        # Create service user object (import here to avoid circular dependency)
-        from pyircx import User
+        # Create service user object (use cached import to avoid circular dependency)
+        global _User
+        if _User is None:
+            import sys
+            # pyircx might be loaded as '__main__' when run as a script
+            if 'pyircx' in sys.modules:
+                _User = sys.modules['pyircx'].User
+            elif '__main__' in sys.modules and hasattr(sys.modules['__main__'], 'User'):
+                _User = sys.modules['__main__'].User
+            else:
+                # Last resort - this will trigger module reload
+                from pyircx import User as _User
 
-        service = User(None, None, is_virtual=True)
+        service = _User(None, None, is_virtual=True)
         service.nickname = nickname
         service.username = username
         service.host = hostname
@@ -537,12 +548,12 @@ class ServerLinkManager:
 
         service.from_server = origin_server
         service.is_remote = True
-        service.is_service_proxy = True  # Mark as service proxy from hub
+        service.is_service_proxy = True  # Mark as service proxy from trunk
 
         self.irc_server.users[nickname] = service
         server.add_user(nickname)
 
-        logger.info(f"Added remote service {nickname} from hub {origin_server}")
+        logger.info(f"Added remote service {nickname} from trunk {origin_server}")
 
     async def handle_remote_nick(self, server: LinkedServer, parts: list):
         """Handle NICK introduction from remote server"""
@@ -700,7 +711,7 @@ class ServerLinkManager:
                 continue
             if exclude_modes and any(user.has_mode(m) for m in exclude_modes):
                 continue
-            user.send(message)
+            await user.send(message)
 
     async def handle_server_split(self, server: LinkedServer):
         """Handle a server disconnecting (netsplit)"""
@@ -779,8 +790,16 @@ class ServerLinkManager:
         """Get the services hub server connection"""
         hub_name = CONFIG.get('services', 'hub_server')
         if not hub_name:
+            logger.debug("No hub_server configured in services")
             return None
-        return self.servers.get(hub_name)
+
+        trunk = self.servers.get(hub_name)
+        if not trunk:
+            logger.warning(f"Trunk server '{hub_name}' not found in linked servers")
+        else:
+            logger.debug(f"Found trunk server '{hub_name}', is_direct={trunk.is_direct}")
+
+        return trunk
 
     async def route_to_services_hub(self, message: str) -> bool:
         """
