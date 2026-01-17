@@ -1795,7 +1795,7 @@ RESPONSES = {
     "401": "{target} :No such nickname or channel",
     "403": "{target} :No such channel",
     "404": "{channel} :You cannot send to channel (check channel modes or your permissions)",
-    "407": "{target} :Too many recipients",
+    "407": "{target} :You specified too many recipients",
     "421": "{command} :Unknown command",
     "432": "{target} :Invalid nickname (must be 1-{nicklen} characters, start with a letter, and contain only letters, numbers, -, _, [, ], {{, }}, \\, or |)",
     "433": "{target} :Nickname is already in use",
@@ -1803,7 +1803,7 @@ RESPONSES = {
     "442": "{target} :You're not on that channel",
     "443": "{target} {channel} :is already on channel",
     "451": "You have not registered (use NICK and USER commands)",
-    "461": "{command} :Not enough parameters. See /HELP {command} for usage.",
+    "461": "{command} :You did not provide enough parameters. See /HELP {command} for usage.",
     "462": "You may not reregister",
     "468": ":Invalid username (must start with a letter and contain only letters, numbers, -, _, or .)",
     "471": "{target} :Cannot join channel (channel is full - user limit reached)",
@@ -1815,7 +1815,7 @@ RESPONSES = {
     "696": "{target} {mode} :You must specify a parameter for the {mode} mode",
     "710": "{channel} {nick} {host} :has asked for an invite",
     "711": "{target} :Your knock request has been sent",
-    "712": "{target} :Too many knock requests. Please wait before trying again.",
+    "712": "{target} :You have sent too many knock requests. Please wait before trying again.",
     "713": "{target} :Channel is open",
     "714": "{target} :You are already on that channel",
     "716": "{target} :You cannot knock on this channel (+u mode)",
@@ -1855,15 +1855,15 @@ RESPONSES = {
     "848": ":Only staff members can invite ServiceBots",
     # IRCX Access Control (850-859)
     "850": ":Invalid access level - valid: {levels}",
-    "851": "{mask} :Mask already in {level} list",
-    "852": "{mask} :Mask not found in {level} list",
+    "851": "{mask} :This mask is already in the {level} list",
+    "852": "{mask} :This mask was not found in the {level} list",
     "853": ":You cannot remove owner-added entry (you are not the channel owner)",
     "854": "{target} :ACCESS {level} added: {mask}",
     "855": "{target} :ACCESS {level} removed: {mask}",
     "856": "{target} :Cleared {count} {level} entries",
     "857": ":Only channel owners can clear access lists",
     "858": ":You cannot delete your own staff account",
-    "859": ":Already linked to {server}",
+    "859": ":You are already linked to {server}",
     # IRCX Command Usage (860-869)
     "860": ":Usage: {usage}",
     "861": ":Invalid path. Use: section.key (e.g., limits.max_users)",
@@ -4654,7 +4654,7 @@ class pyIRCXServer:
         now = time.time()
         last_knock = channel.knock_cooldowns.get(user.nickname, 0)
         if now - last_knock < 60:
-            await user.send(f":{self.servername} 712 {user.nickname} {chan_name} :Too many KNOCKs")
+            await user.send(f":{self.servername} 712 {user.nickname} {chan_name} :You have sent too many knock requests. Please wait before trying again.")
             return
         channel.knock_cooldowns[user.nickname] = now
 
@@ -5063,7 +5063,7 @@ class pyIRCXServer:
             # Check if mask already exists
             for i, (m, _, _, _, _) in enumerate(access_data[level]):
                 if m.lower() == mask.lower():
-                    await user.send(f":{self.servername} NOTICE {user.nickname} :Mask {mask} already in {level} list")
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :This mask {mask} is already in the {level} list")
                     return
 
             # Cannot add services to DENY lists
@@ -5135,7 +5135,7 @@ class pyIRCXServer:
                     break
 
             if not found:
-                await user.send(f":{self.servername} NOTICE {user.nickname} :Mask {mask} not found in {level} list")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Mask {mask} was not found in the {level} list")
                 return
 
             # For server access, remove from database
@@ -5907,7 +5907,7 @@ class pyIRCXServer:
                 await user.send(f":{self.servername} NOTICE {user.nickname} :Use CONFIG SAVE to persist changes")
                 logger.info(f"CONFIG: {user.nickname} set {params[1]} = {json.dumps(value)}")
             else:
-                await user.send(f":{self.servername} NOTICE {user.nickname} :Failed to set value")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :The value could not be set")
 
         elif subcmd == "SAVE":
             # Save to disk - ADMIN only
@@ -5978,7 +5978,7 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :Successfully linked to {target_server}")
             logger.info(f"CONNECT: {user.nickname} linked to {target_server}")
         except Exception as e:
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Failed to link: {e}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :The link could not be established: {e}")
             logger.error(f"CONNECT: Failed to link to {target_server}: {e}")
 
     async def handle_squit(self, user, params):
@@ -6013,7 +6013,7 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :Unlinked from {target_server}")
             logger.info(f"SQUIT: {user.nickname} unlinked {target_server}: {reason}")
         except Exception as e:
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Failed to unlink: {e}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :The server could not be unlinked: {e}")
             logger.error(f"SQUIT: Failed to unlink {target_server}: {e}")
 
     async def handle_links(self, user, params):
@@ -8471,7 +8471,7 @@ class pyIRCXServer:
         7. Client: CAP END
         """
         if not params:
-            await user.send(f":{self.servername} 461 {user.nickname} AUTHENTICATE :Not enough parameters")
+            await user.send(f":{self.servername} 461 {user.nickname} AUTHENTICATE :You did not provide enough parameters")
             return
 
         arg = params[0]
@@ -8486,7 +8486,7 @@ class pyIRCXServer:
         # Check for auth lockout
         if self.failed_auth_tracker.is_locked_out(user.ip):
             remaining = self.failed_auth_tracker.get_lockout_remaining(user.ip)
-            await user.send(f":{self.servername} 904 {user.nickname} :Too many failed attempts. Try again in {remaining}s")
+            await user.send(f":{self.servername} 904 {user.nickname} :You have had too many failed attempts. Try again in {remaining}s")
             return
 
         # Rate limit AUTHENTICATE attempts
@@ -9952,7 +9952,7 @@ class pyIRCXServer:
         max_modes = CONFIG.get('limits', 'max_modes_per_command', default=6)
         mode_count = sum(1 for c in mode_str if c not in '+-')
         if mode_count > max_modes:
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Too many mode changes (max {max_modes} per command)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :You specified too many mode changes (max {max_modes} per command)")
             return
 
         adding, param_idx = True, 0
