@@ -4,7 +4,7 @@
 
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPLv3-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.2.0-brightgreen.svg)](#)
+[![Version](https://img.shields.io/badge/version-2.0.0-brightgreen.svg)](#)
 [![Tests](https://img.shields.io/badge/tests-243%20passing-brightgreen.svg)](#testing)
 
 ---
@@ -23,15 +23,14 @@ If you remember the days of **Microsoft Comic Chat**, chat rooms with real nicks
 
 > **Active Development:** pyIRCX is under active development with frequent updates, enhancements, and bug fixes. New features, security improvements, and performance optimizations are released regularly. See [CHANGELOG.md](CHANGELOG.md) for detailed release notes and version history.
 
-**Current Version:** 1.3.0-dev (seamless cross-server operations)
+**Current Version:** 2.0.0 (friendly, modern IRCX experience)
 
-**Latest Releases:**
-- **v1.3.0-dev** (January 17, 2026) - 🎉 **Seamless Cross-Server Operations**: Complete Phase 2 implementation with network-wide TOPIC, KICK, MODE, INVITE, NICK, AWAY, WHISPER, KNOCK propagation. Channel modes, ban lists, and access controls synchronize across all linked servers. All 12 Phase 2 tests passing! Network behaves as unified system. See [PHASE2_PROGRESS.md](PHASE2_PROGRESS.md)
-- **v1.3.0-dev** (January 16, 2026) - 🎉 **Centralized Services with Trunk/Branch Topology**: Distributed network architecture with centralized services and staff authentication. Trunk servers host services (Registrar, Messenger, etc.), branch servers route requests to trunk. Phase 1 complete (4/4 tests passing)! See [TRUNK_BRANCH_PROGRESS.md](TRUNK_BRANCH_PROGRESS.md) and [SERVICES_TRUNK_IMPLEMENTATION.md](SERVICES_TRUNK_IMPLEMENTATION.md)
-- **v1.2.0** (January 16, 2026) - User experience polish: Enhanced help system, command aliases, improved message quality, STATS/STAFF formatting, configurable client timeout, comprehensive webadmin tooltips
-- **v1.1.9** (January 16, 2026) - Traditional IRC service aliases (NickServ/ChanServ/MemoServ)
-- **v1.1.8** (January 16, 2026) - Comprehensive documentation reorganization, Apache/httpd multi-distro setup
-- **v1.1.7** (January 16, 2026) - WebChat configuration system, SELinux hardening, MOTD editor fixes
+**What's New in v2.0.0:**
+- 🎨 **Personalized Messaging** - ~185+ friendly, conversational messages throughout the system
+- 📚 **Enhanced Help System** - 100% command coverage with examples and fuzzy matching
+- ⚡ **Command Aliases** - 12 shortcuts for faster typing (/J, /P, /W, etc.)
+- 🌐 **Distributed Networks** - Trunk-and-branch topology with seamless cross-server operations
+- 🔒 **AGPL v3 Licensed** - Strong copyleft protection for network server software
 
 For complete version history, see [CHANGELOG.md](CHANGELOG.md)
 
