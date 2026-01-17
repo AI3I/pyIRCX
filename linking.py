@@ -1,6 +1,18 @@
 """
 pyIRCX Server Linking Module
-Implements server-to-server linking protocol
+Implements server-to-server linking protocol (pyIRCX-Only)
+
+IMPORTANT: This linking implementation is designed ONLY for pyIRCX-to-pyIRCX
+connections. It is NOT compatible with other IRC daemons (ircd-hybrid,
+UnrealIRCd, InspIRCd, etc.) and does not attempt RFC 2813 compliance.
+
+This allows us to:
+- Use enhanced protocol features without RFC constraints
+- Make breaking changes between major versions
+- Optimize for pyIRCX-specific behavior
+- Simplify version compatibility checking
+
+DO NOT attempt to link to non-pyIRCX servers.
 
 Copyright (C) 2026 pyIRCX Project
 
@@ -28,6 +40,13 @@ logger = logging.getLogger(__name__)
 
 # Will be set by pyircx.py when module is imported
 CONFIG = None
+
+# pyIRCX Linking Protocol
+PYIRCX_VERSION = "1.3.0"  # Software version
+LINKING_PROTOCOL_VERSION = "2"  # Protocol version (increment on breaking changes)
+MIN_COMPATIBLE_VERSION = "1.2.0"  # Minimum compatible pyIRCX version
+MAX_CLOCK_SKEW = 60  # Maximum acceptable clock skew in seconds (strict)
+CLOCK_SKEW_WARNING = 10  # Warn if skew exceeds this (non-fatal)
 _User = None  # Cache for User class to avoid reimporting
 _Channel = None  # Cache for Channel class to avoid reimporting
 
@@ -47,6 +66,14 @@ class LinkedServer:
         self.users: Set[str] = set()  # Nicknames from this server
         self.last_ping = time.time()
         self.last_pong = time.time()
+
+        # Burst state tracking
+        self.burst_complete = False
+
+        # Version and compatibility
+        self.version = None  # e.g., "1.3.0"
+        self.protocol_version = None  # e.g., "2"
+        self.time_delta = 0  # Detected clock skew in seconds
 
     async def send(self, message: str):
         """Send a message to this server"""
@@ -84,6 +111,11 @@ class ServerLinkManager:
         self.reconnect_attempts: Dict[str, int] = {}  # servername -> retry count
         self.reconnect_tasks: Dict[str, asyncio.Task] = {}  # servername -> task
         self.max_reconnect_delay = 60  # Maximum backoff delay in seconds
+
+        # Ping/Pong monitoring
+        self.ping_interval = 60  # Send PING every 60 seconds
+        self.ping_timeout = 120  # Expect PONG within 120 seconds
+        self.monitor_task = None  # Monitoring task
 
         # Validate server role
         valid_roles = ['standalone', 'trunk', 'branch']
@@ -128,6 +160,125 @@ class ServerLinkManager:
         # Anything else is invalid
         return False, f"Invalid role combination: {my_role} <-> {remote_role}"
 
+    async def _validate_version(self, line: str, remote_name: str, writer: asyncio.StreamWriter) -> bool:
+        """Validate remote server version"""
+        parts = line.split()
+        if len(parts) < 2 or parts[0] != 'VERSION':
+            logger.error(f"Invalid VERSION response from {remote_name}: {line}")
+            await self.send_to_writer(writer, f"ERROR :Invalid VERSION response")
+            writer.close()
+            return False
+
+        # Parse VERSION pyIRCX/1.3.0 PROTO/2
+        version_info = {}
+        for part in parts[1:]:
+            if '/' in part:
+                key, value = part.split('/', 1)
+                version_info[key] = value
+
+        remote_version = version_info.get('pyIRCX', '0.0.0')
+        remote_proto = version_info.get('PROTO', '1')
+
+        logger.info(f"Remote server {remote_name}: pyIRCX/{remote_version} PROTO/{remote_proto}")
+
+        # Check minimum version
+        if self._compare_versions(remote_version, MIN_COMPATIBLE_VERSION) < 0:
+            logger.error(
+                f"Incompatible pyIRCX version from {remote_name}: "
+                f"{remote_version} < {MIN_COMPATIBLE_VERSION} (minimum)"
+            )
+            await self.send_to_writer(
+                writer,
+                f"ERROR :Incompatible pyIRCX version {remote_version}. "
+                f"Minimum required: {MIN_COMPATIBLE_VERSION}"
+            )
+            writer.close()
+            return False
+
+        # Check protocol version (must match exactly for now)
+        if remote_proto != LINKING_PROTOCOL_VERSION:
+            logger.error(
+                f"Incompatible protocol version from {remote_name}: "
+                f"{remote_proto} != {LINKING_PROTOCOL_VERSION}"
+            )
+            await self.send_to_writer(
+                writer,
+                f"ERROR :Incompatible linking protocol {remote_proto}. "
+                f"Required: {LINKING_PROTOCOL_VERSION}"
+            )
+            writer.close()
+            return False
+
+        logger.info(f"Version check passed for {remote_name}")
+        return True
+
+    async def _validate_time_sync(self, line: str, remote_name: str, writer: asyncio.StreamWriter) -> Optional[int]:
+        """Validate time synchronization. Returns time_delta or None on failure."""
+        parts = line.split()
+        if len(parts) < 2 or parts[0] != 'TIMESYNC':
+            logger.error(f"Invalid TIMESYNC response from {remote_name}: {line}")
+            await self.send_to_writer(writer, f"ERROR :Invalid TIMESYNC response")
+            writer.close()
+            return None
+
+        try:
+            remote_time = int(parts[1])
+            local_time = int(time.time())
+            time_delta = abs(local_time - remote_time)
+
+            logger.info(f"Time sync check for {remote_name}: delta = {time_delta}s")
+
+            # Strict: Reject if >60 seconds
+            if time_delta > MAX_CLOCK_SKEW:
+                logger.error(
+                    f"Clock skew too large for {remote_name}: {time_delta}s > {MAX_CLOCK_SKEW}s limit. "
+                    f"Please synchronize clocks with NTP!"
+                )
+                await self.send_to_writer(
+                    writer,
+                    f"ERROR :Clock skew {time_delta}s exceeds {MAX_CLOCK_SKEW}s limit. "
+                    f"Synchronize clocks with NTP (same time source recommended)."
+                )
+                writer.close()
+                return None
+
+            # Warning if >10 seconds
+            if time_delta > CLOCK_SKEW_WARNING:
+                logger.warning(
+                    f"Clock skew detected for {remote_name}: {time_delta}s. "
+                    f"Allowing link but please sync NTP!"
+                )
+
+            logger.info(f"Time sync check passed for {remote_name}")
+            return remote_time - local_time  # Return signed delta
+
+        except (ValueError, IndexError) as e:
+            logger.error(f"Invalid TIMESYNC from {remote_name}: {e}")
+            await self.send_to_writer(writer, f"ERROR :Invalid TIMESYNC format")
+            writer.close()
+            return None
+
+    def _compare_versions(self, v1: str, v2: str) -> int:
+        """Compare semantic versions. Returns -1 if v1 < v2, 0 if equal, 1 if v1 > v2"""
+        try:
+            v1_parts = [int(x) for x in v1.split('.')]
+            v2_parts = [int(x) for x in v2.split('.')]
+
+            # Pad to same length
+            while len(v1_parts) < len(v2_parts):
+                v1_parts.append(0)
+            while len(v2_parts) < len(v1_parts):
+                v2_parts.append(0)
+
+            for a, b in zip(v1_parts, v2_parts):
+                if a < b:
+                    return -1
+                elif a > b:
+                    return 1
+            return 0
+        except ValueError:
+            return 0  # Can't compare, assume equal
+
     async def start(self):
         """Start the linking subsystem"""
         if not self.enabled:
@@ -148,6 +299,10 @@ class ServerLinkManager:
                 if link_cfg.get('autoconnect', False):
                     asyncio.create_task(self.connect_to_server(link_cfg))
 
+            # Start ping monitoring task
+            self.monitor_task = asyncio.create_task(self._monitor_links())
+            logger.info("Link monitoring task started")
+
         except Exception as e:
             logger.error(f"Failed to start server linking: {e}")
 
@@ -161,6 +316,45 @@ class ServerLinkManager:
         if self.link_server:
             self.link_server.close()
             await self.link_server.wait_closed()
+
+        # Stop monitoring task
+        if self.monitor_task:
+            self.monitor_task.cancel()
+
+    async def _monitor_links(self):
+        """Monitor all server links for health (ping/pong)"""
+        logger.info("Link health monitoring started")
+        try:
+            while True:
+                await asyncio.sleep(self.ping_interval)
+
+                current_time = time.time()
+
+                for servername, server in list(self.servers.items()):
+                    if not server.is_direct:
+                        continue  # Only monitor direct connections
+
+                    # Check if we need to send a PING
+                    time_since_ping = current_time - server.last_ping
+                    if time_since_ping >= self.ping_interval:
+                        await server.send(f"PING :{self.irc_server.servername}")
+                        server.last_ping = current_time
+                        logger.debug(f"Sent PING to {servername}")
+
+                    # Check if server has timed out (no PONG received)
+                    time_since_pong = current_time - server.last_pong
+                    if time_since_pong >= self.ping_timeout:
+                        logger.error(
+                            f"Server {servername} ping timeout "
+                            f"({time_since_pong:.0f}s since last PONG, limit {self.ping_timeout}s)"
+                        )
+                        # Trigger split handling
+                        await self.handle_server_split(server)
+
+        except asyncio.CancelledError:
+            logger.info("Link monitoring task cancelled")
+        except Exception as e:
+            logger.error(f"Link monitoring error: {e}")
 
     async def handle_incoming_link(self, reader: asyncio.StreamReader,
                                    writer: asyncio.StreamWriter):
@@ -204,16 +398,39 @@ class ServerLinkManager:
 
                     logger.info(f"Role validation passed: {self.server_role} <-> {remote_role}")
 
-                    # Create linked server
-                    server = LinkedServer(servername, hopcount, description, writer, remote_role)
-                    self.servers[servername] = server
-
                     # Send our SERVER line with role
                     network_name = CONFIG.get('server', 'network', default='IRCX Network')
                     await self.send_to_writer(
                         writer,
                         f"SERVER {self.irc_server.servername} {password} 0 {self.server_role} :{network_name}"
                     )
+
+                    # Receive VERSION from remote
+                    line = await asyncio.wait_for(reader.readline(), timeout=10.0)
+                    line = line.decode('utf-8', errors='replace').strip()
+                    if not await self._validate_version(line, servername, writer):
+                        return
+
+                    # Send our VERSION
+                    await self.send_to_writer(
+                        writer,
+                        f"VERSION pyIRCX/{PYIRCX_VERSION} PROTO/{LINKING_PROTOCOL_VERSION}"
+                    )
+
+                    # Receive TIMESYNC from remote
+                    line = await asyncio.wait_for(reader.readline(), timeout=10.0)
+                    line = line.decode('utf-8', errors='replace').strip()
+                    time_delta = await self._validate_time_sync(line, servername, writer)
+                    if time_delta is None:
+                        return  # Failed validation
+
+                    # Send our TIMESYNC
+                    await self.send_to_writer(writer, f"TIMESYNC {int(time.time())}")
+
+                    # Create linked server with time delta
+                    server = LinkedServer(servername, hopcount, description, writer, remote_role)
+                    server.time_delta = time_delta
+                    self.servers[servername] = server
 
                     # Burst our state
                     await self.burst_to_server(server)
@@ -271,8 +488,29 @@ class ServerLinkManager:
 
                 logger.info(f"Role validation passed: {self.server_role} <-> {remote_role}")
 
+                # Send VERSION and TIMESYNC
+                await self.send_to_writer(
+                    writer,
+                    f"VERSION pyIRCX/{PYIRCX_VERSION} PROTO/{LINKING_PROTOCOL_VERSION}"
+                )
+                await self.send_to_writer(writer, f"TIMESYNC {int(time.time())}")
+
+                # Receive VERSION
+                line = await asyncio.wait_for(reader.readline(), timeout=10.0)
+                line = line.decode('utf-8', errors='replace').strip()
+                if not await self._validate_version(line, remote_name, writer):
+                    return
+
+                # Receive TIMESYNC
+                line = await asyncio.wait_for(reader.readline(), timeout=10.0)
+                line = line.decode('utf-8', errors='replace').strip()
+                time_delta = await self._validate_time_sync(line, remote_name, writer)
+                if time_delta is None:
+                    return  # Failed validation, connection closed
+
                 # Create linked server
                 server = LinkedServer(remote_name, hopcount, description, writer, remote_role)
+                server.time_delta = time_delta
                 self.servers[remote_name] = server
 
                 # Burst our state
@@ -400,6 +638,10 @@ class ServerLinkManager:
                         f"TOPIC {chan_name} {self.irc_server.servername} {int(time.time())} :{channel.topic}"
                     )
 
+        # Send End of Burst marker
+        await server.send("EOB")
+        logger.info(f"Sent EOB (End of Burst) to {server.name}")
+
     async def read_server_messages(self, server: LinkedServer, reader: asyncio.StreamReader):
         """Read and process messages from a linked server"""
         try:
@@ -453,6 +695,10 @@ class ServerLinkManager:
                 await server.send(f"PONG {self.irc_server.servername} {parts[1]}")
         elif cmd == 'PONG':
             server.last_pong = time.time()
+        elif cmd == 'EOB':
+            # End of Burst received
+            server.burst_complete = True
+            logger.info(f"Received EOB from {server.name} - burst complete")
         elif cmd == 'SQUIT':
             # Server quit
             if len(parts) >= 2:
@@ -1535,6 +1781,11 @@ class ServerLinkManager:
             f":{self.irc_server.servername} NOTICE * :Server {server.name} has split",
             exclude_modes='a'
         )
+
+        # Propagate SQUIT to all other linked servers
+        squit_msg = f"SQUIT {server.name} :{server.name} {self.irc_server.servername}"
+        await self.broadcast_to_servers(squit_msg, exclude_server=server.name)
+        logger.info(f"Propagated SQUIT for {server.name} to all linked servers")
 
         # Schedule reconnect if this was an autoconnect link
         for link_cfg in self.links_config:
