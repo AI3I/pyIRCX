@@ -2052,11 +2052,15 @@ class pyIRCXServer:
             window=CONFIG.get('security', 'auth_lockout_window', default=600)
         )
 
-        # Database connection pool
-        self.db_pool = DatabasePool(
-            CONFIG.get('database', 'path', default='pyircx.db'),
-            pool_size=CONFIG.get('database', 'pool_size', default=5)
-        )
+        # Database connection pool (only for trunk servers)
+        server_role = CONFIG.get('linking', 'server_role', default='trunk')
+        if server_role == 'trunk':
+            self.db_pool = DatabasePool(
+                CONFIG.get('database', 'path', default='pyircx.db'),
+                pool_size=CONFIG.get('database', 'pool_size', default=5)
+            )
+        else:
+            self.db_pool = None  # Branch servers don't need database
 
         # CAP negotiation timeout (seconds)
         self.cap_timeout = CONFIG.get('security', 'cap_timeout', default=60)
@@ -2503,9 +2507,14 @@ class pyIRCXServer:
         except Exception as e:
             logger.warning(f"Could not validate config file permissions: {e}")
 
-        async with aiosqlite.connect(CONFIG.get('database', 'path', default='ircx_server.db')) as db:
-            # Staff users table with all required columns
-            await db.execute("""CREATE TABLE IF NOT EXISTS users (
+        # Check server role - only trunk servers need database initialization
+        server_role = CONFIG.get('linking', 'server_role', default='trunk')
+        is_trunk = (server_role == 'trunk')
+
+        if is_trunk:
+            async with aiosqlite.connect(CONFIG.get('database', 'path', default='ircx_server.db')) as db:
+                # Staff users table with all required columns
+                await db.execute("""CREATE TABLE IF NOT EXISTS users (
                 username TEXT PRIMARY KEY,
                 password_hash TEXT,
                 level TEXT,
@@ -2640,9 +2649,12 @@ class pyIRCXServer:
                 read INTEGER DEFAULT 0
             )""")
 
-            await db.commit()
-        logger.info("Database initialized")
+                await db.commit()
+            logger.info("Database initialized (trunk)")
+        else:
+            logger.info("Skipping database initialization (branch server)")
 
+        # Load ACCESS list (branches will have empty list until synced)
         await self._load_access_list()
 
         # Channels are now dynamic - only loaded when users join
@@ -2729,15 +2741,25 @@ class pyIRCXServer:
 
         # Removed: periodic_save - channels now persist on registration, not periodically
 
-        # Initialize database connection pool
-        await self.db_pool.initialize()
+        # Initialize database connection pool (trunk only)
+        if self.db_pool:
+            await self.db_pool.initialize()
+            logger.info("Database connection pool initialized")
 
         # Start CAP timeout monitor
         self.cap_timeout_task = asyncio.create_task(self._cap_timeout_monitor())
         logger.info(f"CAP timeout monitor started ({self.cap_timeout}s timeout)")
 
     async def _load_access_list(self):
-        """Load server-wide ACCESS rules from database"""
+        """Load server-wide ACCESS rules from database (trunk only)"""
+        server_role = CONFIG.get('linking', 'server_role', default='trunk')
+
+        # Branches don't load from database - they keep ACCESS in-memory only
+        if server_role == 'branch':
+            logger.info("ACCESS list: In-memory only (branch server)")
+            return
+
+        # Trunk loads from database
         try:
             async with aiosqlite.connect(CONFIG.get('database', 'path')) as db:
                 # Ensure timeout column exists (migration)
@@ -8033,6 +8055,23 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :Password must be at least 6 characters")
             return
 
+        # Check if branch in centralized mode - proxy to trunk
+        if not CONFIG.get('services', 'is_services_hub') and \
+           CONFIG.get('services', 'mode') == 'centralized':
+            if self.link_manager and self.link_manager.servers:
+                trunk_server = next((s for s in self.link_manager.servers.values() if s.role == 'trunk'), None)
+                if trunk_server:
+                    await trunk_server.send(f"REGCMD {user.nickname} CHGPASS {old_pass} {new_pass}")
+                    logger.debug(f"Proxied CHGPASS from {user.nickname} to trunk")
+                    return
+                else:
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :Service unavailable (trunk not connected)")
+                    return
+            else:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Service unavailable")
+                return
+
+        # Trunk server - process locally
         try:
             async with aiosqlite.connect(CONFIG.get('database', 'path')) as db:
                 # Only check registered nicks table (staff use STAFF PASS)

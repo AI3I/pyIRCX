@@ -1344,6 +1344,39 @@ class ServerLinkManager:
                     await server.send(f"REGREPLY {nickname} :Channel {chan_name} has been unregistered")
                     logger.info(f"Channel unregistration: {chan_name} unregistered by {nickname} via {server.name}")
 
+            elif subcmd == 'CHGPASS':
+                # REGCMD <nickname> CHGPASS <old_password> <new_password>
+                if len(parts) < 5:
+                    await server.send(f"REGREPLY {nickname} :Error: Invalid CHGPASS syntax")
+                    return
+
+                old_pass = parts[3]
+                new_pass = parts[4]
+
+                async with aiosqlite.connect(CONFIG.get('database', 'path')) as db:
+                    # Check registered nickname
+                    async with db.execute("SELECT password_hash FROM registered_nicks WHERE nickname = ?",
+                                         (nickname,)) as cursor:
+                        row = await cursor.fetchone()
+                        if not row:
+                            await server.send(f"REGREPLY {nickname} :Error: Nickname not registered")
+                            return
+
+                        # Verify old password
+                        if not await check_password_async(old_pass, row[0]):
+                            await server.send(f"REGREPLY {nickname} :Error: Incorrect password")
+                            return
+
+                        # Update password
+                        new_hash = await hash_password_async(new_pass)
+                        await db.execute("UPDATE registered_nicks SET password_hash = ? WHERE nickname = ?",
+                                        (new_hash, nickname))
+                        await db.commit()
+
+                        # Send success reply
+                        await server.send(f"REGREPLY {nickname} :Password changed successfully")
+                        logger.info(f"CHGPASS: {nickname} changed password via {server.name}")
+
             else:
                 await server.send(f"REGREPLY {nickname} :Error: Unknown registration command {subcmd}")
 
