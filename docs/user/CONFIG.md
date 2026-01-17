@@ -40,7 +40,7 @@ To disable IPv6, set `network.enable_ipv6` to `false`. To use a specific IPv6 ad
 | Option | Default | Description |
 |--------|---------|-------------|
 | `database.path` | `"pyircx.db"` | SQLite database file path |
-| `database.pool_size` | `10` | Number of pooled database connections (increased in v1.1.6 for web admin concurrency) |
+| `database.pool_size` | `10` | Number of pooled database connections (supports concurrent web admin operations) |
 
 ## System Bot Settings
 

@@ -174,7 +174,7 @@ location /webadmin/ {
 
 ## Security Recommendations
 
-1. **Session Authentication**: Web admin uses IRC staff account authentication with CSRF protection (v1.1.6+)
+1. **Session Authentication**: Web admin uses IRC staff account authentication with CSRF protection (v2.0.0)
 2. **Use HTTPS**: Configure SSL/TLS certificate for encrypted connections
 3. **Restrict access**: Use firewall rules or web server IP restrictions to limit admin panel access
 4. **SELinux Enforcement**: Keep SELinux enabled for mandatory access control (recommended on RHEL/Fedora/CentOS)

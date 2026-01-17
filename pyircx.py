@@ -2592,14 +2592,6 @@ class pyIRCXServer:
                 FOREIGN KEY (owner_uuid) REFERENCES registered_nicks(uuid)
             )""")
 
-            # Add properties column if it doesn't exist (migration)
-            try:
-                await db.execute("ALTER TABLE registered_channels ADD COLUMN properties TEXT")
-            except aiosqlite.OperationalError:
-                pass  # Column already exists
-
-            # Removed: reg_chans table (legacy - now using registered_channels with properties JSON)
-
             # Server access rules
             await db.execute("""CREATE TABLE IF NOT EXISTS server_access (
                 id INTEGER PRIMARY KEY,
@@ -2610,12 +2602,6 @@ class pyIRCXServer:
                 reason TEXT,
                 timeout INTEGER DEFAULT 0
             )""")
-
-            # Migrate server_access table schema (add timeout column for existing installations)
-            try:
-                await db.execute("ALTER TABLE server_access ADD COLUMN timeout INTEGER DEFAULT 0")
-            except aiosqlite.OperationalError:
-                pass  # Column already exists
 
             # Messenger mailbox
             await db.execute("""CREATE TABLE IF NOT EXISTS mailbox (
@@ -2762,12 +2748,6 @@ class pyIRCXServer:
         # Trunk loads from database
         try:
             async with aiosqlite.connect(CONFIG.get('database', 'path')) as db:
-                # Ensure timeout column exists (migration)
-                try:
-                    await db.execute("ALTER TABLE server_access ADD COLUMN timeout INTEGER DEFAULT 0")
-                    await db.commit()
-                except aiosqlite.OperationalError:
-                    pass  # Column already exists
                 async with db.execute("SELECT type, pattern, set_by, set_at, COALESCE(timeout, 0), reason FROM server_access") as cursor:
                     now = int(time.time())
                     async for row in cursor:
@@ -6356,7 +6336,7 @@ class pyIRCXServer:
                     return
 
             elif len(params) == 3:
-                # STAFF PASS <username> <newpass> - legacy format (ADMIN only, local only)
+                # STAFF PASS <username> <newpass> - ADMIN-only shorthand (trunk only)
                 if not is_admin:
                     await user.send(f":{self.servername} NOTICE {user.nickname} :Your old password is required when changing your own password")
                     await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: STAFF PASS <username> <oldpassword> <newpassword>")

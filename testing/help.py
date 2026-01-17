@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-pyIRCX v1.1.5 HELP System Test Suite
+pyIRCX v2.0.0 HELP System Test Suite
 Tests HELP command and all help topics, especially new REGISTER topic
 
 Test Staff Accounts:
@@ -70,7 +70,7 @@ async def test_help_main_menu():
 
     assert has_help_header, "HELP should show help header"
     assert has_commands, "HELP should list COMMANDS topic"
-    assert has_register, "HELP should list REGISTER topic (v1.1.5)"
+    assert has_register, "HELP should list REGISTER topic (v2.0.0)"
 
     await client.disconnect()
 
@@ -106,7 +106,7 @@ async def test_help_topic_count():
 
 
 # ==============================================================================
-# HELP REGISTER Topic (NEW in v1.1.5)
+# HELP REGISTER Topic (NEW in v2.0.0)
 # ==============================================================================
 
 @runner.test("HELP REGISTER - Topic exists")
@@ -232,7 +232,7 @@ async def test_help_commands_has_registration():
         if "egistration" in line or "REGISTER" in line:
             print(f"   Found: {line[:80]}...")
 
-    assert has_registration, "HELP COMMANDS should include Registration category (v1.1.5)"
+    assert has_registration, "HELP COMMANDS should include Registration category (v2.0.0)"
 
     await client.disconnect()
 

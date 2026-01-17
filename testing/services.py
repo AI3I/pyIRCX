@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-pyIRCX v1.1.5 Service Improvements Test Suite
-Tests Registrar and ServiceBot HELP commands, case-insensitive routing
+pyIRCX v2.0.0 Service Test Suite
+Tests Registrar and ServiceBot functionality, HELP commands, case-insensitive routing
 
 Test Staff Accounts:
   - admin/testpass (ADMIN) - Can invite ServiceBots
@@ -37,7 +37,7 @@ runner = TestRunner()
 
 
 # ==============================================================================
-# Registrar Service HELP Command (NEW in v1.1.5)
+# Registrar Service HELP Command (NEW in v2.0.0)
 # ==============================================================================
 
 @runner.test("Registrar HELP - Exists")
@@ -98,7 +98,7 @@ async def test_registrar_help_comprehensive():
 
 
 # ==============================================================================
-# ServiceBot Case-Insensitive Routing (FIXED in v1.1.5)
+# ServiceBot Case-Insensitive Routing (FIXED in v2.0.0)
 # ==============================================================================
 
 @runner.test("ServiceBot - Uppercase routing")
@@ -144,7 +144,7 @@ async def test_servicebot_help_lowercase():
         if "ervice" in line:
             print(f"   {line[:80]}...")
 
-    assert has_response, "servicebot01 (lowercase) should respond to HELP (v1.1.5 fix)"
+    assert has_response, "servicebot01 (lowercase) should respond to HELP (v2.0.0 fix)"
 
     await client.disconnect()
 
@@ -166,7 +166,7 @@ async def test_servicebot_help_mixedcase():
 
     print(f"   SERVICEBOT01 responds: {has_response}")
 
-    assert has_response, "SERVICEBOT01 (all caps) should respond to HELP (v1.1.5 fix)"
+    assert has_response, "SERVICEBOT01 (all caps) should respond to HELP (v2.0.0 fix)"
 
     await client.disconnect()
 
@@ -194,7 +194,7 @@ async def test_servicebot_status_case_insensitive():
 
 
 # ==============================================================================
-# ServiceBot Enhanced HELP Command (ENHANCED in v1.1.5)
+# ServiceBot Enhanced HELP Command (ENHANCED in v2.0.0)
 # ==============================================================================
 
 @runner.test("ServiceBot HELP - Comprehensive")
@@ -224,7 +224,7 @@ async def test_servicebot_help_comprehensive():
         if "ServiceBot" in line:
             print(f"   {line[:80]}...")
 
-    assert has_header or has_monitoring, "ServiceBot HELP should be comprehensive (v1.1.5)"
+    assert has_header or has_monitoring, "ServiceBot HELP should be comprehensive (v2.0.0)"
 
     await client.disconnect()
 
@@ -246,7 +246,7 @@ async def test_servicebot_help_shows_actions():
 
     print(f"   Actions documented: {has_actions}")
 
-    assert has_actions, "ServiceBot HELP should document actions (v1.1.5)"
+    assert has_actions, "ServiceBot HELP should document actions (v2.0.0)"
 
     await client.disconnect()
 
@@ -268,13 +268,13 @@ async def test_servicebot_help_shows_invitation():
 
     print(f"   Invitation instructions: {has_invite}")
 
-    assert has_invite, "ServiceBot HELP should show invitation instructions (v1.1.5)"
+    assert has_invite, "ServiceBot HELP should show invitation instructions (v2.0.0)"
 
     await client.disconnect()
 
 
 # ==============================================================================
-# ServiceBot Enhanced STATUS Command (ENHANCED in v1.1.5)
+# ServiceBot Enhanced STATUS Command (ENHANCED in v2.0.0)
 # ==============================================================================
 
 @runner.test("ServiceBot STATUS - Shows channels")
@@ -308,7 +308,7 @@ async def test_servicebot_status_shows_channels():
         if "Status" in line or "Active" in line or "#test" in line:
             print(f"   {line[:80]}...")
 
-    assert has_capacity, "ServiceBot STATUS should show capacity info (v1.1.5)"
+    assert has_capacity, "ServiceBot STATUS should show capacity info (v2.0.0)"
 
     await client.disconnect()
 
@@ -330,7 +330,7 @@ async def test_servicebot_status_shows_detection():
 
     print(f"   Detection status: {has_detection}")
 
-    assert has_detection, "ServiceBot STATUS should show detection status (v1.1.5)"
+    assert has_detection, "ServiceBot STATUS should show detection status (v2.0.0)"
 
     await client.disconnect()
 

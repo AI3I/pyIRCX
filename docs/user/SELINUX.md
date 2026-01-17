@@ -214,7 +214,7 @@ The `install.sh` script automatically configures all SELinux contexts. If you're
 
 ## Version History
 
-- **v1.1.6** - Initial comprehensive SELinux documentation
+- **v2.0.0** - Initial comprehensive SELinux documentation
 - Added webchat.conf special handling for systemd
 - Fixed webadmin contexts (httpd_sys_rw_content_t required)
 

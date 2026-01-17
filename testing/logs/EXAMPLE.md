@@ -9,7 +9,7 @@
 
 ## Test Environment
 
-**Test Runner**: pyIRCX v1.1.5
+**Test Runner**: pyIRCX v2.0.0
 
 - **Python Version**: 3.14.2
 - **Test Suites Found**: 8
@@ -52,9 +52,9 @@
 - Staff Authentication (39 tests)
 - Server Linking (4 tests)
 - Access Control (10 tests)
-- v1.1.5 STATS System (16 tests)
-- v1.1.5 HELP System (15 tests)
-- v1.1.5 Service Improvements (13 tests)
+- v2.0.0 STATS System (16 tests)
+- v2.0.0 HELP System (15 tests)
+- v2.0.0 Service Improvements (13 tests)
 
 ---
 

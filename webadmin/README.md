@@ -22,7 +22,7 @@ Your web admin is now live and fully functional, replacing the old Cockpit inter
 - ✅ **Pure JavaScript** - No jQuery, no external dependencies
 - ✅ **Mobile responsive** - Sidebar collapses on mobile devices
 
-### Security Features (v1.1.6+)
+### Security Features (v2.0.0)
 - ✅ **CSRF Token Protection** - All API endpoints protected against cross-site request forgery
 - ✅ **Secure Session Handling** - HttpOnly, SameSite=Strict cookies with HTTP/HTTPS auto-detection
 - ✅ **Stdin Password Auth** - Passwords never exposed in process lists
@@ -80,11 +80,11 @@ Your web admin is now live and fully functional, replacing the old Cockpit inter
 - Monitor user communications
 
 ### Configuration Page
-- **MOTD Editor** - Edit Message of the Day with blank line preservation (v1.1.7+)
+- **MOTD Editor** - Edit Message of the Day with blank line preservation (v2.0.0+)
 - View server configuration
 - Edit JSON config directly
 - Auto-restart after save
-- Changes persist correctly (fixed in v1.1.7)
+- Changes persist correctly (fixed in v2.0.0)
 
 ### Logs Page
 - View server logs
