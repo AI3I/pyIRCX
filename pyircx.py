@@ -3209,6 +3209,8 @@ class pyIRCXServer:
             await self.handle_squit(user, params)
         elif cmd == "LINKS":
             await self.handle_links(user, params)
+        elif cmd == "MAP":
+            await self.handle_map(user, params)
         elif cmd == "ADMIN":
             await user.send(self.get_reply("256", user))
             await user.send(self.get_reply("257", user))
@@ -3310,6 +3312,11 @@ class pyIRCXServer:
                         if member.nickname not in notified:
                             await member.send(nick_msg)
                             notified.add(member.nickname)
+
+            # Propagate NICK change to linked servers (if not a remote user)
+            if self.link_manager and self.link_manager.enabled:
+                if not (hasattr(user, 'is_remote') and user.is_remote):
+                    await self.link_manager.broadcast_to_servers(nick_msg)
         else:
             # Just update channel membership for unregistered users
             for cn in list(user.channels):
@@ -3789,9 +3796,15 @@ class pyIRCXServer:
                 if not target_user:
                     await user.send(self.get_reply("401", user, target=target_nick))
                     return
-                # Send only to target
+                # Send to target (local or route to remote server)
                 whisper_out = f"{source} WHISPER {chan_name} {target_nick} :{text}"
-                await target_user.send(whisper_out)
+                if hasattr(target_user, 'is_remote') and target_user.is_remote:
+                    # Target is on a remote server, route through link manager
+                    if self.link_manager and self.link_manager.enabled:
+                        await self.link_manager.broadcast_to_servers(whisper_out)
+                else:
+                    # Target is local, send directly
+                    await target_user.send(whisper_out)
                 self.stats['messages_sent'] += 1
                 return
 
@@ -4053,6 +4066,11 @@ class pyIRCXServer:
                     continue
 
             if not target:
+                # Route WHOIS query to linked servers if target not found locally
+                if self.link_manager and self.link_manager.enabled:
+                    whois_msg = f":{user.prefix()} WHOIS {target_nick}"
+                    await self.link_manager.broadcast_to_servers(whois_msg)
+                # Still send error to user (remote server will send replies directly if found)
                 await user.send(self.get_reply("401", user, target=target_nick))
                 continue
             await user.send(self.get_reply("311", user, target=target.nickname, ident=target.username,
@@ -4373,9 +4391,19 @@ class pyIRCXServer:
         if params:
             user.away_msg = params[0].lstrip(':')
             await user.send(self.get_reply("306", user))
+            # Propagate AWAY status to linked servers
+            if self.link_manager and self.link_manager.enabled:
+                if not (hasattr(user, 'is_remote') and user.is_remote):
+                    away_msg = f":{user.prefix()} AWAY :{user.away_msg}"
+                    await self.link_manager.broadcast_to_servers(away_msg)
         else:
             user.away_msg = None
             await user.send(self.get_reply("305", user))
+            # Propagate AWAY removal (no message = back from away)
+            if self.link_manager and self.link_manager.enabled:
+                if not (hasattr(user, 'is_remote') and user.is_remote):
+                    away_msg = f":{user.prefix()} AWAY"
+                    await self.link_manager.broadcast_to_servers(away_msg)
 
 
     async def handle_topic(self, user, params):
@@ -4551,9 +4579,20 @@ class pyIRCXServer:
         if message:
             knock_msg = f":{self.servername} 710 {chan_name} {user.nickname} {user.prefix()} :has asked for an invite ({message})"
 
+        # Send to LOCAL owners/hosts only
         for nick in channel.members:
             if nick in channel.owners or nick in channel.hosts:
-                channel.members[nick].send(knock_msg)
+                member = channel.members[nick]
+                if not (hasattr(member, 'is_remote') and member.is_remote):
+                    await member.send(knock_msg)
+
+        # Propagate KNOCK to linked servers
+        if self.link_manager and self.link_manager.enabled:
+            if not (hasattr(user, 'is_remote') and user.is_remote):
+                knock_cmd = f":{user.prefix()} KNOCK {chan_name}"
+                if message:
+                    knock_cmd += f" :{message}"
+                await self.link_manager.broadcast_to_servers(knock_cmd)
 
         await user.send(f":{self.servername} 711 {user.nickname} {chan_name} :Your KNOCK has been delivered")
 
@@ -4691,6 +4730,12 @@ class pyIRCXServer:
         await user.send(self.get_reply("819", user, target=chan_name,
                                  prop=prop_name, value=prop_value))
         logger.info(f"PROP {chan_name} {prop_name}={prop_value} by {user.nickname}")
+
+        # Propagate PROP command to linked servers
+        if self.link_manager and self.link_manager.enabled:
+            if not (hasattr(user, 'is_remote') and user.is_remote):
+                prop_cmd = f":{user.prefix()} PROP {' '.join(params)}"
+                await self.link_manager.broadcast_to_servers(prop_cmd)
 
     async def handle_invite(self, user, params):
         if len(params) < 2:
@@ -4965,6 +5010,12 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :ACCESS {level} added to {target_name}: {mask}{timeout_str}")
             logger.info(f"ACCESS {target_name} ADD {level} {mask} by {user.nickname}")
 
+            # Propagate ACCESS command to linked servers (for channels only)
+            if not is_server_access and self.link_manager and self.link_manager.enabled:
+                if not (hasattr(user, 'is_remote') and user.is_remote):
+                    access_cmd = f":{user.prefix()} ACCESS {' '.join(params)}"
+                    await self.link_manager.broadcast_to_servers(access_cmd)
+
         elif action in ("DELETE", "DEL"):
             if len(params) < 4:
                 await user.send(self.get_reply("461", user, command="ACCESS DELETE"))
@@ -5016,6 +5067,12 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :ACCESS {level} removed from {target_name}: {mask}")
             logger.info(f"ACCESS {target_name} DEL {level} {mask} by {user.nickname}")
 
+            # Propagate ACCESS DELETE to linked servers (for channels only)
+            if not is_server_access and self.link_manager and self.link_manager.enabled:
+                if not (hasattr(user, 'is_remote') and user.is_remote):
+                    access_cmd = f":{user.prefix()} ACCESS {' '.join(params)}"
+                    await self.link_manager.broadcast_to_servers(access_cmd)
+
         elif action == "CLEAR":
             level = params[2].upper() if len(params) > 2 else None
 
@@ -5052,6 +5109,12 @@ class pyIRCXServer:
 
             level_str = level if level else "all levels"
             await user.send(f":{self.servername} NOTICE {user.nickname} :Cleared {cleared} entries from {target_name} ({level_str})")
+
+            # Propagate ACCESS CLEAR to linked servers (for channels only)
+            if not is_server_access and self.link_manager and self.link_manager.enabled:
+                if not (hasattr(user, 'is_remote') and user.is_remote):
+                    access_cmd = f":{user.prefix()} ACCESS {' '.join(params)}"
+                    await self.link_manager.broadcast_to_servers(access_cmd)
             logger.info(f"ACCESS {target_name} CLEAR {level_str} by {user.nickname}")
 
         else:
@@ -5881,6 +5944,32 @@ class pyIRCXServer:
             await user.send(f":{self.servername} 364 {user.nickname} {server_name} {uplink} :{hopcount} {desc}")
 
         await user.send(f":{self.servername} 365 {user.nickname} * :End of /LINKS list")
+
+    async def handle_map(self, user, params):
+        """
+        MAP command - Show network topology as a tree.
+        Syntax: MAP
+        """
+        if not hasattr(self, 'link_manager') or not self.link_manager:
+            # No linking enabled, just show this server
+            local_users = sum(1 for u in self.users.values() if not u.is_virtual)
+            await user.send(f":{self.servername} 006 {user.nickname} :{self.servername} ({local_users})")
+            await user.send(f":{self.servername} 007 {user.nickname} :End of /MAP")
+            return
+
+        # Count local users
+        local_users = sum(1 for u in self.users.values() if not u.is_virtual and not (hasattr(u, 'is_remote') and u.is_remote))
+
+        # Show local server
+        await user.send(f":{self.servername} 006 {user.nickname} :{self.servername} ({local_users})")
+
+        # Show linked servers with indentation
+        for server_name, linked_server in self.link_manager.linked_servers.items():
+            remote_users = linked_server.user_count if hasattr(linked_server, 'user_count') else 0
+            indent = "  " if linked_server.is_direct else "    "
+            await user.send(f":{self.servername} 006 {user.nickname} :{indent}`-{server_name} ({remote_users})")
+
+        await user.send(f":{self.servername} 007 {user.nickname} :End of /MAP")
 
     async def handle_staff(self, user, params):
         """
@@ -6993,11 +7082,22 @@ class pyIRCXServer:
 
     async def handle_lusers(self, user):
         """Handle LUSERS command - display user statistics"""
-        total_users = sum(1 for u in self.users.values() if not u.is_virtual)
-        # Staff count includes staff users AND services/bots
-        ops = sum(1 for u in self.users.values() if u.is_staff() or u.is_virtual)
+        # Count local users (not virtual, not remote)
+        local_users = sum(1 for u in self.users.values() if not u.is_virtual and not (hasattr(u, 'is_remote') and u.is_remote))
+        # Count remote users (from linked servers)
+        remote_users = sum(1 for u in self.users.values() if not u.is_virtual and hasattr(u, 'is_remote') and u.is_remote)
+        # Total users
+        total_users = local_users + remote_users
+
+        # Staff count includes staff users AND services/bots (local only for accuracy)
+        ops = sum(1 for u in self.users.values() if (u.is_staff() or u.is_virtual) and not (hasattr(u, 'is_remote') and u.is_remote))
         unknown = 0  # Connections not yet registered
         channels = len(self.channels)
+
+        # Count linked servers
+        server_count = 1  # This server
+        if hasattr(self, 'link_manager') and self.link_manager:
+            server_count += len(self.link_manager.linked_servers)
 
         # Only show invisible count to staff
         is_staff = user.is_staff()
@@ -7006,13 +7106,13 @@ class pyIRCXServer:
         else:
             invisible = 0  # Hide from non-staff
 
-        await user.send(self.get_reply("251", user, users=total_users, invisible=invisible, server_count=1))
+        await user.send(self.get_reply("251", user, users=total_users, invisible=invisible, server_count=server_count))
         await user.send(self.get_reply("252", user, ops=ops))
         if unknown > 0:
             await user.send(self.get_reply("253", user, unknown=unknown))
         await user.send(self.get_reply("254", user, channels=channels))
         await user.send(self.get_reply("255", user, users=total_users))
-        await user.send(self.get_reply("265", user, local=total_users, local_max=self.max_users_seen))
+        await user.send(self.get_reply("265", user, local=local_users, local_max=self.max_users_seen))
         await user.send(self.get_reply("266", user, global_users=total_users, global_max=self.max_users_seen))
 
     async def handle_ison(self, user, params):
@@ -9356,6 +9456,13 @@ class pyIRCXServer:
         # Send confirmation NOTICE to staff member
         await staff.send(f":{self.servername} NOTICE {staff.nickname} :*** User {target_nick} has been killed ({reason})")
         await self.log_staff(staff.nickname, "KILL", target_nick, reason)
+
+        # Propagate KILL to linked servers for network-wide termination
+        if self.link_manager and self.link_manager.enabled:
+            if not (hasattr(target, 'is_remote') and target.is_remote):
+                kill_msg = f":{staff.prefix()} KILL {target_nick} :{reason}"
+                await self.link_manager.broadcast_to_servers(kill_msg)
+
         await self.quit_user(target)
 
     async def _kill_channel(self, staff, channel_name, reason):
@@ -9477,7 +9584,12 @@ class pyIRCXServer:
                         # +i can be toggled by user
                         user.set_mode('i', adding)
                         sign = '+' if adding else '-'
-                        await user.send(f":{user.nickname} MODE {user.nickname} :{sign}i")
+                        mode_msg = f":{user.nickname} MODE {user.nickname} :{sign}i"
+                        await user.send(mode_msg)
+                        # Propagate user MODE change to linked servers
+                        if self.link_manager and self.link_manager.enabled:
+                            if not (hasattr(user, 'is_remote') and user.is_remote):
+                                await self.link_manager.broadcast_to_servers(mode_msg)
                     else:
                         # Unknown mode
                         await user.send(f":{self.servername} 501 {user.nickname} :Unknown MODE flag")
@@ -9704,6 +9816,13 @@ class pyIRCXServer:
                 # Sync to clones if this is the original (skip +d and +e)
                 if char not in ('d', 'e') and channel.is_clone_enabled() and channel.clone_children:
                     await self.sync_mode_to_clones(channel, char, adding)
+
+        # Propagate MODE changes to linked servers
+        if self.link_manager and self.link_manager.enabled:
+            if not (hasattr(user, 'is_remote') and user.is_remote):
+                mode_args_str = ' '.join(mode_params) if mode_params else ''
+                mode_cmd = f":{user.prefix()} MODE {channel.name} {mode_str} {mode_args_str}".strip()
+                await self.link_manager.broadcast_to_servers(mode_cmd)
 
         # Log the mode change to transcript if +y is enabled
         mode_args = ' '.join(mode_params) if mode_params else ''

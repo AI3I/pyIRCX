@@ -909,7 +909,7 @@ class ServerLinkManager:
                     channel = self.irc_server.channels.get(target)
                     if channel and len(parts) >= 4:
                         modes = parts[3]
-                        # Parse mode parameters (nicknames for +q/+o/+v etc)
+                        # Parse mode parameters
                         mode_params = parts[4:] if len(parts) > 4 else []
 
                         adding = True
@@ -945,12 +945,75 @@ class ServerLinkManager:
                                         else:
                                             channel.voices.discard(target_nick)
                                             logger.info(f"Remote MODE: Removed {target_nick} as voice in {target}")
+                            elif char == 'b':  # Ban list
+                                if param_idx < len(mode_params):
+                                    ban_mask = mode_params[param_idx]
+                                    param_idx += 1
+                                    if adding:
+                                        if ban_mask not in channel.ban_list:
+                                            channel.ban_list.append(ban_mask)
+                                            logger.info(f"Remote MODE: Added ban {ban_mask} to {target}")
+                                    else:
+                                        if ban_mask in channel.ban_list:
+                                            channel.ban_list.remove(ban_mask)
+                                            logger.info(f"Remote MODE: Removed ban {ban_mask} from {target}")
+                            elif char == 'k':  # Key
+                                if adding:
+                                    if param_idx < len(mode_params):
+                                        channel.key = mode_params[param_idx]
+                                        channel.modes['k'] = True
+                                        param_idx += 1
+                                        logger.info(f"Remote MODE: Set key on {target}")
+                                else:
+                                    channel.key = None
+                                    channel.modes['k'] = False
+                                    logger.info(f"Remote MODE: Removed key from {target}")
+                            elif char == 'l':  # Limit
+                                if adding:
+                                    if param_idx < len(mode_params):
+                                        try:
+                                            channel.user_limit = int(mode_params[param_idx])
+                                            channel.modes['l'] = True
+                                            param_idx += 1
+                                            logger.info(f"Remote MODE: Set limit on {target}")
+                                        except ValueError:
+                                            param_idx += 1
+                                else:
+                                    channel.user_limit = None
+                                    channel.modes['l'] = False
+                                    logger.info(f"Remote MODE: Removed limit from {target}")
+                            elif char in channel.modes:
+                                # Other simple flags (t, m, n, i, s, etc.)
+                                channel.modes[char] = adding
+                                logger.info(f"Remote MODE: Set {target} {'+' if adding else '-'}{char}")
 
                         # Broadcast to LOCAL channel members only
                         for member in channel.members.values():
                             is_remote = hasattr(member, 'is_remote') and member.is_remote
                             if not is_remote:
                                 await member.send(line)
+                        # Forward MODE to other linked servers ONLY if we're trunk
+                        if self.server_role == 'trunk':
+                            await self.broadcast_to_servers(line, exclude_server=server.name)
+                else:
+                    # User mode change
+                    # Format: :nickname MODE nickname :+i or :-i
+                    user = self.irc_server.users.get(target)
+                    if user and len(parts) >= 4:
+                        modes = parts[3].lstrip(':')
+                        adding = True
+                        for char in modes:
+                            if char == '+':
+                                adding = True
+                            elif char == '-':
+                                adding = False
+                            elif char == 'i':
+                                # Update invisible mode
+                                user.set_mode('i', adding)
+                                logger.info(f"Remote MODE: {target} {'set' if adding else 'unset'} +i")
+                            # Other user modes (o, a, g, s, etc.) are typically server-controlled
+                            # and shouldn't be propagated from remote servers for security
+
                         # Forward MODE to other linked servers ONLY if we're trunk
                         if self.server_role == 'trunk':
                             await self.broadcast_to_servers(line, exclude_server=server.name)
@@ -1005,6 +1068,253 @@ class ServerLinkManager:
                     # Target not found locally - forward to other servers ONLY if we're trunk
                     if self.server_role == 'trunk':
                         await self.broadcast_to_servers(line, exclude_server=server.name)
+
+        elif cmd == 'NICK':
+            # Nickname change
+            # Format: :oldnick!user@host NICK newnick
+            if len(parts) >= 3:
+                # Extract old nickname from source prefix
+                if '!' in source:
+                    old_nick = source.split('!')[0]
+                else:
+                    old_nick = source
+                new_nick = parts[2].lstrip(':')
+
+                # Update user in users dictionary
+                user = self.irc_server.users.get(old_nick)
+                if user:
+                    # Update users dictionary
+                    del self.irc_server.users[old_nick]
+                    user.nickname = new_nick
+                    self.irc_server.users[new_nick] = user
+
+                    # Update channel memberships
+                    for chan_name in list(user.channels):
+                        channel = self.irc_server.channels.get(chan_name)
+                        if channel:
+                            if old_nick in channel.members:
+                                channel.members[new_nick] = channel.members.pop(old_nick)
+                            if old_nick in channel.owners:
+                                channel.owners.discard(old_nick)
+                                channel.owners.add(new_nick)
+                            if old_nick in channel.hosts:
+                                channel.hosts.discard(old_nick)
+                                channel.hosts.add(new_nick)
+                            if old_nick in channel.voices:
+                                channel.voices.discard(old_nick)
+                                channel.voices.add(new_nick)
+
+                    logger.info(f"Remote NICK: {old_nick} -> {new_nick}")
+
+                    # Broadcast to LOCAL users who can see this user
+                    notified = set()
+                    for chan_name in user.channels:
+                        channel = self.irc_server.channels.get(chan_name)
+                        if channel:
+                            for member in channel.members.values():
+                                if not (hasattr(member, 'is_remote') and member.is_remote):
+                                    if member.nickname not in notified:
+                                        await member.send(line)
+                                        notified.add(member.nickname)
+
+                # Forward NICK to other linked servers ONLY if we're trunk
+                if self.server_role == 'trunk':
+                    await self.broadcast_to_servers(line, exclude_server=server.name)
+
+        elif cmd == 'KILL':
+            # User killed
+            # Format: :staff!user@host KILL target :reason
+            if len(parts) >= 3:
+                target_nick = parts[2]
+                reason = ' '.join(parts[3:]).lstrip(':') if len(parts) > 3 else 'Killed'
+
+                # Find target user
+                target = self.irc_server.users.get(target_nick)
+                if target:
+                    # Don't kill local users via remote KILL (security)
+                    if hasattr(target, 'is_remote') and target.is_remote:
+                        logger.info(f"Remote KILL ignored: {target_nick} is remote on this server")
+                    else:
+                        # Send KILL message to local target
+                        await target.send(f":{self.irc_server.servername} KILL {target_nick} :{reason}")
+                        logger.info(f"Remote KILL: {target_nick} ({reason})")
+                        await self.irc_server.quit_user(target)
+
+                # Forward KILL to other linked servers ONLY if we're trunk
+                if self.server_role == 'trunk':
+                    await self.broadcast_to_servers(line, exclude_server=server.name)
+
+        elif cmd == 'WHOIS':
+            # WHOIS query
+            # Format: :nickname!user@host WHOIS target
+            if len(parts) >= 3:
+                # Extract requester from source
+                if '!' in source:
+                    requester_nick = source.split('!')[0]
+                else:
+                    requester_nick = source
+                target_nick = parts[2]
+
+                # Check if target is local
+                target = self.irc_server.users.get(target_nick)
+                if target and not (hasattr(target, 'is_remote') and target.is_remote):
+                    # Target is local, send WHOIS replies back through the link
+                    # We need to route replies back to the requester
+                    # For now, log that we received the query
+                    logger.info(f"Remote WHOIS: {requester_nick} querying {target_nick}")
+                    # TODO: Send WHOIS replies back through server link
+                else:
+                    # Target not found locally - forward to other servers ONLY if we're trunk
+                    if self.server_role == 'trunk':
+                        await self.broadcast_to_servers(line, exclude_server=server.name)
+
+        elif cmd == 'AWAY':
+            # Away status change
+            # Format: :nickname!user@host AWAY :message
+            # Format: :nickname!user@host AWAY (no message = back from away)
+            if '!' in source:
+                nickname = source.split('!')[0]
+            else:
+                nickname = source
+
+            user = self.irc_server.users.get(nickname)
+            if user:
+                if len(parts) >= 3:
+                    # Setting away
+                    away_msg = ' '.join(parts[2:]).lstrip(':')
+                    user.away_msg = away_msg
+                    logger.info(f"Remote AWAY: {nickname} is away: {away_msg}")
+                else:
+                    # Returning from away
+                    user.away_msg = None
+                    logger.info(f"Remote AWAY: {nickname} is back")
+
+            # Forward AWAY to other linked servers ONLY if we're trunk
+            if self.server_role == 'trunk':
+                await self.broadcast_to_servers(line, exclude_server=server.name)
+
+        elif cmd == 'WHISPER':
+            # WHISPER message to user in channel
+            # Format: :sender!user@host WHISPER #channel target :message
+            if len(parts) >= 5:
+                chan_name = parts[2]
+                target_nick = parts[3]
+                message_text = ' '.join(parts[4:]).lstrip(':')
+
+                # Check if target is local
+                target_user = self.irc_server.users.get(target_nick)
+                if target_user and not (hasattr(target_user, 'is_remote') and target_user.is_remote):
+                    # Target is local, deliver WHISPER
+                    await target_user.send(line)
+                    logger.info(f"Remote WHISPER: {source} to {target_nick} in {chan_name}")
+                else:
+                    # Target not found locally - forward to other servers ONLY if we're trunk
+                    if self.server_role == 'trunk':
+                        await self.broadcast_to_servers(line, exclude_server=server.name)
+
+        elif cmd == 'ACCESS':
+            # ACCESS list modification
+            # Format: :nickname!user@host ACCESS #channel ADD|DELETE|CLEAR ...
+            if len(parts) >= 4:
+                obj = parts[2]
+                action = parts[3].upper()
+
+                # Only process channel ACCESS (not server ACCESS)
+                if obj.startswith('#') or obj.startswith('&'):
+                    channel = self.irc_server.channels.get(obj)
+                    if channel:
+                        # Re-execute ACCESS command locally
+                        # Parse the user who initiated this
+                        if '!' in source:
+                            nickname = source.split('!')[0]
+                        else:
+                            nickname = source
+
+                        remote_user = self.irc_server.users.get(nickname)
+                        if remote_user:
+                            # Build params for ACCESS handler
+                            access_params = parts[2:]  # [#channel, ACTION, ...]
+                            # Execute ACCESS locally (this will modify channel.access_list)
+                            try:
+                                await self.irc_server.handle_access(remote_user, access_params)
+                                logger.info(f"Remote ACCESS: {nickname} executed ACCESS {action} on {obj}")
+                            except Exception as e:
+                                logger.error(f"Remote ACCESS execution error: {e}")
+
+                # Forward ACCESS to other linked servers ONLY if we're trunk
+                if self.server_role == 'trunk':
+                    await self.broadcast_to_servers(line, exclude_server=server.name)
+
+        elif cmd == 'PROP':
+            # PROP channel property change
+            # Format: :nickname!user@host PROP #channel property value
+            if len(parts) >= 4:
+                chan_name = parts[2]
+                prop_name = parts[3]
+                prop_value = ' '.join(parts[4:]).lstrip(':') if len(parts) > 4 else ""
+
+                # Only process channel PROP
+                if chan_name.startswith('#') or chan_name.startswith('&'):
+                    channel = self.irc_server.channels.get(chan_name)
+                    if channel:
+                        # Parse the user who initiated this
+                        if '!' in source:
+                            nickname = source.split('!')[0]
+                        else:
+                            nickname = source
+
+                        remote_user = self.irc_server.users.get(nickname)
+                        if remote_user:
+                            # Build params for PROP handler
+                            prop_params = parts[2:]  # [#channel, property, value...]
+                            # Execute PROP locally (this will modify channel properties)
+                            try:
+                                await self.irc_server.handle_prop(remote_user, prop_params)
+                                logger.info(f"Remote PROP: {nickname} set {prop_name} on {chan_name}")
+                            except Exception as e:
+                                logger.error(f"Remote PROP execution error: {e}")
+
+                # Forward PROP to other linked servers ONLY if we're trunk
+                if self.server_role == 'trunk':
+                    await self.broadcast_to_servers(line, exclude_server=server.name)
+
+        elif cmd == 'KNOCK':
+            # KNOCK channel request
+            # Format: :nickname!user@host KNOCK #channel :message
+            if len(parts) >= 3:
+                chan_name = parts[2]
+                message = ' '.join(parts[3:]).lstrip(':') if len(parts) > 3 else ""
+
+                # Only process channel KNOCK
+                if chan_name.startswith('#') or chan_name.startswith('&'):
+                    channel = self.irc_server.channels.get(chan_name)
+                    if channel:
+                        # Extract knock notification message
+                        # Format: :servername 710 #channel nickname user@host :has asked for an invite
+                        if '!' in source:
+                            nickname = source.split('!')[0]
+                            userhost = source.split('!')[1]
+                        else:
+                            nickname = source
+                            userhost = "unknown@unknown"
+
+                        # Build KNOCK notification for local owners/hosts
+                        knock_msg = f":{self.irc_server.servername} 710 {chan_name} {nickname} {nickname}!{userhost} :has asked for an invite"
+                        if message:
+                            knock_msg += f" ({message})"
+
+                        # Send to LOCAL owners/hosts only
+                        for nick in channel.members:
+                            if nick in channel.owners or nick in channel.hosts:
+                                member = channel.members[nick]
+                                if not (hasattr(member, 'is_remote') and member.is_remote):
+                                    await member.send(knock_msg)
+
+                        logger.info(f"Remote KNOCK: {nickname} knocked on {chan_name}")
+
+                # Forward KNOCK to other linked servers ONLY if we're trunk
+                if self.server_role == 'trunk':
+                    await self.broadcast_to_servers(line, exclude_server=server.name)
 
     async def broadcast_to_servers(self, message: str, exclude_server: str = None):
         """Broadcast a message to all linked servers"""
