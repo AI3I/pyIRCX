@@ -2120,7 +2120,7 @@ console.log("=== admin.js LOADING ===");
                 </div>
             </div>
             <div style="margin-top: 10px; display: flex; gap: 10px; align-items: center;">
-                <label style="font-size: 12px;"><input type="checkbox" class="branch-autoconnect" ${autoconnect ? 'checked' : ''}> Automatically connect (and reconnect)</label>
+                <label style="font-size: 12px;"><input type="checkbox" class="branch-autoconnect" ${autoconnect ? 'checked' : ''}> Allow automatic connection and reconnection</label>
                 <div style="margin-left: auto; display: flex; gap: 10px;">
                     <button type="button" class="btn btn-sm btn-secondary branch-gen-password-btn">🔑 Generate Secure Password</button>
                     <button type="button" class="btn btn-sm btn-primary branch-gen-config-btn">📄 Generate Configuration</button>
