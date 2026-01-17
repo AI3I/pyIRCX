@@ -9763,6 +9763,9 @@ class pyIRCXServer:
 
     async def quit_user(self, user):
         nick = user.nickname
+        # Prevent duplicate QUIT processing if already disconnected
+        if user.disconnected:
+            return
         user.disconnected = True  # Mark user as disconnected
 
         # Notify watchers that this user has gone offline

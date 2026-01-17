@@ -769,9 +769,12 @@ class ServerLinkManager:
                         if channel:
                             # Broadcast to LOCAL channel members only (exclude remote users to avoid loops)
                             logger.info(f"Processing channel message from {server.name}: {source_nick} -> {target}")
+                            logger.info(f"  Channel {target} has {len(channel.members)} total members")
                             for member in channel.members.values():
-                                if not (hasattr(member, 'is_remote') and member.is_remote):
-                                    logger.info(f"  Sending to local member: {member.nickname}")
+                                is_remote = hasattr(member, 'is_remote') and member.is_remote
+                                logger.info(f"  Member {member.nickname}: is_remote={is_remote}")
+                                if not is_remote:
+                                    logger.info(f"    -> Sending to {member.nickname}")
                                     await member.send(line)
                             # Forward to other servers ONLY if we're trunk (hub forwards between branches)
                             if self.server_role == 'trunk':
