@@ -1830,7 +1830,7 @@ RESPONSES = {
     "818": "{target} :End of properties",
     "819": "{target} {prop} :{value}",
     # IRCX Service Protection (820-829)
-    "820": "{target} :Service is protected",
+    "820": "{target} :Cannot perform this action on services",
     "821": "{target} :Cannot kick services",
     "822": "{target} :Cannot ban services",
     "823": "{target} :Cannot kill services",
@@ -1879,7 +1879,7 @@ RESPONSES = {
     "870": ":Nickname {nick} is already registered",
     "871": ":Nickname {nick} is not registered",
     "872": ":You are already identified to a registered nickname",
-    "873": ":You must identify first to drop your nickname",
+    "873": ":You must be identified to unregister your nickname",
     "874": ":Nickname {nick} has been registered (UUID: {uuid})",
     "875": ":Nickname {nick} has been dropped",
     "876": ":You are now identified as {nick}",
@@ -6840,11 +6840,12 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /PROP <#channel> [property] [value]")
             await user.send(f":{self.servername} NOTICE {user.nickname} :View or set extended channel properties.")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  /PROP #lobby - List all properties")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  /PROP #lobby OWNERKEY mypassword - Set owner key")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  /PROP #lobby TOPIC Welcome! - Set topic via PROP")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  /PROP #lobby LAG 0 - Set lag property")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Common properties: OWNERKEY, HOSTKEY, TOPIC, LAG, ONJOIN, ONPART")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /PROP #lobby - List all properties (hosts can view except OWNERKEY)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /PROP #lobby OWNERKEY mypassword - Set owner key (owner only)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /PROP #lobby TOPIC Welcome! - Set topic via PROP (owner only)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /PROP #lobby LAG 0 - Set lag property (owner only)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Common properties: OWNERKEY, HOSTKEY, VOICEKEY, MEMBERKEY, TOPIC, ONJOIN, ONPART")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Note: Only channel owners can set properties")
 
         elif topic in ["WHISPER", "NOTICE"]:
             await user.send(f":{self.servername} NOTICE {user.nickname} :=== WHISPER Command (IRCX) ===")
@@ -6948,27 +6949,28 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  /KNOCK #private - Request access")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  /KNOCK #vip I'd like to join - Request with message")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Note: Channel hosts will be notified of your request")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Rate limited to prevent abuse")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Note: Channel owners and hosts will be notified of your request")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Rate limited to once per minute per channel to prevent abuse")
 
         elif topic in ["EVENT"]:
             await user.send(f":{self.servername} NOTICE {user.nickname} :=== EVENT Command (IRCX) ===")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /EVENT <#channel> <message>")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Send an event message to all users in a channel.")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /EVENT ADD <type> <mask>")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Subscribe to server events by registering event traps.")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  /EVENT #lobby Welcome to our chat!")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  /EVENT #game Round 5 starting in 30 seconds")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Note: Requires host or owner status in the channel")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /EVENT ADD JOIN * - Notify when anyone joins any channel")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /EVENT ADD PART #lobby - Notify when someone leaves #lobby")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Note: Advanced IRCX feature for monitoring channel activity")
 
         elif topic in ["TRANSCRIPT"]:
             await user.send(f":{self.servername} NOTICE {user.nickname} :=== TRANSCRIPT Command (IRCX) ===")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /TRANSCRIPT <#channel> <ON|OFF>")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Enable or disable transcript logging for a channel.")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /TRANSCRIPT <#channel> [lines] [offset]")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :View channel transcript logs if transcript mode (+y) is enabled.")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  /TRANSCRIPT #lobby ON - Enable logging")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  /TRANSCRIPT #lobby OFF - Disable logging")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Note: Requires owner status. Sets +y mode on channel")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Logs are stored server-side for moderation purposes")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /TRANSCRIPT #lobby - View last 50 messages")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /TRANSCRIPT #lobby 100 - View last 100 messages")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /TRANSCRIPT #lobby 50 100 - View 50 messages starting from offset 100")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Note: Requires channel owner status or IRC operator/administrator")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :To enable logging: Use /MODE #channel +y (owner only)")
 
         elif topic in ["STATS"]:
             await user.send(f":{self.servername} NOTICE {user.nickname} :=== STATS Command ===")
@@ -6977,12 +6979,11 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  /STATS - Show general server statistics")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  /STATS u - Show server uptime")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Common queries: u (uptime), c (connections), m (commands)")
-            if is_staff:
-                await user.send(f":{self.servername} NOTICE {user.nickname} :Note: Staff members (IRC administrators, operators, and guides) can view detailed stats")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Use /STATS ? for complete list of available queries")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Note: Many detailed stats require staff privileges (guide/operator/administrator)")
 
-        elif topic in ["PROFANITY"] and user.is_admin():
-            await user.send(f":{self.servername} NOTICE {user.nickname} :=== PROFANITY Command (IRC administrator only) ===")
+        elif topic in ["PROFANITY"] and user.is_high_staff():
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== PROFANITY Command (IRC operator/administrator only) ===")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Manage ServiceBot profanity filter in real-time.")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Commands:")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  /PROFANITY LIST - View current configuration")
