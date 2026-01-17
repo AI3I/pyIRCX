@@ -2519,3 +2519,54 @@
 2026-01-17 18:49:42,097 [INFO] linking: Sent EOB (End of Burst) to branch.testnet.local
 2026-01-17 18:49:42,097 [INFO] linking: Server branch.testnet.local linked successfully
 2026-01-17 18:49:42,097 [INFO] linking: Received EOB from branch.testnet.local - burst complete
+2026-01-17 18:56:32,198 [INFO] linking: Incoming server connection from ('127.0.0.1', 51304)
+2026-01-17 18:56:32,198 [WARNING] linking: Server link branch.testnet.local using PLAINTEXT password - UPDATE TO BCRYPT IMMEDIATELY
+2026-01-17 18:56:32,198 [INFO] linking: Role validation passed: trunk <-> branch
+2026-01-17 18:56:32,199 [INFO] linking: Remote server branch.testnet.local: pyIRCX/1.3.0 PROTO/2
+2026-01-17 18:56:32,199 [INFO] linking: Version check passed for branch.testnet.local
+2026-01-17 18:56:32,199 [INFO] linking: Time sync check for branch.testnet.local: delta = 0s
+2026-01-17 18:56:32,199 [INFO] linking: Time sync check passed for branch.testnet.local
+2026-01-17 18:56:32,200 [INFO] linking: Burst 3 staff accounts to branch.testnet.local
+2026-01-17 18:56:32,201 [INFO] linking: Bursting service System to branch.testnet.local
+2026-01-17 18:56:32,201 [INFO] linking: Bursting service Registrar to branch.testnet.local
+2026-01-17 18:56:32,201 [INFO] linking: Bursting service Messenger to branch.testnet.local
+2026-01-17 18:56:32,201 [INFO] linking: Bursting service NewsFlash to branch.testnet.local
+2026-01-17 18:56:32,201 [INFO] linking: Bursting service ServiceBot01 to branch.testnet.local
+2026-01-17 18:56:32,202 [INFO] linking: Bursting service ServiceBot02 to branch.testnet.local
+2026-01-17 18:56:32,202 [INFO] linking: Bursting service ServiceBot03 to branch.testnet.local
+2026-01-17 18:56:32,202 [INFO] linking: Bursting service ServiceBot04 to branch.testnet.local
+2026-01-17 18:56:32,202 [INFO] linking: Bursting service ServiceBot05 to branch.testnet.local
+2026-01-17 18:56:32,202 [INFO] linking: Bursting service ServiceBot06 to branch.testnet.local
+2026-01-17 18:56:32,202 [INFO] linking: Bursting service ServiceBot07 to branch.testnet.local
+2026-01-17 18:56:32,202 [INFO] linking: Bursting service ServiceBot08 to branch.testnet.local
+2026-01-17 18:56:32,202 [INFO] linking: Bursting service ServiceBot09 to branch.testnet.local
+2026-01-17 18:56:32,202 [INFO] linking: Bursting service ServiceBot10 to branch.testnet.local
+2026-01-17 18:56:32,202 [INFO] linking: Bursting service ServiceBot to branch.testnet.local
+2026-01-17 18:56:32,202 [INFO] linking: Sent EOB (End of Burst) to branch.testnet.local
+2026-01-17 18:56:32,202 [INFO] linking: Server branch.testnet.local linked successfully
+2026-01-17 18:56:32,203 [INFO] linking: Received EOB from branch.testnet.local - burst complete
+2026-01-17 18:57:13,990 [INFO] pyIRCX: Received signal SIGTERM, initiating shutdown...
+2026-01-17 18:57:14,009 [WARNING] linking: Server branch2.testnet.local disconnected (split)
+2026-01-17 18:57:14,009 [INFO] linking: broadcast_to_servers called with message: SQUIT branch2.testnet.local :branch2.testnet.local trunk.testnet.local...
+2026-01-17 18:57:14,009 [INFO] linking: Available servers: ['branch.testnet.local'], exclude=branch2.testnet.local
+2026-01-17 18:57:14,009 [INFO] linking:   Sending to branch.testnet.local: SQUIT branch2.testnet.local :branch2.testnet.local trunk.tes...
+2026-01-17 18:57:14,010 [INFO] linking:   Sent to branch.testnet.local
+2026-01-17 18:57:14,010 [INFO] linking: Propagated SQUIT for branch2.testnet.local to all linked servers
+2026-01-17 18:57:14,012 [WARNING] linking: Server branch.testnet.local disconnected (split)
+2026-01-17 18:57:14,013 [INFO] linking: broadcast_to_servers called with message: SQUIT branch.testnet.local :branch.testnet.local trunk.testnet.local...
+2026-01-17 18:57:14,013 [INFO] linking: Available servers: [], exclude=branch.testnet.local
+2026-01-17 18:57:14,013 [INFO] linking: Propagated SQUIT for branch.testnet.local to all linked servers
+2026-01-17 18:57:14,014 [ERROR] linking: Error reading from branch.testnet.local: [Errno 104] Connection reset by peer
+2026-01-17 18:57:14,014 [WARNING] linking: Server branch.testnet.local disconnected (split)
+2026-01-17 18:57:14,014 [INFO] linking: broadcast_to_servers called with message: SQUIT branch.testnet.local :branch.testnet.local trunk.testnet.local...
+2026-01-17 18:57:14,014 [INFO] linking: Available servers: [], exclude=branch.testnet.local
+2026-01-17 18:57:14,014 [INFO] linking: Propagated SQUIT for branch.testnet.local to all linked servers
+2026-01-17 18:57:15,992 [WARNING] pyIRCX: Timeout cancelling background tasks, forcing
+2026-01-17 18:57:15,992 [INFO] pyIRCX: Initiating graceful shutdown...
+2026-01-17 18:57:15,992 [WARNING] pyIRCX: Link manager shutdown: 'ServerLinkManager' object has no attribute 'shutdown'
+2026-01-17 18:57:17,994 [WARNING] pyIRCX: Timeout waiting for server to close, forcing
+2026-01-17 18:57:17,994 [INFO] linking: broadcast_to_servers called with message: :John!~admin@localhost QUIT :Client exited...
+2026-01-17 18:57:17,994 [INFO] linking: Available servers: [], exclude=None
+2026-01-17 18:57:17,997 [INFO] pyIRCX: Database pool closed
+2026-01-17 18:57:17,997 [INFO] pyIRCX: Shutdown complete
+2026-01-17 18:57:17,997 [INFO] linking: Link monitoring task cancelled

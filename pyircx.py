@@ -2277,7 +2277,7 @@ class pyIRCXServer:
                 msg = f":{self.servername} MODE {clone_name} {mode_str}"
                 await clone.broadcast(msg)
 
-    def _create_virtual_service(self, nickname, ident, realname, is_admin=False, is_servicebot=False):
+    def _create_virtual_service(self, nickname, ident, realname, is_admin=False, is_servicebot=False, omnipresent=False, divine=False):
         """Create a virtual service user"""
         service = User(None, None, is_virtual=True)
         service.nickname = nickname
@@ -2286,7 +2286,15 @@ class pyIRCXServer:
         service.realname = realname
         service.staff_level = "ADMIN" if is_admin else "SERVICE"
         service.registered = True
-        service.set_mode('s', True)  # Service mode
+
+        # Special modes for mystical entities
+        if omnipresent:
+            service.set_mode('S', True)  # System - omnipresent (undeclared, capital S)
+        elif divine:
+            service.set_mode('G', True)  # God - divine watcher (undeclared, capital G)
+        else:
+            service.set_mode('s', True)  # Regular service mode
+
         if is_admin:
             service.set_mode('a', True)
         if is_servicebot:
@@ -2741,11 +2749,16 @@ class pyIRCXServer:
             self.channels["#System"].registered = True
             self.channels["#System"].account_uuid = str(uuid.uuid4())
 
-            # Create System virtual user
-            sys_user = self._create_virtual_service('System', 'System', "Network Services")
+            # Create System virtual user (omnipresent)
+            sys_user = self._create_virtual_service('System', 'System', "System", omnipresent=True)
             self.channels["#System"].members[sys_user.nickname] = sys_user
             self.channels["#System"].owners.add(sys_user.nickname)
             logger.info("#System channel created")
+
+            # Create God virtual user (omniscient watcher)
+            god_user = self._create_virtual_service('God', 'God', "God", divine=True)
+            self.users[god_user.nickname] = god_user
+            logger.info("God virtual user created")
 
             # Create Registrar service - handles nick/channel registration
             registrar = self._create_virtual_service('Registrar', 'Registrar', "Registration Services")
@@ -3263,6 +3276,10 @@ class pyIRCXServer:
             await user.send(self.get_reply("391", user, time=time.ctime()))
         elif cmd == "VERSION":
             await user.send(self.get_reply("351", user))
+        elif cmd == "JEDI":
+            # Undocumented easter egg - God's response
+            if "God" in self.users:
+                await user.send(f":God!God@{self.servername} NOTICE {user.nickname} :That is not the command you're looking for.")
         elif cmd == "AWAY":
             await self.handle_away(user, params)
         elif cmd == "TOPIC":
@@ -3701,9 +3718,17 @@ class pyIRCXServer:
             invisible = sum(1 for u in self.users.values() if u.has_mode('i') and not u.is_virtual)
         else:
             invisible = 0  # Hide from non-staff
+
+        # Send complete LUSERS info during registration
         await user.send(self.get_reply("251", user, users=real_users, invisible=invisible, server_count=server_count))
         await user.send(self.get_reply("252", user, ops=ops))
+        channels = len([ch for ch in self.channels.values() if not ch.is_local()])
+        await user.send(self.get_reply("254", user, channels=channels))
         await user.send(self.get_reply("255", user, users=real_users, server_count=server_count))
+        # Local and global user counts
+        local_users = len([u for u in self.users.values() if not u.is_virtual])
+        await user.send(self.get_reply("265", user, local=local_users, local_max=self.max_users_seen))
+        await user.send(self.get_reply("266", user, global_users=real_users, global_max=self.max_users_seen))
         await self.handle_motd(user)
 
         if auth:
@@ -4248,8 +4273,12 @@ class pyIRCXServer:
                     "319", user, target=target.nickname, channels=chan_list))
             await user.send(self.get_reply("312", user, target=target.nickname))
 
-            # Services get priority in display
-            if target.is_service():
+            # Mystical and staff roles (priority order)
+            if target.has_mode('S'):  # Omnipresent System (undeclared)
+                role = "has an omnipresence"
+            elif target.has_mode('G'):  # Divine God (undeclared)
+                role = "is watching over you"
+            elif target.is_service():  # Regular services
                 role = "is an IRC service"
             elif target.has_mode('a'):
                 role = "is an IRC administrator"

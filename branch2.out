@@ -3246,3 +3246,16 @@
 2026-01-17 18:49:25,762 [INFO] linking: ✓ Added remote user MsgAdmin from trunk.testnet.local (total users: 20)
 2026-01-17 18:49:25,762 [INFO] linking: broadcast_to_servers called with message: NICK MsgAdmin 1 1768693765 ~admin localhost trunk.testnet.local + :MsgAdmin...
 2026-01-17 18:49:25,762 [INFO] linking: Available servers: ['trunk.testnet.local'], exclude=trunk.testnet.local
+2026-01-17 18:57:13,990 [INFO] pyIRCX: Received signal SIGTERM, initiating shutdown...
+2026-01-17 18:57:13,991 [INFO] pyIRCX: Initiating graceful shutdown...
+2026-01-17 18:57:13,991 [WARNING] pyIRCX: Link manager shutdown: 'ServerLinkManager' object has no attribute 'shutdown'
+2026-01-17 18:57:13,991 [WARNING] pyIRCX: Database pool close: 'NoneType' object has no attribute 'close'
+2026-01-17 18:57:13,991 [INFO] pyIRCX: Shutdown complete
+2026-01-17 18:57:13,991 [INFO] linking: Link monitoring task cancelled
+2026-01-17 18:57:13,991 [WARNING] linking: Server trunk.testnet.local disconnected (split)
+2026-01-17 18:57:13,991 [INFO] linking: broadcast_to_servers called with message: SQUIT trunk.testnet.local :trunk.testnet.local branch2.testnet.local...
+2026-01-17 18:57:13,991 [INFO] linking: Available servers: [], exclude=trunk.testnet.local
+2026-01-17 18:57:13,991 [INFO] linking: Propagated SQUIT for trunk.testnet.local to all linked servers
+2026-01-17 18:57:13,991 [INFO] linking: Scheduling reconnect to trunk.testnet.local in 5s (attempt #1)
+2026-01-17 18:57:14,009 [ERROR] asyncio: Task was destroyed but it is pending!
+task: <Task pending name='Task-13' coro=<ServerLinkManager._delayed_reconnect() done, defined at /home/jdlewis/GitHub/pyIRCX/linking.py:568> wait_for=<Future pending cb=[Task.task_wakeup()]>>

@@ -1009,3 +1009,58 @@
 2026-01-17 18:49:42,189 [INFO] linking: broadcast_to_servers called with message: NICK John 1 1768693238 ~admin localhost trunk.testnet.local + :John D. Lewis...
 2026-01-17 18:49:42,189 [INFO] linking: Available servers: ['trunk.testnet.local'], exclude=trunk.testnet.local
 2026-01-17 18:49:42,189 [INFO] linking: Received EOB from trunk.testnet.local - burst complete
+2026-01-17 18:56:27,195 [WARNING] linking: Server trunk.testnet.local disconnected (split)
+2026-01-17 18:56:27,195 [INFO] linking: broadcast_to_servers called with message: SQUIT trunk.testnet.local :trunk.testnet.local branch.testnet.local...
+2026-01-17 18:56:27,195 [INFO] linking: Available servers: [], exclude=trunk.testnet.local
+2026-01-17 18:56:27,195 [INFO] linking: Propagated SQUIT for trunk.testnet.local to all linked servers
+2026-01-17 18:56:27,195 [INFO] linking: Scheduling reconnect to trunk.testnet.local in 5s (attempt #1)
+2026-01-17 18:56:32,197 [INFO] linking: Attempting reconnect to trunk.testnet.local
+2026-01-17 18:56:32,197 [INFO] linking: Connecting to trunk.testnet.local at 127.0.0.1:7001
+2026-01-17 18:56:32,198 [INFO] linking: Role validation passed: branch <-> trunk
+2026-01-17 18:56:32,199 [INFO] linking: Remote server trunk.testnet.local: pyIRCX/1.3.0 PROTO/2
+2026-01-17 18:56:32,199 [INFO] linking: Version check passed for trunk.testnet.local
+2026-01-17 18:56:32,199 [INFO] linking: Time sync check for trunk.testnet.local: delta = 0s
+2026-01-17 18:56:32,199 [INFO] linking: Time sync check passed for trunk.testnet.local
+2026-01-17 18:56:32,199 [INFO] linking: Sent EOB (End of Burst) to trunk.testnet.local
+2026-01-17 18:56:32,199 [INFO] linking: Successfully linked to trunk.testnet.local
+2026-01-17 18:56:32,202 [INFO] linking: Staff sync: admin (ADMIN) from trunk.testnet.local
+2026-01-17 18:56:32,203 [INFO] linking: Staff sync: sysop (SYSOP) from trunk.testnet.local
+2026-01-17 18:56:32,205 [INFO] linking: Staff sync: guide (GUIDE) from trunk.testnet.local
+2026-01-17 18:56:32,206 [INFO] linking: Staff sync completed from trunk.testnet.local
+2026-01-17 18:56:32,206 [INFO] linking: Added remote service System from trunk trunk.testnet.local
+2026-01-17 18:56:32,206 [INFO] linking: Added remote service Registrar from trunk trunk.testnet.local
+2026-01-17 18:56:32,206 [INFO] linking: Added remote service Messenger from trunk trunk.testnet.local
+2026-01-17 18:56:32,206 [INFO] linking: Added remote service NewsFlash from trunk trunk.testnet.local
+2026-01-17 18:56:32,206 [INFO] linking: Added remote service ServiceBot01 from trunk trunk.testnet.local
+2026-01-17 18:56:32,207 [INFO] linking: Added remote service ServiceBot02 from trunk trunk.testnet.local
+2026-01-17 18:56:32,207 [INFO] linking: Added remote service ServiceBot03 from trunk trunk.testnet.local
+2026-01-17 18:56:32,207 [INFO] linking: Added remote service ServiceBot04 from trunk trunk.testnet.local
+2026-01-17 18:56:32,207 [INFO] linking: Added remote service ServiceBot05 from trunk trunk.testnet.local
+2026-01-17 18:56:32,207 [INFO] linking: Added remote service ServiceBot06 from trunk trunk.testnet.local
+2026-01-17 18:56:32,207 [INFO] linking: Added remote service ServiceBot07 from trunk trunk.testnet.local
+2026-01-17 18:56:32,207 [INFO] linking: Added remote service ServiceBot08 from trunk trunk.testnet.local
+2026-01-17 18:56:32,207 [INFO] linking: Added remote service ServiceBot09 from trunk trunk.testnet.local
+2026-01-17 18:56:32,208 [INFO] linking: Added remote service ServiceBot10 from trunk trunk.testnet.local
+2026-01-17 18:56:32,208 [INFO] linking: Added remote service ServiceBot from trunk trunk.testnet.local
+2026-01-17 18:56:32,208 [INFO] linking: handle_remote_nick called from trunk.testnet.local with 11 parts: NICK John 1 1768693238 ~admin
+2026-01-17 18:56:32,208 [INFO] linking: Processing NICK for John from trunk.testnet.local
+2026-01-17 18:56:32,208 [INFO] linking: ✓ Added remote user John from trunk.testnet.local (total users: 16)
+2026-01-17 18:56:32,208 [INFO] linking: broadcast_to_servers called with message: NICK John 1 1768693238 ~admin localhost trunk.testnet.local + :John D. Lewis...
+2026-01-17 18:56:32,208 [INFO] linking: Available servers: ['trunk.testnet.local'], exclude=trunk.testnet.local
+2026-01-17 18:56:32,208 [INFO] linking: Received EOB from trunk.testnet.local - burst complete
+2026-01-17 18:57:13,990 [INFO] pyIRCX: Received signal SIGTERM, initiating shutdown...
+2026-01-17 18:57:13,991 [INFO] pyIRCX: Initiating graceful shutdown...
+2026-01-17 18:57:13,991 [WARNING] pyIRCX: Link manager shutdown: 'ServerLinkManager' object has no attribute 'shutdown'
+2026-01-17 18:57:13,992 [WARNING] pyIRCX: Database pool close: 'NoneType' object has no attribute 'close'
+2026-01-17 18:57:13,992 [INFO] pyIRCX: Shutdown complete
+2026-01-17 18:57:13,992 [WARNING] linking: Server trunk.testnet.local disconnected (split)
+2026-01-17 18:57:13,992 [INFO] linking: broadcast_to_servers called with message: SQUIT trunk.testnet.local :trunk.testnet.local branch.testnet.local...
+2026-01-17 18:57:13,993 [INFO] linking: Available servers: [], exclude=trunk.testnet.local
+2026-01-17 18:57:13,993 [INFO] linking: Propagated SQUIT for trunk.testnet.local to all linked servers
+2026-01-17 18:57:13,993 [INFO] linking: Scheduling reconnect to trunk.testnet.local in 5s (attempt #1)
+2026-01-17 18:57:13,993 [INFO] linking: Link monitoring task cancelled
+2026-01-17 18:57:13,993 [WARNING] linking: Server trunk.testnet.local disconnected (split)
+2026-01-17 18:57:13,993 [INFO] linking: broadcast_to_servers called with message: SQUIT trunk.testnet.local :trunk.testnet.local branch.testnet.local...
+2026-01-17 18:57:13,993 [INFO] linking: Available servers: [], exclude=trunk.testnet.local
+2026-01-17 18:57:13,994 [INFO] linking: Propagated SQUIT for trunk.testnet.local to all linked servers
+2026-01-17 18:57:13,994 [INFO] linking: Scheduling reconnect to trunk.testnet.local in 10s (attempt #2)
