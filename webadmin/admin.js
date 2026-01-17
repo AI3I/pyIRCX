@@ -2222,10 +2222,6 @@ console.log("=== admin.js LOADING ===");
                         }
                     ]
                 },
-                "admin": {
-                    "default_username": "admin",
-                    "default_password": "changeme"
-                },
                 "ssl": {
                     "enabled": false
                 },
