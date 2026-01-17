@@ -1642,21 +1642,22 @@ console.log("=== admin.js LOADING ===");
             const branchName = formData.get('server_name');
             const branchDesc = formData.get('server_desc') || 'Branch Server';
             const listenAddr = formData.get('listen_addr');
-            const clientPort = parseInt(formData.get('client_port'));
             const linkPort = parseInt(formData.get('link_port'));
             const dbPath = formData.get('db_path');
             const maxUsers = parseInt(formData.get('max_users'));
-            const trunkName = formData.get('trunk_name');
-            const trunkIp = formData.get('trunk_ip');
-            const trunkPort = parseInt(formData.get('trunk_port'));
             const linkPassword = formData.get('link_password');
-            const autoconnect = formData.get('autoconnect') === 'on';
 
-            // Fetch trunk config to get network name
+            // Fetch trunk config to auto-populate trunk information
             try {
                 const response = await callAPI('CONFIG_GET');
                 const trunkConfig = JSON.parse(response);
+
+                // Auto-populate from trunk config
                 const networkName = trunkConfig.server?.network || 'IRC Network';
+                const trunkName = trunkConfig.server?.name || 'trunk.network.local';
+                const clientPorts = trunkConfig.network?.listen_ports || [6667];
+                const trunkBindHost = trunkConfig.linking?.bind_host || '127.0.0.1';
+                const trunkBindPort = trunkConfig.linking?.bind_port || 7001;
 
                 // Generate branch config
                 const branchConfig = {
@@ -1672,8 +1673,8 @@ console.log("=== admin.js LOADING ===");
                     },
                     "network": {
                         "listen_addr": listenAddr,
-                        "listen_ports": [clientPort],
-                        "enable_ipv6": false
+                        "listen_ports": clientPorts,
+                        "enable_ipv6": trunkConfig.network?.enable_ipv6 || false
                     },
                     "database": {
                         "path": dbPath,
@@ -1699,10 +1700,10 @@ console.log("=== admin.js LOADING ===");
                         "links": [
                             {
                                 "name": trunkName,
-                                "host": trunkIp,
-                                "port": trunkPort,
+                                "host": trunkBindHost,
+                                "port": trunkBindPort,
                                 "password": linkPassword,
-                                "autoconnect": autoconnect
+                                "autoconnect": true
                             }
                         ]
                     },
@@ -2251,23 +2252,6 @@ console.log("=== admin.js LOADING ===");
             });
         }
 
-        // Linking role selector
-        if ($('#cfg-linking-role')) {
-            $('#cfg-linking-role').addEventListener('change', function() {
-                const role = this.value;
-                const trunkSettings = $('#cfg-linking-trunk-settings');
-                const branchSettings = $('#cfg-linking-branch-settings');
-
-                if (role === 'trunk') {
-                    if (trunkSettings) trunkSettings.style.display = 'block';
-                    if (branchSettings) branchSettings.style.display = 'none';
-                } else {
-                    if (trunkSettings) trunkSettings.style.display = 'none';
-                    if (branchSettings) branchSettings.style.display = 'block';
-                }
-            });
-        }
-
         // Add branch button
         if ($('#cfg-linking-add-branch')) {
             $('#cfg-linking-add-branch').addEventListener('click', () => {
@@ -2409,42 +2393,14 @@ console.log("=== admin.js LOADING ===");
             setVal('#cfg-linking-host', config.linking?.bind_host || '');
             setVal('#cfg-linking-port', config.linking?.bind_port || 7001);
 
-            // Linking role
-            const role = config.linking?.server_role || 'trunk';
-            setVal('#cfg-linking-role', role);
-
-            // Show/hide role-specific sections
-            const trunkSettings = $('#cfg-linking-trunk-settings');
-            const branchSettings = $('#cfg-linking-branch-settings');
-            if (role === 'trunk') {
-                if (trunkSettings) trunkSettings.style.display = 'block';
-                if (branchSettings) branchSettings.style.display = 'none';
-
-                // Load trunk settings
-                setVal('#cfg-linking-servicebot-count', config.services?.servicebot_count || 10);
-
-                // Load branch list
-                const branchesList = $('#cfg-linking-branches-list');
-                if (branchesList) {
-                    branchesList.innerHTML = '';
-                    const links = config.linking?.links || [];
-                    links.forEach(link => {
-                        addBranchEntry(link.name, link.host, link.port, link.password, link.autoconnect);
-                    });
-                }
-            } else {
-                if (trunkSettings) trunkSettings.style.display = 'none';
-                if (branchSettings) branchSettings.style.display = 'block';
-
-                // Load branch settings
-                setVal('#cfg-linking-trunk-server', config.services?.hub_server || '');
-                const trunkLink = (config.linking?.links || [])[0];
-                if (trunkLink) {
-                    setVal('#cfg-linking-trunk-host', trunkLink.host || '');
-                    setVal('#cfg-linking-trunk-port', trunkLink.port || 7001);
-                    setVal('#cfg-linking-trunk-password', trunkLink.password || '');
-                    setCheck('#cfg-linking-trunk-autoconnect', trunkLink.autoconnect !== false);
-                }
+            // Load branch list (webadmin is always on trunk)
+            const branchesList = $('#cfg-linking-branches-list');
+            if (branchesList) {
+                branchesList.innerHTML = '';
+                const links = config.linking?.links || [];
+                links.forEach(link => {
+                    addBranchEntry(link.name, link.host, link.port, link.password, link.autoconnect);
+                });
             }
 
             // Advanced
@@ -2569,66 +2525,36 @@ console.log("=== admin.js LOADING ===");
         newConfig.ssl.min_version = getVal('#cfg-ssl-min-version');
         newConfig.ssl.auto_reload = getCheck('#cfg-ssl-auto-reload');
 
-        // Linking
+        // Linking (webadmin is always on trunk)
         newConfig.linking.enabled = getCheck('#cfg-linking-enabled');
         newConfig.linking.bind_host = getVal('#cfg-linking-host');
         newConfig.linking.bind_port = parseInt(getVal('#cfg-linking-port'));
+        newConfig.linking.server_role = 'trunk';
 
-        // Linking role
-        const role = getVal('#cfg-linking-role');
-        newConfig.linking.server_role = role;
+        // Trunk is always services hub
+        newConfig.services.is_services_hub = true;
+        newConfig.services.hub_server = null;
 
-        if (role === 'trunk') {
-            // Trunk settings
-            newConfig.services.is_services_hub = true;
-            newConfig.services.hub_server = null;
-            newConfig.services.servicebot_count = parseInt(getVal('#cfg-linking-servicebot-count')) || 10;
+        // Collect branch links
+        newConfig.linking.links = [];
+        const branchEntries = $$('.branch-entry');
+        branchEntries.forEach(entry => {
+            const name = entry.querySelector('.branch-name')?.value;
+            const host = entry.querySelector('.branch-host')?.value;
+            const port = parseInt(entry.querySelector('.branch-port')?.value);
+            const password = entry.querySelector('.branch-password')?.value;
+            const autoconnect = entry.querySelector('.branch-autoconnect')?.checked || false;
 
-            // Collect branch links
-            newConfig.linking.links = [];
-            const branchEntries = $$('.branch-entry');
-            branchEntries.forEach(entry => {
-                const name = entry.querySelector('.branch-name')?.value;
-                const host = entry.querySelector('.branch-host')?.value;
-                const port = parseInt(entry.querySelector('.branch-port')?.value);
-                const password = entry.querySelector('.branch-password')?.value;
-                const autoconnect = entry.querySelector('.branch-autoconnect')?.checked || false;
-
-                if (name && host && port && password) {
-                    newConfig.linking.links.push({
-                        name: name,
-                        host: host,
-                        port: port,
-                        password: password,
-                        autoconnect: autoconnect
-                    });
-                }
-            });
-        } else {
-            // Branch settings
-            newConfig.services.is_services_hub = false;
-            newConfig.services.hub_server = getVal('#cfg-linking-trunk-server');
-            newConfig.services.servicebot_count = 0;
-
-            // Single trunk link
-            const trunkName = getVal('#cfg-linking-trunk-server');
-            const trunkHost = getVal('#cfg-linking-trunk-host');
-            const trunkPort = parseInt(getVal('#cfg-linking-trunk-port'));
-            const trunkPassword = getVal('#cfg-linking-trunk-password');
-            const trunkAutoconnect = getCheck('#cfg-linking-trunk-autoconnect');
-
-            if (trunkName && trunkHost && trunkPort && trunkPassword) {
-                newConfig.linking.links = [{
-                    name: trunkName,
-                    host: trunkHost,
-                    port: trunkPort,
-                    password: trunkPassword,
-                    autoconnect: trunkAutoconnect
-                }];
-            } else {
-                newConfig.linking.links = [];
+            if (name && host && port && password) {
+                newConfig.linking.links.push({
+                    name: name,
+                    host: host,
+                    port: port,
+                    password: password,
+                    autoconnect: autoconnect
+                });
             }
-        }
+        });
 
         // Advanced
         newConfig.persistence.auto_save = getCheck('#cfg-persist-auto');

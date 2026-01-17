@@ -892,16 +892,6 @@ badword3"></textarea>
                                 <small>Allow this server to link with other IRC servers to form a network. Use /CONNECT and /SQUIT commands (ADMIN only) to manage server links.</small>
                             </div>
 
-                            <h4 style="margin-top: 20px;">Server Role</h4>
-                            <div class="form-group">
-                                <label>Role in Network</label>
-                                <select class="form-control" id="cfg-linking-role">
-                                    <option value="trunk">Trunk (Services Hub)</option>
-                                    <option value="branch">Branch (Access Point)</option>
-                                </select>
-                                <small><strong>Trunk:</strong> Hosts services (Registrar, Messenger, ServiceBots) and routes messages between branches. <strong>Branch:</strong> Connects to trunk, routes service requests, provides client access points. <strong style="color: #2980b9;">Note:</strong> For standalone servers (not part of a network), select <strong>Trunk</strong>.</small>
-                            </div>
-
                             <h4 style="margin-top: 20px;">Network Connection</h4>
                             <div class="form-group">
                                 <label>Bind Host</label>
@@ -914,45 +904,7 @@ badword3"></textarea>
                                 <small>Port for server-to-server connections. Default: 7000. Must not conflict with client ports. Firewall: Allow only trusted server IPs.</small>
                             </div>
 
-                            <!-- Branch-specific settings -->
-                            <div id="cfg-linking-branch-settings" style="display: none;">
-                                <h4 style="margin-top: 20px;">Branch Configuration</h4>
-                                <div class="form-group">
-                                    <label>Trunk Server (Services Hub)</label>
-                                    <input type="text" class="form-control" id="cfg-linking-trunk-server" placeholder="trunk.example.com">
-                                    <small>FQDN of the trunk server that hosts services. Branch will route all service requests here.</small>
-                                </div>
-                                <div class="form-group">
-                                    <label>Trunk Host</label>
-                                    <input type="text" class="form-control" id="cfg-linking-trunk-host" placeholder="10.0.1.1 or 2001:db8::1">
-                                    <small>IPv4 address, IPv6 address, or hostname of trunk server for linking. Examples: 10.0.1.1, 2001:db8::1, trunk.example.com</small>
-                                </div>
-                                <div class="form-group">
-                                    <label>Trunk Port</label>
-                                    <input type="number" class="form-control" id="cfg-linking-trunk-port" placeholder="7001">
-                                    <small>Server-to-server port on the trunk</small>
-                                </div>
-                                <div class="form-group">
-                                    <label>Link Password</label>
-                                    <input type="password" class="form-control" id="cfg-linking-trunk-password" placeholder="secure-password-here">
-                                    <small>Password for authenticating with trunk server</small>
-                                </div>
-                                <div class="form-group">
-                                    <label><input type="checkbox" id="cfg-linking-trunk-autoconnect" checked> Auto-connect to Trunk</label>
-                                    <small>Automatically connect to trunk server on startup</small>
-                                </div>
-                            </div>
-
-                            <!-- Trunk-specific settings -->
-                            <div id="cfg-linking-trunk-settings" style="display: none;">
-                                <h4 style="margin-top: 20px;">Trunk Configuration</h4>
-                                <div class="form-group">
-                                    <label>ServiceBot Count</label>
-                                    <input type="number" class="form-control" id="cfg-linking-servicebot-count" placeholder="10" value="10">
-                                    <small>Number of ServiceBots to create for channel monitoring. Trunk hosts all ServiceBots for the network. Default: 10</small>
-                                </div>
-
-                                <h4 style="margin-top: 20px;">Branch Servers</h4>
+                            <h4 style="margin-top: 20px;">Branch Servers</h4>
                                 <div class="form-group">
                                     <small>Configure branch servers that can connect to this trunk. Each branch needs a unique name, port, and password.</small>
                                     <div id="cfg-linking-branches-list" style="margin-top: 10px;">
@@ -995,13 +947,6 @@ badword3"></textarea>
                                             </div>
 
                                             <div class="form-group">
-                                                <label>Client Port</label>
-                                                <input type="number" class="form-control" id="branch-port" name="client_port"
-                                                       value="6667" min="1" max="65535" required>
-                                                <small>Port for client connections (default: 6667)</small>
-                                            </div>
-
-                                            <div class="form-group">
                                                 <label>Server Link Port</label>
                                                 <input type="number" class="form-control" id="branch-link-port" name="link_port"
                                                        value="7002" min="1" max="65535" required>
@@ -1023,28 +968,7 @@ badword3"></textarea>
                                                 <small>Maximum concurrent users for this branch</small>
                                             </div>
 
-                                            <h5 style="margin-top: 15px; color: #666;">Trunk Connection</h5>
-                                            <div class="form-group">
-                                                <label>Trunk Server Name</label>
-                                                <input type="text" class="form-control" id="trunk-name" name="trunk_name"
-                                                       placeholder="trunk.network.local" required>
-                                                <small>Hostname of the trunk server to connect to</small>
-                                            </div>
-
-                                            <div class="form-group">
-                                                <label>Trunk IP Address</label>
-                                                <input type="text" class="form-control" id="trunk-ip" name="trunk_ip"
-                                                       placeholder="10.0.1.1" required>
-                                                <small>IP address of the trunk server</small>
-                                            </div>
-
-                                            <div class="form-group">
-                                                <label>Trunk Link Port</label>
-                                                <input type="number" class="form-control" id="trunk-port" name="trunk_port"
-                                                       value="7001" min="1" max="65535" required>
-                                                <small>Server link port on the trunk</small>
-                                            </div>
-
+                                            <h5 style="margin-top: 15px; color: #666;">Link Password</h5>
                                             <div class="form-group">
                                                 <label>Link Password</label>
                                                 <input type="text" class="form-control" id="link-password" name="link_password"
@@ -1052,13 +976,6 @@ badword3"></textarea>
                                                 <button type="button" class="btn btn-sm btn-secondary" id="gen-password-btn"
                                                         style="margin-top: 5px;">🎲 Generate Password</button>
                                                 <small>Shared secret for server linking (use strong password)</small>
-                                            </div>
-
-                                            <div class="form-group">
-                                                <label>
-                                                    <input type="checkbox" id="auto-connect" name="autoconnect" checked>
-                                                    Auto-connect to trunk on startup
-                                                </label>
                                             </div>
 
                                             <div class="button-group">
@@ -1083,7 +1000,6 @@ badword3"></textarea>
                                         </div>
                                     </div>
                                 </div>
-                            </div>
                         </div>
 
                         <!-- Advanced Tab -->
