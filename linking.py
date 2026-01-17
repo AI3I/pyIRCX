@@ -712,6 +712,15 @@ class ServerLinkManager:
         elif cmd == 'STAFFREPLY':
             # Staff command reply from trunk to user on branch
             await self.handle_staff_reply(server, parts)
+        elif cmd == 'REGCMD':
+            # Registration command proxy from branch to trunk
+            await self.handle_registration_command_proxy(server, parts)
+        elif cmd == 'REGUPDATE':
+            # Registration update broadcast from trunk
+            await self.handle_registration_update(server, parts)
+        elif cmd == 'REGREPLY':
+            # Registration command reply from trunk to user on branch
+            await self.handle_registration_reply(server, parts)
         elif cmd == 'SVCNICK':
             # Service nickname from trunk
             await self.handle_service_nick(server, parts)
@@ -1126,6 +1135,254 @@ class ServerLinkManager:
             await user.send(f":{self.irc_server.servername} NOTICE {nickname} :{message}")
         else:
             logger.warning(f"STAFFREPLY for unknown user {nickname}")
+
+    async def handle_registration_command_proxy(self, server: LinkedServer, parts: list):
+        """Handle REGCMD proxy from branch (trunk only)"""
+        if len(parts) < 3:
+            logger.warning(f"Invalid REGCMD from {server.name}: {parts}")
+            return
+
+        # REGCMD <nickname> <subcmd> [args...]
+        nickname = parts[1]
+        subcmd = parts[2].upper()
+
+        # Find the user on trunk (they're connected to branch)
+        user = self.irc_server.users_by_nick.get(nickname)
+        if not user:
+            logger.warning(f"REGCMD for unknown user {nickname} from {server.name}")
+            await server.send(f"REGREPLY {nickname} :Error: User not found on trunk")
+            return
+
+        try:
+            import aiosqlite
+            import uuid
+            import time
+            from pyircx import check_password_async, hash_password_async
+
+            if subcmd == 'REGISTER_NICK':
+                # REGCMD <nickname> REGISTER_NICK <account> <password> <email>
+                if len(parts) < 6:
+                    await server.send(f"REGREPLY {nickname} :Error: Invalid REGISTER syntax")
+                    return
+
+                account = parts[3]
+                password = parts[4]
+                email_param = parts[5]
+                email = None if email_param == '*' else email_param
+
+                # Check if account is already registered
+                async with aiosqlite.connect(CONFIG.get('database', 'path')) as db:
+                    async with db.execute("SELECT uuid FROM registered_nicks WHERE nickname = ?", (account,)) as cursor:
+                        if await cursor.fetchone():
+                            await server.send(f"REGREPLY {nickname} :Error: Nickname {account} is already registered")
+                            return
+
+                    # Register nickname
+                    nick_uuid = str(uuid.uuid4())
+                    password_hash = await hash_password_async(password)
+                    now = int(time.time())
+
+                    await db.execute("""INSERT INTO registered_nicks
+                        (uuid, nickname, password_hash, email, registered_at, last_seen, registered_by)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                        (nick_uuid, account, password_hash, email, now, now, user.prefix()))
+                    await db.commit()
+
+                    # Broadcast update to all servers (user gets +r mode)
+                    await self.broadcast_to_servers(f"REGUPDATE REGISTERED {nickname}")
+
+                    # Send success reply
+                    await server.send(f"REGREPLY {nickname} :Nickname {account} has been registered")
+                    logger.info(f"Registration: {account} registered via {server.name}")
+
+            elif subcmd == 'UNREGISTER_NICK':
+                # REGCMD <nickname> UNREGISTER_NICK <account>
+                if len(parts) < 4:
+                    await server.send(f"REGREPLY {nickname} :Error: Invalid UNREGISTER syntax")
+                    return
+
+                account = parts[3]
+
+                async with aiosqlite.connect(CONFIG.get('database', 'path')) as db:
+                    await db.execute("DELETE FROM registered_nicks WHERE nickname = ?", (account,))
+                    await db.commit()
+
+                    # Broadcast update to all servers (user loses +r mode)
+                    await self.broadcast_to_servers(f"REGUPDATE UNREGISTERED {nickname}")
+
+                    # Send success reply
+                    await server.send(f"REGREPLY {nickname} :Nickname {account} has been unregistered")
+                    logger.info(f"Unregistration: {account} unregistered via {server.name}")
+
+            elif subcmd == 'IDENTIFY':
+                # REGCMD <nickname> IDENTIFY <account> <password>
+                if len(parts) < 5:
+                    await server.send(f"REGREPLY {nickname} :Error: Invalid IDENTIFY syntax")
+                    return
+
+                account = parts[3]
+                password = parts[4]
+
+                async with aiosqlite.connect(CONFIG.get('database', 'path')) as db:
+                    async with db.execute("SELECT uuid, password_hash, mfa_enabled, mfa_secret FROM registered_nicks WHERE nickname = ?",
+                                         (account,)) as cursor:
+                        row = await cursor.fetchone()
+                        if not row:
+                            await server.send(f"REGREPLY {nickname} :Error: Nickname {account} is not registered")
+                            return
+
+                        nick_uuid, password_hash, mfa_enabled, mfa_secret = row
+
+                        if await check_password_async(password, password_hash):
+                            if mfa_enabled and mfa_secret:
+                                # MFA required - can't complete via proxy yet
+                                await server.send(f"REGREPLY {nickname} :Error: MFA-protected accounts must identify on trunk server")
+                                return
+
+                            # Update last_seen
+                            await db.execute("UPDATE registered_nicks SET last_seen = ? WHERE uuid = ?",
+                                           (int(time.time()), nick_uuid))
+                            await db.commit()
+
+                            # Broadcast update to all servers (user gets +r mode)
+                            await self.broadcast_to_servers(f"REGUPDATE IDENTIFIED {nickname}")
+
+                            # Send success reply
+                            await server.send(f"REGREPLY {nickname} :You are now identified as {account}")
+                            logger.info(f"Identification: {account} identified via {server.name}")
+                        else:
+                            await server.send(f"REGREPLY {nickname} :Error: Incorrect password")
+
+            elif subcmd == 'REGISTER_CHANNEL':
+                # REGCMD <nickname> REGISTER_CHANNEL <channel> <password>
+                if len(parts) < 5:
+                    await server.send(f"REGREPLY {nickname} :Error: Invalid channel REGISTER syntax")
+                    return
+
+                chan_name = parts[3]
+                password_param = parts[4]
+                password = None if password_param == '*' else password_param
+
+                async with aiosqlite.connect(CONFIG.get('database', 'path')) as db:
+                    # Check if channel is already registered
+                    async with db.execute("SELECT uuid FROM registered_channels WHERE channel_name = ?",
+                                         (chan_name,)) as cursor:
+                        if await cursor.fetchone():
+                            await server.send(f"REGREPLY {nickname} :Error: Channel {chan_name} is already registered")
+                            return
+
+                    # Get user's registered_nicks uuid
+                    async with db.execute("SELECT uuid FROM registered_nicks WHERE nickname = ?",
+                                         (nickname,)) as cursor:
+                        nick_row = await cursor.fetchone()
+                        if not nick_row:
+                            await server.send(f"REGREPLY {nickname} :Error: You must be identified to register a channel")
+                            return
+                        owner_uuid = nick_row[0]
+
+                    # Register channel
+                    chan_uuid = str(uuid.uuid4())
+                    password_hash = await hash_password_async(password) if password else None
+                    now = int(time.time())
+
+                    await db.execute("""INSERT INTO registered_channels
+                        (uuid, channel_name, owner_uuid, password_hash, registered_at, last_seen)
+                        VALUES (?, ?, ?, ?, ?, ?)""",
+                        (chan_uuid, chan_name, owner_uuid, password_hash, now, now))
+                    await db.commit()
+
+                    # Send success reply
+                    await server.send(f"REGREPLY {nickname} :Channel {chan_name} has been registered")
+                    logger.info(f"Channel registration: {chan_name} registered by {nickname} via {server.name}")
+
+            elif subcmd == 'UNREGISTER_CHANNEL':
+                # REGCMD <nickname> UNREGISTER_CHANNEL <channel>
+                if len(parts) < 4:
+                    await server.send(f"REGREPLY {nickname} :Error: Invalid channel UNREGISTER syntax")
+                    return
+
+                chan_name = parts[3]
+
+                async with aiosqlite.connect(CONFIG.get('database', 'path')) as db:
+                    # Check if channel is registered
+                    async with db.execute("SELECT owner_uuid FROM registered_channels WHERE channel_name = ?",
+                                         (chan_name,)) as cursor:
+                        chan_row = await cursor.fetchone()
+                        if not chan_row:
+                            await server.send(f"REGREPLY {nickname} :Error: Channel {chan_name} is not registered")
+                            return
+
+                    # Verify ownership (admins can bypass)
+                    if not user.has_mode('a'):
+                        async with db.execute("SELECT uuid FROM registered_nicks WHERE nickname = ?",
+                                             (nickname,)) as cursor:
+                            nick_row = await cursor.fetchone()
+                            if not nick_row or nick_row[0] != chan_row[0]:
+                                await server.send(f"REGREPLY {nickname} :Error: You don't own channel {chan_name}")
+                                return
+
+                    # Unregister channel
+                    await db.execute("DELETE FROM registered_channels WHERE channel_name = ?", (chan_name,))
+                    await db.commit()
+
+                    # Send success reply
+                    await server.send(f"REGREPLY {nickname} :Channel {chan_name} has been unregistered")
+                    logger.info(f"Channel unregistration: {chan_name} unregistered by {nickname} via {server.name}")
+
+            else:
+                await server.send(f"REGREPLY {nickname} :Error: Unknown registration command {subcmd}")
+
+        except Exception as e:
+            logger.error(f"Error processing REGCMD {subcmd} from {server.name}: {e}")
+            await server.send(f"REGREPLY {nickname} :Error: Command failed - {e}")
+
+    async def handle_registration_update(self, server: LinkedServer, parts: list):
+        """Handle REGUPDATE broadcast from trunk (branch only)"""
+        if len(parts) < 3:
+            logger.warning(f"Invalid REGUPDATE from {server.name}: {parts}")
+            return
+
+        # REGUPDATE <action> <nickname>
+        action = parts[1].upper()
+        nickname = parts[2]
+
+        # Find user on this branch
+        user = self.irc_server.users_by_nick.get(nickname)
+        if not user:
+            logger.debug(f"REGUPDATE for user {nickname} not on this branch")
+            return
+
+        try:
+            if action == 'REGISTERED' or action == 'IDENTIFIED':
+                # User registered or identified - set +r mode
+                user.set_mode('r', True)
+                await user.send(f":{nickname} MODE {nickname} :+r")
+                logger.info(f"Registration update: {nickname} {action.lower()}")
+
+            elif action == 'UNREGISTERED':
+                # User unregistered - remove +r mode
+                user.set_mode('r', False)
+                await user.send(f":{nickname} MODE {nickname} :-r")
+                logger.info(f"Registration update: {nickname} unregistered")
+
+        except Exception as e:
+            logger.error(f"Error processing REGUPDATE for {nickname}: {e}")
+
+    async def handle_registration_reply(self, server: LinkedServer, parts: list):
+        """Handle REGREPLY from trunk to user on branch (branch only)"""
+        if len(parts) < 3:
+            return
+
+        # REGREPLY <nickname> :<message>
+        nickname = parts[1]
+        message = ' '.join(parts[2:]).lstrip(':')
+
+        # Find user on this branch
+        user = self.irc_server.users_by_nick.get(nickname)
+        if user:
+            await user.send(f":{self.irc_server.servername} NOTICE {nickname} :{message}")
+        else:
+            logger.warning(f"REGREPLY for unknown user {nickname}")
 
     async def handle_service_nick(self, server: LinkedServer, parts: list):
         """Handle SVCNICK (service user) from services hub"""

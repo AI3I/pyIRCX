@@ -3234,6 +3234,9 @@ class pyIRCXServer:
             await self.handle_register(user, params)
         elif cmd == "UNREGISTER":
             await self.handle_unregister(user, params)
+        elif cmd == "DROP":
+            # Alias for UNREGISTER
+            await self.handle_unregister(user, params)
         elif cmd == "IDENTIFY":
             await self.handle_identify(user, params)
         elif cmd == "MFA":
@@ -7374,6 +7377,19 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :You are already identified to a registered nickname")
             return
 
+        # Check if branch in centralized mode - proxy to trunk
+        if not CONFIG.get('services', 'is_services_hub') and \
+           CONFIG.get('services', 'mode') == 'centralized':
+            if self.link_manager and self.link_manager.servers:
+                trunk_server = next((s for s in self.link_manager.servers.values() if s.role == 'trunk'), None)
+                if trunk_server:
+                    email_param = email if email else '*'
+                    await trunk_server.send(f"REGCMD {user.nickname} REGISTER_NICK {account} {password} {email_param}")
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :Registration request sent to services. Please wait...")
+                    return
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Error: Services unavailable (trunk not connected)")
+            return
+
         try:
             async with aiosqlite.connect(CONFIG.get('database', 'path')) as db:
                 async with db.execute("SELECT uuid FROM registered_nicks WHERE nickname = ?",
@@ -7415,6 +7431,19 @@ class pyIRCXServer:
 
         if user.nickname not in channel.owners:
             await user.send(f":{self.servername} NOTICE {user.nickname} :You must be a channel owner to register {chan_name}")
+            return
+
+        # Check if branch in centralized mode - proxy to trunk
+        if not CONFIG.get('services', 'is_services_hub') and \
+           CONFIG.get('services', 'mode') == 'centralized':
+            if self.link_manager and self.link_manager.servers:
+                trunk_server = next((s for s in self.link_manager.servers.values() if s.role == 'trunk'), None)
+                if trunk_server:
+                    password_param = password if password else '*'
+                    await trunk_server.send(f"REGCMD {user.nickname} REGISTER_CHANNEL {chan_name} {password_param}")
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :Channel registration request sent to services. Please wait...")
+                    return
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Error: Services unavailable (trunk not connected)")
             return
 
         try:
@@ -7491,6 +7520,18 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :You must identify first to unregister")
             return
 
+        # Check if branch in centralized mode - proxy to trunk
+        if not CONFIG.get('services', 'is_services_hub') and \
+           CONFIG.get('services', 'mode') == 'centralized':
+            if self.link_manager and self.link_manager.servers:
+                trunk_server = next((s for s in self.link_manager.servers.values() if s.role == 'trunk'), None)
+                if trunk_server:
+                    await trunk_server.send(f"REGCMD {user.nickname} UNREGISTER_NICK {account}")
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :Unregistration request sent to services. Please wait...")
+                    return
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Error: Services unavailable (trunk not connected)")
+            return
+
         try:
             async with aiosqlite.connect(CONFIG.get('database', 'path')) as db:
                 await db.execute("DELETE FROM registered_nicks WHERE nickname = ?", (account,))
@@ -7515,6 +7556,18 @@ class pyIRCXServer:
         channel, chan_name = self.get_channel(channel_name)
         if not channel:
             await user.send(f":{self.servername} NOTICE {user.nickname} :Channel {channel_name} does not exist")
+            return
+
+        # Check if branch in centralized mode - proxy to trunk
+        if not CONFIG.get('services', 'is_services_hub') and \
+           CONFIG.get('services', 'mode') == 'centralized':
+            if self.link_manager and self.link_manager.servers:
+                trunk_server = next((s for s in self.link_manager.servers.values() if s.role == 'trunk'), None)
+                if trunk_server:
+                    await trunk_server.send(f"REGCMD {user.nickname} UNREGISTER_CHANNEL {chan_name}")
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :Channel unregistration request sent to services. Please wait...")
+                    return
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Error: Services unavailable (trunk not connected)")
             return
 
         try:
@@ -7572,6 +7625,18 @@ class pyIRCXServer:
         """Identify to a registered nickname"""
         if user.nickname.lower() != account.lower():
             await user.send(f":{self.servername} NOTICE {user.nickname} :You must be using the nickname to identify to it")
+            return
+
+        # Check if branch in centralized mode - proxy to trunk
+        if not CONFIG.get('services', 'is_services_hub') and \
+           CONFIG.get('services', 'mode') == 'centralized':
+            if self.link_manager and self.link_manager.servers:
+                trunk_server = next((s for s in self.link_manager.servers.values() if s.role == 'trunk'), None)
+                if trunk_server:
+                    await trunk_server.send(f"REGCMD {user.nickname} IDENTIFY {account} {password}")
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :Identifying...")
+                    return
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Error: Services unavailable (trunk not connected)")
             return
 
         try:
