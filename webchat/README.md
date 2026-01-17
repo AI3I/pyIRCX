@@ -9,6 +9,16 @@ The WebChat system consists of two components:
 1. **Frontend** (`/var/www/html/webchat/index.html`) - Browser-based IRC client
 2. **Gateway** (`/opt/pyircx/webchat/gateway.py`) - WebSocket-to-IRC bridge
 
+## Deployment Options
+
+### Local Deployment (Default)
+WebChat runs on the same server as the IRC server. This README covers local deployment.
+
+### Remote Deployment (Recommended for Production)
+WebChat runs on a separate web server from the IRC server for better scalability and security.
+
+**See: [REMOTE_DEPLOYMENT.md](REMOTE_DEPLOYMENT.md)** for complete guide on deploying WebChat on a separate server.
+
 ## Configuration
 
 WebChat is configured via `config.js` for easy customization without editing HTML.
