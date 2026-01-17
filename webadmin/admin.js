@@ -1648,7 +1648,6 @@ console.log("=== admin.js LOADING ===");
             const branchDesc = formData.get('server_desc') || 'Branch Server';
             const listenAddr = formData.get('listen_addr');
             const linkPort = parseInt(formData.get('link_port'));
-            const dbPath = formData.get('db_path');
             const maxUsers = parseInt(formData.get('max_users'));
             const linkPassword = formData.get('link_password');
 
@@ -1680,10 +1679,6 @@ console.log("=== admin.js LOADING ===");
                         "listen_addr": listenAddr,
                         "listen_ports": clientPorts,
                         "enable_ipv6": trunkConfig.network?.enable_ipv6 || false
-                    },
-                    "database": {
-                        "path": dbPath,
-                        "pool_size": 10
                     },
                     "limits": {
                         "max_users": maxUsers,

@@ -953,14 +953,7 @@ badword3"></textarea>
                                                 <small>Port for server-to-server connections on this branch. Each branch on its own server can use the same port (default: 7001).</small>
                                             </div>
 
-                                            <h5 style="margin-top: 15px; color: #666;">Database & Resources</h5>
-                                            <div class="form-group">
-                                                <label>Database Filename</label>
-                                                <input type="text" class="form-control" id="branch-db" name="db_path"
-                                                       placeholder="pyircx.db" required>
-                                                <small>SQLite database file. Each branch on its own server can use the same filename (default: pyircx.db).</small>
-                                            </div>
-
+                                            <h5 style="margin-top: 15px; color: #666;">Resources</h5>
                                             <div class="form-group">
                                                 <label>Max Users</label>
                                                 <input type="number" class="form-control" id="branch-max-users" name="max_users"
