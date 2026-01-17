@@ -4411,8 +4411,14 @@ class pyIRCXServer:
             channel.topic_set_at = int(time.time())
 
             msg = f":{user.prefix()} TOPIC {chan_name} :{new_topic}"
-            await channel.broadcast(msg)
-            await user.send(msg)
+            # Broadcast to LOCAL channel members only
+            for member in channel.members.values():
+                if not (hasattr(member, 'is_remote') and member.is_remote):
+                    await member.send(msg)
+            # Propagate TOPIC to linked servers (if not a remote user)
+            if self.link_manager and self.link_manager.enabled:
+                if not (hasattr(user, 'is_remote') and user.is_remote):
+                    await self.link_manager.broadcast_to_servers(msg)
             # Log to transcript if +y mode is enabled
             self.log_transcript(channel, "TOPIC", user, message=new_topic)
             logger.info(f"Topic set in {chan_name} by {user.nickname}")

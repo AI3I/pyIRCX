@@ -768,15 +768,17 @@ class ServerLinkManager:
                         channel = self.irc_server.channels.get(target)
                         if channel:
                             # Broadcast to LOCAL channel members only (exclude remote users to avoid loops)
+                            logger.info(f"Processing channel message from {server.name}: {source_nick} -> {target}")
                             for member in channel.members.values():
                                 if not (hasattr(member, 'is_remote') and member.is_remote):
+                                    logger.info(f"  Sending to local member: {member.nickname}")
                                     await member.send(line)
                             # Forward to other servers ONLY if we're trunk (hub forwards between branches)
                             if self.server_role == 'trunk':
+                                logger.info(f"  Forwarding to other servers (exclude={server.name})")
                                 await self.broadcast_to_servers(line, exclude_server=server.name)
-                                logger.debug(f"Delivered and forwarded channel message from {source_nick} to {target}")
                             else:
-                                logger.debug(f"Delivered channel message from {source_nick} to {target}")
+                                logger.info(f"  NOT forwarding (branch server)")
                     else:
                         # Message to user - check if user is local
                         target_user = self.irc_server.users.get(target)
@@ -869,13 +871,13 @@ class ServerLinkManager:
 
     async def broadcast_to_servers(self, message: str, exclude_server: str = None):
         """Broadcast a message to all linked servers"""
-        logger.debug(f"broadcast_to_servers called with message: {message[:80]}...")
-        logger.debug(f"Available servers: {list(self.servers.keys())}")
+        logger.info(f"broadcast_to_servers called with message: {message[:80]}...")
+        logger.info(f"Available servers: {list(self.servers.keys())}, exclude={exclude_server}")
         for servername, server in self.servers.items():
             if servername != exclude_server and server.is_direct:
-                logger.debug(f"Sending to {servername}: {message[:80]}...")
+                logger.info(f"  Sending to {servername}: {message[:60]}...")
                 await server.send(message)
-                logger.debug(f"Sent to {servername}")
+                logger.info(f"  Sent to {servername}")
 
     async def broadcast_to_local(self, message: str, exclude_server: str = None,
                                 exclude_modes: str = None):
