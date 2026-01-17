@@ -4293,16 +4293,28 @@ class pyIRCXServer:
             for member in channel.members.values():
                 if not (hasattr(member, 'is_remote') and member.is_remote):
                     await member.send(mode_msg)
+            # Propagate MODE to linked servers (if not a remote user)
+            if self.link_manager and self.link_manager.enabled:
+                if not (hasattr(user, 'is_remote') and user.is_remote):
+                    await self.link_manager.broadcast_to_servers(mode_msg)
         elif grant_host:
             mode_msg = f":{user.prefix()} MODE {chan_name} +o {user.nickname}"
             for member in channel.members.values():
                 if not (hasattr(member, 'is_remote') and member.is_remote):
                     await member.send(mode_msg)
+            # Propagate MODE to linked servers (if not a remote user)
+            if self.link_manager and self.link_manager.enabled:
+                if not (hasattr(user, 'is_remote') and user.is_remote):
+                    await self.link_manager.broadcast_to_servers(mode_msg)
         elif grant_voice:
             mode_msg = f":{user.prefix()} MODE {chan_name} +v {user.nickname}"
             for member in channel.members.values():
                 if not (hasattr(member, 'is_remote') and member.is_remote):
                     await member.send(mode_msg)
+            # Propagate MODE to linked servers (if not a remote user)
+            if self.link_manager and self.link_manager.enabled:
+                if not (hasattr(user, 'is_remote') and user.is_remote):
+                    await self.link_manager.broadcast_to_servers(mode_msg)
 
         # Log to transcript if +y mode is enabled
         self.log_transcript(channel, "JOIN", user)
@@ -4788,7 +4800,16 @@ class pyIRCXServer:
 
         target.invited_to.add(chan_name)
         await user.send(self.get_reply("341", user, target=target_nick, channel=chan_name))
-        await target.send(f":{user.prefix()} INVITE {target_nick} :{chan_name}")
+
+        # Send INVITE to target (local or route to remote server)
+        invite_msg = f":{user.prefix()} INVITE {target_nick} :{chan_name}"
+        if hasattr(target, 'is_remote') and target.is_remote:
+            # Target is on a remote server, route through link manager
+            if self.link_manager and self.link_manager.enabled:
+                await self.link_manager.broadcast_to_servers(invite_msg)
+        else:
+            # Target is local, send directly
+            await target.send(invite_msg)
 
     async def handle_access(self, user, params):
         """
@@ -9406,7 +9427,10 @@ class pyIRCXServer:
             await user.send(self.get_reply("821", user, target=target_nick))
             return
         msg = f":{user.prefix()} KICK {chan_name} {target_nick} :{reason}"
-        await channel.broadcast(msg)
+        # Broadcast to LOCAL channel members only (exclude remote users to avoid routing loops)
+        for member in channel.members.values():
+            if not (hasattr(member, 'is_remote') and member.is_remote):
+                await member.send(msg)
         # Log to transcript if +y mode is enabled (before removing member)
         self.log_transcript(channel, "KICK", user, message=reason, target=target)
         channel.members.pop(target_nick, None)
@@ -9415,6 +9439,10 @@ class pyIRCXServer:
         channel.voices.discard(target_nick)
         channel.gagged.discard(target_nick)
         target.channels.discard(chan_name)
+        # Propagate KICK to linked servers (if not a remote user)
+        if self.link_manager and self.link_manager.enabled:
+            if not (hasattr(user, 'is_remote') and user.is_remote):
+                await self.link_manager.broadcast_to_servers(msg)
         if user.is_high_staff():
             await self.log_staff(user.nickname, "KICK", f"{target_nick} from {chan_name}", reason)
 

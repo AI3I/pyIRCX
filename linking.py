@@ -871,6 +871,140 @@ class ServerLinkManager:
                 # Forward QUIT to other linked servers ONLY if we're trunk
                 if self.server_role == 'trunk':
                     await self.broadcast_to_servers(line, exclude_server=server.name)
+        elif cmd == 'TOPIC':
+            # Topic change
+            # Format: :nickname!user@host TOPIC #channel :new topic
+            if len(parts) >= 3:
+                chan_name = parts[2]
+                new_topic = ' '.join(parts[3:]).lstrip(':') if len(parts) > 3 else ''
+                # Extract nickname from source prefix (nick!user@host)
+                if '!' in source:
+                    nickname = source.split('!')[0]
+                else:
+                    nickname = source
+                channel = self.irc_server.channels.get(chan_name)
+                if channel:
+                    # Update topic locally
+                    channel.topic = new_topic
+                    channel.topic_set_by = nickname
+                    channel.topic_set_at = int(time.time())
+                    logger.info(f"Remote TOPIC set in {chan_name} by {nickname}: {new_topic}")
+                    # Broadcast to LOCAL channel members only (exclude remote users)
+                    for member in channel.members.values():
+                        is_remote = hasattr(member, 'is_remote') and member.is_remote
+                        if not is_remote:
+                            await member.send(line)
+                    # Forward TOPIC to other linked servers ONLY if we're trunk
+                    if self.server_role == 'trunk':
+                        await self.broadcast_to_servers(line, exclude_server=server.name)
+        elif cmd == 'MODE':
+            # Channel or user mode change
+            # Format: :nickname!user@host MODE #channel +o user
+            # Format: :nickname!user@host MODE nickname +i
+            if len(parts) >= 3:
+                target = parts[2]
+                # Check if it's a channel mode
+                if target.startswith('#') or target.startswith('&'):
+                    # Channel mode
+                    channel = self.irc_server.channels.get(target)
+                    if channel and len(parts) >= 4:
+                        modes = parts[3]
+                        # Parse mode parameters (nicknames for +q/+o/+v etc)
+                        mode_params = parts[4:] if len(parts) > 4 else []
+
+                        adding = True
+                        param_idx = 0
+                        for char in modes:
+                            if char == '+':
+                                adding = True
+                            elif char == '-':
+                                adding = False
+                            elif char in 'qov':  # Owner, operator, voice
+                                if param_idx < len(mode_params):
+                                    target_nick = mode_params[param_idx]
+                                    param_idx += 1
+
+                                    if char == 'q':  # Owner
+                                        if adding:
+                                            channel.owners.add(target_nick)
+                                            logger.info(f"Remote MODE: Added {target_nick} as owner of {target}")
+                                        else:
+                                            channel.owners.discard(target_nick)
+                                            logger.info(f"Remote MODE: Removed {target_nick} as owner of {target}")
+                                    elif char == 'o':  # Operator/Host
+                                        if adding:
+                                            channel.hosts.add(target_nick)
+                                            logger.info(f"Remote MODE: Added {target_nick} as host of {target}")
+                                        else:
+                                            channel.hosts.discard(target_nick)
+                                            logger.info(f"Remote MODE: Removed {target_nick} as host of {target}")
+                                    elif char == 'v':  # Voice
+                                        if adding:
+                                            channel.voices.add(target_nick)
+                                            logger.info(f"Remote MODE: Added {target_nick} as voice in {target}")
+                                        else:
+                                            channel.voices.discard(target_nick)
+                                            logger.info(f"Remote MODE: Removed {target_nick} as voice in {target}")
+
+                        # Broadcast to LOCAL channel members only
+                        for member in channel.members.values():
+                            is_remote = hasattr(member, 'is_remote') and member.is_remote
+                            if not is_remote:
+                                await member.send(line)
+                        # Forward MODE to other linked servers ONLY if we're trunk
+                        if self.server_role == 'trunk':
+                            await self.broadcast_to_servers(line, exclude_server=server.name)
+        elif cmd == 'KICK':
+            # User kicked from channel
+            # Format: :nickname!user@host KICK #channel target :reason
+            if len(parts) >= 4:
+                chan_name = parts[2]
+                target_nick = parts[3]
+                reason = ' '.join(parts[4:]).lstrip(':') if len(parts) > 4 else ''
+
+                channel = self.irc_server.channels.get(chan_name)
+                if channel:
+                    # Remove target from channel
+                    channel.members.pop(target_nick, None)
+                    channel.owners.discard(target_nick)
+                    channel.hosts.discard(target_nick)
+                    channel.voices.discard(target_nick)
+                    channel.gagged.discard(target_nick)
+
+                    # Update target user's channel list if they're local
+                    target_user = self.irc_server.users.get(target_nick)
+                    if target_user:
+                        target_user.channels.discard(chan_name)
+
+                    logger.info(f"Remote KICK: {target_nick} from {chan_name} by {source}")
+
+                    # Broadcast to LOCAL channel members only
+                    for member in channel.members.values():
+                        is_remote = hasattr(member, 'is_remote') and member.is_remote
+                        if not is_remote:
+                            await member.send(line)
+
+                    # Forward KICK to other linked servers ONLY if we're trunk
+                    if self.server_role == 'trunk':
+                        await self.broadcast_to_servers(line, exclude_server=server.name)
+        elif cmd == 'INVITE':
+            # User invited to channel
+            # Format: :nickname!user@host INVITE target :#channel
+            if len(parts) >= 4:
+                target_nick = parts[2]
+                chan_name = parts[3].lstrip(':')
+
+                # Check if target is local
+                target_user = self.irc_server.users.get(target_nick)
+                if target_user and not (hasattr(target_user, 'is_remote') and target_user.is_remote):
+                    # Target is local, deliver INVITE
+                    target_user.invited_to.add(chan_name)
+                    await target_user.send(line)
+                    logger.info(f"Remote INVITE: {target_nick} to {chan_name} from {source}")
+                else:
+                    # Target not found locally - forward to other servers ONLY if we're trunk
+                    if self.server_role == 'trunk':
+                        await self.broadcast_to_servers(line, exclude_server=server.name)
 
     async def broadcast_to_servers(self, message: str, exclude_server: str = None):
         """Broadcast a message to all linked servers"""
