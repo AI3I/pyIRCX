@@ -1794,7 +1794,7 @@ RESPONSES = {
     "391": ":Local time is {time}",
     "401": "{target} :No such nickname or channel",
     "403": "{target} :No such channel",
-    "404": "{channel} :Cannot send to channel (check channel modes or your permissions)",
+    "404": "{channel} :You cannot send to channel (check channel modes or your permissions)",
     "407": "{target} :Too many recipients",
     "421": "{command} :Unknown command",
     "432": "{target} :Invalid nickname (must be 1-{nicklen} characters, start with a letter, and contain only letters, numbers, -, _, [, ], {{, }}, \\, or |)",
@@ -1830,12 +1830,12 @@ RESPONSES = {
     "818": "{target} :End of properties",
     "819": "{target} {prop} :{value}",
     # IRCX Service Protection (820-829)
-    "820": "{target} :Cannot perform this action on services",
-    "821": "{target} :Cannot kick services",
-    "822": "{target} :Cannot ban services",
-    "823": "{target} :Cannot kill services",
-    "824": "{target} :Cannot gag services",
-    "825": "{target} :Cannot add services to access deny list",
+    "820": "{target} :You cannot perform this action on services",
+    "821": "{target} :You cannot kick services",
+    "822": "{target} :You cannot ban services",
+    "823": "{target} :You cannot kill services",
+    "824": "{target} :You cannot gag services",
+    "825": "{target} :You cannot add services to access deny list",
     # IRCX Rate Limiting (830-839)
     "830": ":You are being rate limited. Please wait before trying again.",
     "831": ":WHO command rate limited. Please wait before trying again.",
@@ -1844,9 +1844,9 @@ RESPONSES = {
     "834": ":Sending too fast. Flood protection triggered. Please slow down.",
     "835": ":Please wait {seconds} seconds before changing nickname",
     # IRCX Channel Restrictions (840-849)
-    "840": "{channel} :Cannot send to channel",
-    "841": "{channel} :Cannot send to channel (moderated - only voiced users and channel operators can speak)",
-    "842": "{channel} :Cannot send to channel (no external messages - you must join the channel first)",
+    "840": "{channel} :You cannot send to channel",
+    "841": "{channel} :You cannot send to channel (moderated - only voiced users and channel operators can speak)",
+    "842": "{channel} :You cannot send to channel (no external messages - you must join the channel first)",
     "843": "{channel} :Whispers are not allowed in this channel",
     "844": "{channel} :Invitations are not allowed in this channel",
     "845": "{channel} :Transcript mode not enabled (+y)",
@@ -1857,12 +1857,12 @@ RESPONSES = {
     "850": ":Invalid access level - valid: {levels}",
     "851": "{mask} :Mask already in {level} list",
     "852": "{mask} :Mask not found in {level} list",
-    "853": ":Cannot remove owner-added entry (you are not the channel owner)",
+    "853": ":You cannot remove owner-added entry (you are not the channel owner)",
     "854": "{target} :ACCESS {level} added: {mask}",
     "855": "{target} :ACCESS {level} removed: {mask}",
     "856": "{target} :Cleared {count} {level} entries",
     "857": ":Only channel owners can clear access lists",
-    "858": ":Cannot delete your own staff account",
+    "858": ":You cannot delete your own staff account",
     "859": ":Already linked to {server}",
     # IRCX Command Usage (860-869)
     "860": ":Usage: {usage}",
@@ -9780,7 +9780,7 @@ class pyIRCXServer:
             await staff.send(self.get_reply("403", staff, target=channel_name))
             return
         if chan_name.lower() == "#system":
-            await staff.send(f":{self.servername} NOTICE {staff.nickname} :Cannot kill #System channel")
+            await staff.send(f":{self.servername} NOTICE {staff.nickname} :You cannot kill #System channel")
             return
         kill_count = 0
         for nick in list(channel.members.keys()):
@@ -9843,7 +9843,7 @@ class pyIRCXServer:
             return
         # Cannot kick staff members unless you're also staff
         if target.is_staff() and not user.is_staff():
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Cannot kick staff members")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :You cannot kick staff members")
             return
         msg = f":{user.prefix()} KICK {chan_name} {target_nick} :{reason}"
         # Broadcast to LOCAL channel members only (exclude remote users to avoid routing loops)
@@ -10007,7 +10007,7 @@ class pyIRCXServer:
                         if would_ban_service:
                             await user.send(self.get_reply("822", user, target=ban_mask))
                         elif would_ban_staff:
-                            await user.send(f":{self.servername} NOTICE {user.nickname} :Cannot ban staff members")
+                            await user.send(f":{self.servername} NOTICE {user.nickname} :You cannot ban staff members")
                         elif ban_mask not in channel.ban_list:
                             channel.ban_list.append(ban_mask)
                             sign = '+' if adding else '-'
