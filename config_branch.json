@@ -47,6 +47,14 @@
     "default_username": "admin",
     "default_password": "changeme"
   },
+  "security": {
+    "enable_flood_protection": false,
+    "enable_connection_throttle": false,
+    "flood_messages": 9999,
+    "flood_window": 1.0,
+    "connection_throttle": 99999,
+    "throttle_window": 1.0
+  },
   "ssl": {
     "enabled": false
   }

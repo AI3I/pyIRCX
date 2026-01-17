@@ -72,9 +72,9 @@ class IRCTestClient:
                 await self.send_raw(f"USER {username or nickname} 0 * :{nickname}")
 
             # Wait for registration
-            await asyncio.sleep(1.5)  # Increased delay to reduce connection floods
+            await asyncio.sleep(0.3)  # Minimal delay for network latency
             await self.read_lines()
-            await asyncio.sleep(0.2)  # Allow server to finish processing
+            await asyncio.sleep(0.05)  # Allow server to finish processing
 
             return True
         except Exception as e:
@@ -124,10 +124,10 @@ class IRCTestClient:
         if self.connected:
             try:
                 await self.send_raw("QUIT :Test completed")
-                await asyncio.sleep(0.15)  # Give server time to process QUIT
+                await asyncio.sleep(0.05)  # Give server time to process QUIT
                 self.writer.close()
                 await self.writer.wait_closed()
-                await asyncio.sleep(0.15)  # Allow connection cleanup
+                await asyncio.sleep(0.05)  # Allow connection cleanup
             except Exception:
                 pass  # Connection already closed
             self.connected = False
@@ -174,8 +174,8 @@ class TestRunner:
                 import traceback
                 traceback.print_exc()
 
-            # Brief delay between tests to avoid connection floods
-            await asyncio.sleep(0.3)
+            # Brief delay between tests for cleanup
+            await asyncio.sleep(0.05)
         
         # Summary
         print("\n" + "="*70)
