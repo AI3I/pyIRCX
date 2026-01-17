@@ -181,16 +181,16 @@ class ServerLinkManager:
 
         logger.info(f"Remote server {remote_name}: pyIRCX/{remote_version} PROTO/{remote_proto}")
 
-        # Check minimum version
-        if self._compare_versions(remote_version, MIN_COMPATIBLE_VERSION) < 0:
+        # Require EXACT version match (strict - no risk tolerance)
+        if remote_version != PYIRCX_VERSION:
             logger.error(
-                f"Incompatible pyIRCX version from {remote_name}: "
-                f"{remote_version} < {MIN_COMPATIBLE_VERSION} (minimum)"
+                f"Version mismatch from {remote_name}: "
+                f"{remote_version} != {PYIRCX_VERSION} (exact match required)"
             )
             await self.send_to_writer(
                 writer,
-                f"ERROR :Incompatible pyIRCX version {remote_version}. "
-                f"Minimum required: {MIN_COMPATIBLE_VERSION}"
+                f"ERROR :Version mismatch. Remote: {remote_version}, Local: {PYIRCX_VERSION}. "
+                f"Versions must match exactly. Please upgrade/downgrade to match."
             )
             writer.close()
             return False
@@ -588,6 +588,23 @@ class ServerLinkManager:
 
         # Burst services if we're a hub and in centralized mode
         if is_services_hub and services_mode == 'centralized':
+            # Burst staff accounts first (network-wide admin)
+            try:
+                import aiosqlite
+                async with aiosqlite.connect(CONFIG.get('database', 'path')) as db:
+                    async with db.execute("SELECT username, level, password_hash FROM users WHERE level IN ('ADMIN', 'SYSOP', 'GUIDE')") as cursor:
+                        staff_count = 0
+                        async for row in cursor:
+                            username, level, password_hash = row
+                            # STAFFSYNC <username> <level> <password_hash>
+                            await server.send(f"STAFFSYNC {username} {level} {password_hash}")
+                            staff_count += 1
+                        await server.send("STAFFSYNC_END")
+                        logger.info(f"Burst {staff_count} staff accounts to {server.name}")
+            except Exception as e:
+                logger.error(f"Error bursting staff accounts to {server.name}: {e}")
+
+            # Burst service bots
             for nickname, user in self.irc_server.users.items():
                 if user.is_virtual and user.has_mode('s'):
                     # Service user - burst with special SVCNICK command
@@ -680,6 +697,21 @@ class ServerLinkManager:
         elif cmd == 'STAFFFAIL':
             # Staff authentication failure response from trunk
             await self.handle_staff_auth_response(server, parts, success=False)
+        elif cmd == 'STAFFSYNC':
+            # Staff account sync from trunk during burst
+            await self.handle_staff_sync(server, parts)
+        elif cmd == 'STAFFSYNC_END':
+            # End of staff sync burst
+            logger.info(f"Staff sync completed from {server.name}")
+        elif cmd == 'STAFFCMD':
+            # Staff command proxy from branch to trunk
+            await self.handle_staff_command_proxy(server, parts)
+        elif cmd == 'STAFFUPDATE':
+            # Staff account update broadcast from trunk
+            await self.handle_staff_update(server, parts)
+        elif cmd == 'STAFFREPLY':
+            # Staff command reply from trunk to user on branch
+            await self.handle_staff_reply(server, parts)
         elif cmd == 'SVCNICK':
             # Service nickname from trunk
             await self.handle_service_nick(server, parts)
@@ -807,6 +839,293 @@ class ServerLinkManager:
             logger.info(f"Branch: Staff auth FAILED via trunk for {pending['username']}")
 
         del self._pending_staff_auth[auth_id]
+
+    async def handle_staff_sync(self, server: LinkedServer, parts: list):
+        """Handle STAFFSYNC from trunk during burst (branch only)"""
+        if len(parts) < 4:
+            logger.warning(f"Invalid STAFFSYNC from {server.name}: {parts}")
+            return
+
+        # STAFFSYNC <username> <level> <password_hash>
+        username = parts[1]
+        level = parts[2]
+        password_hash = parts[3]
+
+        try:
+            import aiosqlite
+            async with aiosqlite.connect(CONFIG.get('database', 'path')) as db:
+                # Check if staff account exists
+                async with db.execute("SELECT username FROM users WHERE username=?", (username,)) as cursor:
+                    existing = await cursor.fetchone()
+
+                if existing:
+                    # Update existing staff account
+                    await db.execute(
+                        "UPDATE users SET level=?, password_hash=? WHERE username=?",
+                        (level, password_hash, username)
+                    )
+                else:
+                    # Insert new staff account
+                    await db.execute(
+                        "INSERT INTO users (username, level, password_hash) VALUES (?, ?, ?)",
+                        (username, level, password_hash)
+                    )
+
+                await db.commit()
+                logger.info(f"Staff sync: {username} ({level}) from {server.name}")
+
+        except Exception as e:
+            logger.error(f"Error syncing staff account {username}: {e}")
+
+    async def handle_staff_command_proxy(self, server: LinkedServer, parts: list):
+        """Handle STAFFCMD proxy from branch (trunk only)"""
+        if len(parts) < 3:
+            logger.warning(f"Invalid STAFFCMD from {server.name}: {parts}")
+            return
+
+        # STAFFCMD <nickname> <subcmd> [args...]
+        nickname = parts[1]
+        subcmd = parts[2].upper()
+
+        # Find the user on trunk (they're connected to branch, but we need to process command)
+        user = self.irc_server.users_by_nick.get(nickname)
+        if not user:
+            logger.warning(f"STAFFCMD for unknown user {nickname} from {server.name}")
+            await server.send(f"STAFFREPLY {nickname} :Error: User not found on trunk")
+            return
+
+        try:
+            if subcmd == 'PASSWORD':
+                # STAFFCMD <nickname> PASSWORD <old_pass> <new_pass>
+                if len(parts) < 5:
+                    await server.send(f"STAFFREPLY {nickname} :Error: Invalid PASSWORD command syntax")
+                    return
+
+                old_pass = parts[3]
+                new_pass = parts[4]
+
+                # Validate old password and update
+                from pyircx import check_password_async, hash_password_async
+                import aiosqlite
+
+                async with aiosqlite.connect(CONFIG.get('database', 'path')) as db:
+                    async with db.execute("SELECT password_hash FROM users WHERE username=?", (user.username,)) as cursor:
+                        row = await cursor.fetchone()
+                        if not row:
+                            await server.send(f"STAFFREPLY {nickname} :Error: Staff account not found")
+                            return
+
+                        if not await check_password_async(old_pass, row[0]):
+                            await server.send(f"STAFFREPLY {nickname} :Error: Incorrect current password")
+                            return
+
+                        # Hash new password
+                        new_hash = await hash_password_async(new_pass)
+
+                        # Update password
+                        await db.execute("UPDATE users SET password_hash=? WHERE username=?", (new_hash, user.username))
+                        await db.commit()
+
+                        # Broadcast update to all servers
+                        await self.broadcast_to_servers(f"STAFFUPDATE {user.username} PASSWORD_HASH {new_hash}")
+
+                        # Send success reply
+                        await server.send(f"STAFFREPLY {nickname} :Password changed successfully")
+                        logger.info(f"Staff password changed for {user.username} via {server.name}")
+
+            elif subcmd == 'ADD':
+                # STAFFCMD <nickname> ADD <new_username> <password> <level>
+                if len(parts) < 6:
+                    await server.send(f"STAFFREPLY {nickname} :Error: Invalid ADD command syntax")
+                    return
+
+                # Check if user has permission (ADMIN only)
+                if user.staff_level != 'ADMIN':
+                    await server.send(f"STAFFREPLY {nickname} :Error: Permission denied (ADMIN only)")
+                    return
+
+                new_username = parts[3]
+                password = parts[4]
+                level = parts[5].upper()
+
+                if level not in ['ADMIN', 'SYSOP', 'GUIDE']:
+                    await server.send(f"STAFFREPLY {nickname} :Error: Invalid staff level (must be ADMIN, SYSOP, or GUIDE)")
+                    return
+
+                from pyircx import hash_password_async
+                import aiosqlite
+
+                async with aiosqlite.connect(CONFIG.get('database', 'path')) as db:
+                    # Check if username exists
+                    async with db.execute("SELECT username FROM users WHERE username=?", (new_username,)) as cursor:
+                        if await cursor.fetchone():
+                            await server.send(f"STAFFREPLY {nickname} :Error: Username {new_username} already exists")
+                            return
+
+                    # Create staff account
+                    password_hash = await hash_password_async(password)
+                    await db.execute("INSERT INTO users (username, level, password_hash) VALUES (?, ?, ?)",
+                                   (new_username, level, password_hash))
+                    await db.commit()
+
+                    # Broadcast to all servers
+                    await self.broadcast_to_servers(f"STAFFUPDATE {new_username} ADDED {level} {password_hash}")
+
+                    # Send success reply
+                    await server.send(f"STAFFREPLY {nickname} :Staff account {new_username} created with level {level}")
+                    logger.info(f"Staff account {new_username} ({level}) added by {user.username} via {server.name}")
+
+            elif subcmd == 'REMOVE':
+                # STAFFCMD <nickname> REMOVE <username>
+                if len(parts) < 4:
+                    await server.send(f"STAFFREPLY {nickname} :Error: Invalid REMOVE command syntax")
+                    return
+
+                # Check if user has permission (ADMIN only)
+                if user.staff_level != 'ADMIN':
+                    await server.send(f"STAFFREPLY {nickname} :Error: Permission denied (ADMIN only)")
+                    return
+
+                target_username = parts[3]
+
+                import aiosqlite
+                async with aiosqlite.connect(CONFIG.get('database', 'path')) as db:
+                    # Check if username exists
+                    async with db.execute("SELECT username FROM users WHERE username=?", (target_username,)) as cursor:
+                        if not await cursor.fetchone():
+                            await server.send(f"STAFFREPLY {nickname} :Error: Staff account {target_username} not found")
+                            return
+
+                    # Prevent self-removal
+                    if target_username == user.username:
+                        await server.send(f"STAFFREPLY {nickname} :Error: Cannot remove your own staff account")
+                        return
+
+                    # Remove staff account
+                    await db.execute("DELETE FROM users WHERE username=?", (target_username,))
+                    await db.commit()
+
+                    # Broadcast to all servers
+                    await self.broadcast_to_servers(f"STAFFUPDATE {target_username} REMOVED")
+
+                    # Send success reply
+                    await server.send(f"STAFFREPLY {nickname} :Staff account {target_username} removed")
+                    logger.info(f"Staff account {target_username} removed by {user.username} via {server.name}")
+
+            elif subcmd == 'LEVEL':
+                # STAFFCMD <nickname> LEVEL <username> <new_level>
+                if len(parts) < 5:
+                    await server.send(f"STAFFREPLY {nickname} :Error: Invalid LEVEL command syntax")
+                    return
+
+                # Check if user has permission (ADMIN only)
+                if user.staff_level != 'ADMIN':
+                    await server.send(f"STAFFREPLY {nickname} :Error: Permission denied (ADMIN only)")
+                    return
+
+                target_username = parts[3]
+                new_level = parts[4].upper()
+
+                if new_level not in ['ADMIN', 'SYSOP', 'GUIDE', 'USER']:
+                    await server.send(f"STAFFREPLY {nickname} :Error: Invalid level (must be ADMIN, SYSOP, GUIDE, or USER)")
+                    return
+
+                import aiosqlite
+                async with aiosqlite.connect(CONFIG.get('database', 'path')) as db:
+                    # Check if username exists
+                    async with db.execute("SELECT username FROM users WHERE username=?", (target_username,)) as cursor:
+                        if not await cursor.fetchone():
+                            await server.send(f"STAFFREPLY {nickname} :Error: Staff account {target_username} not found")
+                            return
+
+                    # Update level
+                    await db.execute("UPDATE users SET level=? WHERE username=?", (new_level, target_username))
+                    await db.commit()
+
+                    # Broadcast to all servers
+                    await self.broadcast_to_servers(f"STAFFUPDATE {target_username} LEVEL {new_level}")
+
+                    # Send success reply
+                    await server.send(f"STAFFREPLY {nickname} :Staff level for {target_username} changed to {new_level}")
+                    logger.info(f"Staff level for {target_username} changed to {new_level} by {user.username} via {server.name}")
+
+            else:
+                await server.send(f"STAFFREPLY {nickname} :Error: Unknown staff command {subcmd}")
+
+        except Exception as e:
+            logger.error(f"Error processing STAFFCMD {subcmd} from {server.name}: {e}")
+            await server.send(f"STAFFREPLY {nickname} :Error: Command failed - {e}")
+
+    async def handle_staff_update(self, server: LinkedServer, parts: list):
+        """Handle STAFFUPDATE broadcast from trunk (branch only)"""
+        if len(parts) < 3:
+            logger.warning(f"Invalid STAFFUPDATE from {server.name}: {parts}")
+            return
+
+        # STAFFUPDATE <username> <field> [value...]
+        username = parts[1]
+        field = parts[2].upper()
+
+        try:
+            import aiosqlite
+            async with aiosqlite.connect(CONFIG.get('database', 'path')) as db:
+                if field == 'PASSWORD_HASH':
+                    if len(parts) < 4:
+                        return
+                    password_hash = parts[3]
+                    await db.execute("UPDATE users SET password_hash=? WHERE username=?", (password_hash, username))
+                    await db.commit()
+                    logger.info(f"Staff update: password changed for {username}")
+
+                elif field == 'LEVEL':
+                    if len(parts) < 4:
+                        return
+                    level = parts[3]
+                    await db.execute("UPDATE users SET level=? WHERE username=?", (level, username))
+                    await db.commit()
+                    logger.info(f"Staff update: level changed for {username} to {level}")
+
+                elif field == 'ADDED':
+                    if len(parts) < 5:
+                        return
+                    level = parts[3]
+                    password_hash = parts[4]
+                    # Check if exists
+                    async with db.execute("SELECT username FROM users WHERE username=?", (username,)) as cursor:
+                        if await cursor.fetchone():
+                            # Update existing
+                            await db.execute("UPDATE users SET level=?, password_hash=? WHERE username=?",
+                                           (level, password_hash, username))
+                        else:
+                            # Insert new
+                            await db.execute("INSERT INTO users (username, level, password_hash) VALUES (?, ?, ?)",
+                                           (username, level, password_hash))
+                    await db.commit()
+                    logger.info(f"Staff update: {username} added with level {level}")
+
+                elif field == 'REMOVED':
+                    await db.execute("DELETE FROM users WHERE username=?", (username,))
+                    await db.commit()
+                    logger.info(f"Staff update: {username} removed")
+
+        except Exception as e:
+            logger.error(f"Error processing STAFFUPDATE for {username}: {e}")
+
+    async def handle_staff_reply(self, server: LinkedServer, parts: list):
+        """Handle STAFFREPLY from trunk to user on branch (branch only)"""
+        if len(parts) < 3:
+            return
+
+        # STAFFREPLY <nickname> :<message>
+        nickname = parts[1]
+        message = ' '.join(parts[2:]).lstrip(':')
+
+        # Find user on this branch
+        user = self.irc_server.users_by_nick.get(nickname)
+        if user:
+            await user.send(f":{self.irc_server.servername} NOTICE {nickname} :{message}")
+        else:
+            logger.warning(f"STAFFREPLY for unknown user {nickname}")
 
     async def handle_service_nick(self, server: LinkedServer, parts: list):
         """Handle SVCNICK (service user) from services hub"""

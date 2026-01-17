@@ -6056,6 +6056,18 @@ class pyIRCXServer:
                 await user.send(f":{self.servername} NOTICE {user.nickname} :Levels: ADMIN, SYSOP, GUIDE")
                 return
 
+            # Check if branch in centralized mode - proxy to trunk
+            if not CONFIG.get('services', 'is_services_hub') and \
+               CONFIG.get('services', 'mode') == 'centralized':
+                if self.link_manager and self.link_manager.servers:
+                    trunk_server = next((s for s in self.link_manager.servers.values() if s.role == 'trunk'), None)
+                    if trunk_server:
+                        await trunk_server.send(f"STAFFCMD {user.nickname} ADD {params[1]} {params[2]} {params[3]}")
+                        await user.send(f":{self.servername} NOTICE {user.nickname} :Staff command forwarded to trunk. Please wait...")
+                        return
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Error: Trunk not connected. Staff management unavailable.")
+                return
+
             username = params[1]
             password = params[2]
             level = params[3].upper()
@@ -6111,6 +6123,18 @@ class pyIRCXServer:
                 await self.send_notice(user, "860", usage="STAFF DEL <username>")
                 return
 
+            # Check if branch in centralized mode - proxy to trunk
+            if not CONFIG.get('services', 'is_services_hub') and \
+               CONFIG.get('services', 'mode') == 'centralized':
+                if self.link_manager and self.link_manager.servers:
+                    trunk_server = next((s for s in self.link_manager.servers.values() if s.role == 'trunk'), None)
+                    if trunk_server:
+                        await trunk_server.send(f"STAFFCMD {user.nickname} REMOVE {params[1]}")
+                        await user.send(f":{self.servername} NOTICE {user.nickname} :Staff command forwarded to trunk. Please wait...")
+                        return
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Error: Trunk not connected. Staff management unavailable.")
+                return
+
             username = params[1]
 
             # Prevent self-deletion
@@ -6154,6 +6178,18 @@ class pyIRCXServer:
                 await user.send(f":{self.servername} NOTICE {user.nickname} :Levels: ADMIN, SYSOP, GUIDE")
                 return
 
+            # Check if branch in centralized mode - proxy to trunk
+            if not CONFIG.get('services', 'is_services_hub') and \
+               CONFIG.get('services', 'mode') == 'centralized':
+                if self.link_manager and self.link_manager.servers:
+                    trunk_server = next((s for s in self.link_manager.servers.values() if s.role == 'trunk'), None)
+                    if trunk_server:
+                        await trunk_server.send(f"STAFFCMD {user.nickname} LEVEL {params[1]} {params[2]}")
+                        await user.send(f":{self.servername} NOTICE {user.nickname} :Staff command forwarded to trunk. Please wait...")
+                        return
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Error: Trunk not connected. Staff management unavailable.")
+                return
+
             username = params[1]
             new_level = params[2].upper()
 
@@ -6193,17 +6229,57 @@ class pyIRCXServer:
 
         elif subcmd == "PASS":
             # Change staff password - ADMIN or self
+            # Syntax: STAFF PASS <username> <oldpassword> <newpassword> (for own password)
+            #         STAFF PASS <username> <newpassword> (ADMIN changing others - less secure, local only)
+
+            own_username = user.username.lstrip('~')
+
             if len(params) < 3:
-                await self.send_notice(user, "860", usage="STAFF PASS <username> <newpassword>")
+                await self.send_notice(user, "860", usage="STAFF PASS <username> <oldpassword> <newpassword>")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :For changing own password, old password required")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Admins changing others: STAFF PASS <username> <newpassword>")
                 return
 
             username = params[1]
-            new_password = params[2]
-
-            # Check permissions: ADMIN can change anyone's, others can only change their own
-            own_username = user.username.lstrip('~')
             is_self = username.lower() == own_username.lower()
 
+            # Determine if 2 or 3 parameter format
+            if len(params) == 4:
+                # STAFF PASS <username> <oldpass> <newpass> - secure format
+                old_password = params[2]
+                new_password = params[3]
+
+                # Check if branch in centralized mode - proxy to trunk
+                if not CONFIG.get('services', 'is_services_hub') and \
+                   CONFIG.get('services', 'mode') == 'centralized':
+                    if self.link_manager and self.link_manager.servers:
+                        trunk_server = next((s for s in self.link_manager.servers.values() if s.role == 'trunk'), None)
+                        if trunk_server:
+                            await trunk_server.send(f"STAFFCMD {user.nickname} PASSWORD {old_password} {new_password}")
+                            await user.send(f":{self.servername} NOTICE {user.nickname} :Password change request forwarded to trunk. Please wait...")
+                            return
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :Error: Trunk not connected. Staff management unavailable.")
+                    return
+
+            elif len(params) == 3:
+                # STAFF PASS <username> <newpass> - legacy format (ADMIN only, local only)
+                if not is_admin:
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :Old password required when changing own password")
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: STAFF PASS <username> <oldpassword> <newpassword>")
+                    return
+
+                if not CONFIG.get('services', 'is_services_hub'):
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :This format only works on trunk server")
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :Use: STAFF PASS <username> <oldpassword> <newpassword>")
+                    return
+
+                new_password = params[2]
+                old_password = None  # Admin override, no validation
+            else:
+                await self.send_notice(user, "860", usage="STAFF PASS <username> <oldpassword> <newpassword>")
+                return
+
+            # Check permissions
             if not is_admin and not is_self:
                 await user.send(f":{self.servername} NOTICE {user.nickname} :You can only change your own staff password")
                 return
