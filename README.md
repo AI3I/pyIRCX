@@ -23,10 +23,11 @@ If you remember the days of **Microsoft Comic Chat**, chat rooms with real nicks
 
 > **Active Development:** pyIRCX is under active development with frequent updates, enhancements, and bug fixes. New features, security improvements, and performance optimizations are released regularly. See [CHANGELOG.md](CHANGELOG.md) for detailed release notes and version history.
 
-**Current Version:** 1.3.0-dev (trunk/branch implementation)
+**Current Version:** 1.3.0-dev (seamless cross-server operations)
 
 **Latest Releases:**
-- **v1.3.0-dev** (January 16, 2026) - 🎉 **Centralized Services with Trunk/Branch Topology**: Distributed network architecture with centralized services and staff authentication. Trunk servers host services (Registrar, Messenger, etc.), branch servers route requests to trunk. All tests passing (4/4)! See [TRUNK_BRANCH_PROGRESS.md](TRUNK_BRANCH_PROGRESS.md) and [SERVICES_TRUNK_IMPLEMENTATION.md](SERVICES_TRUNK_IMPLEMENTATION.md)
+- **v1.3.0-dev** (January 17, 2026) - 🎉 **Seamless Cross-Server Operations**: Complete Phase 2 implementation with network-wide TOPIC, KICK, MODE, INVITE, NICK, AWAY, WHISPER, KNOCK propagation. Channel modes, ban lists, and access controls synchronize across all linked servers. All 12 Phase 2 tests passing! Network behaves as unified system. See [PHASE2_PROGRESS.md](PHASE2_PROGRESS.md)
+- **v1.3.0-dev** (January 16, 2026) - 🎉 **Centralized Services with Trunk/Branch Topology**: Distributed network architecture with centralized services and staff authentication. Trunk servers host services (Registrar, Messenger, etc.), branch servers route requests to trunk. Phase 1 complete (4/4 tests passing)! See [TRUNK_BRANCH_PROGRESS.md](TRUNK_BRANCH_PROGRESS.md) and [SERVICES_TRUNK_IMPLEMENTATION.md](SERVICES_TRUNK_IMPLEMENTATION.md)
 - **v1.2.0** (January 16, 2026) - User experience polish: Enhanced help system, command aliases, improved message quality, STATS/STAFF formatting, configurable client timeout, comprehensive webadmin tooltips
 - **v1.1.9** (January 16, 2026) - Traditional IRC service aliases (NickServ/ChanServ/MemoServ)
 - **v1.1.8** (January 16, 2026) - Comprehensive documentation reorganization, Apache/httpd multi-distro setup
@@ -91,23 +92,53 @@ pyIRCX offers feature parity with commercial IRCX servers like [OfficeIRC](https
 
 ### 🌐 Server Linking & Distributed Networks (NEW!)
 
-Build IRC networks that scale with **trunk-and-branch topology**:
+Build IRC networks that scale with **trunk-and-branch topology** and **seamless cross-server operations**:
 
+#### Network Architecture
 - **Centralized Services** — Trunk servers host services (Registrar, Messenger, ServiceBots)
 - **Branch Routing** — Branch servers automatically route service requests to trunk
 - **Staff Authentication** — Centralized staff credentials on trunk with branch routing
 - **Server-to-Server Protocol** — Custom IRCX-aware linking protocol with role validation
 - **Authentication** — Password-protected server links with bcrypt support
 - **State Burst** — Full user/channel synchronization on link, including service users
-- **Message Routing** — Efficient bi-directional message routing (branch ↔ trunk ↔ branch)
-- **Netsplit Handling** — Automatic cleanup and recovery
 - **Role Validation** — Enforces flat topology (trunk↔branch only, prevents multi-tier)
-- **Admin Commands**:
-  - `CONNECT <server>` — Link to a remote server
-  - `SQUIT <server>` — Disconnect a linked server
-  - `LINKS` — Show network topology
+- **Netsplit Handling** — Automatic cleanup and recovery
 - **Collision Detection** — Timestamp-based nick collision resolution
-- **Configurable** — Link configuration via JSON config file
+
+#### Seamless Cross-Server Operations (Phase 2) 🎉
+Network-wide command propagation makes linked servers behave as a unified system:
+
+**Channel Operations:**
+- **TOPIC** — Topic changes propagate to all servers instantly
+- **KICK** — Kicks remove users network-wide
+- **MODE** — Channel modes (+t/+m/+n/+i/+s/+k/+l/+b/+o/+v/+q) sync across network
+- **INVITE** — Invites route to users on any server
+- **ACCESS/PROP** — IRCX access lists and properties stay synchronized
+
+**User Operations:**
+- **NICK** — Nickname changes update across all servers
+- **AWAY** — Away status syncs network-wide
+- **MODE** — User modes (+i invisible) propagate
+- **KILL** — Network operators can terminate connections globally
+- **WHISPER** — IRCX whisper messages route to remote users
+
+**Network Queries:**
+- **WHO/NAMES** — Show all users in channels (local + remote)
+- **WHOIS** — Query users on any linked server
+- **MAP** — Visual network topology tree
+- **LUSERS** — Network-wide user statistics
+
+**Advanced:**
+- **KNOCK** — Channel knock requests reach remote channel owners/hosts
+- **Ban Lists** — +b mode ban masks synchronize across servers
+- **Channel Keys** — +k mode keys sync to all servers
+- **User Limits** — +l mode limits propagate network-wide
+
+#### Admin Commands
+- `CONNECT <server>` — Link to a remote server
+- `SQUIT <server>` — Disconnect a linked server
+- `LINKS` — Show network topology
+- `MAP` — Visual tree display of network
 
 **Example Trunk/Branch Topology:**
 ```
