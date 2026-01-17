@@ -7387,7 +7387,7 @@ class pyIRCXServer:
         if is_channel(target):
             # Channel registration (only global # channels, not local &)
             if is_local_channel(target):
-                await user.send(f":{self.servername} NOTICE {user.nickname} :Local channels (&) cannot be registered")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :You cannot register local channels (&)")
                 return
             channel_password = params[1] if len(params) > 1 else None
             await self._register_channel(user, target, channel_password)
