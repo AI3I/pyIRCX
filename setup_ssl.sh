@@ -205,6 +205,13 @@ case $REPLY in
             exit 1
         fi
 
+        # Get additional SANs (Subject Alternative Names)
+        echo ""
+        echo "Subject Alternative Names (SANs) allow the certificate to work with multiple domains."
+        echo "Examples: www.${DOMAIN}, chat.${DOMAIN}, ${DOMAIN%%.*}.com"
+        echo ""
+        read -p "Enter additional SANs (comma-separated, or leave empty): " SANS_INPUT
+
         # Check if certbot is installed
         if ! command -v certbot &> /dev/null; then
             echo -e "${YELLOW}Installing certbot...${NC}"
@@ -280,8 +287,27 @@ case $REPLY in
             systemctl stop pyircx
         fi
 
+        # Build certbot command with SANs
+        CERTBOT_CMD="certbot certonly --standalone -d \"$DOMAIN\""
+
+        # Add SANs to certbot command
+        if [ -n "$SANS_INPUT" ]; then
+            # Split comma-separated SANs and add each as -d flag
+            IFS=',' read -ra SANS_ARRAY <<< "$SANS_INPUT"
+            for san in "${SANS_ARRAY[@]}"; do
+                # Trim whitespace
+                san=$(echo "$san" | xargs)
+                if [ -n "$san" ]; then
+                    CERTBOT_CMD="$CERTBOT_CMD -d \"$san\""
+                fi
+            done
+            echo -e "${YELLOW}Certificate will include SANs: $SANS_INPUT${NC}"
+        fi
+
+        CERTBOT_CMD="$CERTBOT_CMD --email \"$EMAIL\" --agree-tos --non-interactive"
+
         # Get certificate
-        if certbot certonly --standalone -d "$DOMAIN" --email "$EMAIL" --agree-tos --non-interactive; then
+        if eval $CERTBOT_CMD; then
             echo -e "${GREEN}✓ Certificate obtained successfully!${NC}"
 
             CERT_FILE="/etc/letsencrypt/live/$DOMAIN/fullchain.pem"
@@ -356,6 +382,13 @@ EOF
         read -p "Enter domain/hostname (e.g., irc.local): " DOMAIN
         DOMAIN=${DOMAIN:-irc.local}
 
+        # Get additional SANs (Subject Alternative Names)
+        echo ""
+        echo "Subject Alternative Names (SANs) allow the certificate to work with multiple domains."
+        echo "Examples: localhost, 127.0.0.1, ::1, www.${DOMAIN}"
+        echo ""
+        read -p "Enter additional SANs (comma-separated, or leave empty): " SANS_INPUT
+
         CERT_DIR="/etc/pyircx/ssl"
         mkdir -p "$CERT_DIR"
 
@@ -364,11 +397,40 @@ EOF
 
         echo -e "${YELLOW}Generating self-signed certificate...${NC}"
 
+        # Build SAN extension string
+        SAN_EXT="DNS:${DOMAIN}"
+
+        # Add localhost and loopback IPs by default
+        SAN_EXT="${SAN_EXT},DNS:localhost,IP:127.0.0.1,IP:::1"
+
+        # Add user-specified SANs
+        if [ -n "$SANS_INPUT" ]; then
+            IFS=',' read -ra SANS_ARRAY <<< "$SANS_INPUT"
+            for san in "${SANS_ARRAY[@]}"; do
+                san=$(echo "$san" | xargs)  # Trim whitespace
+                if [ -n "$san" ]; then
+                    # Detect if it's an IP address or hostname
+                    if [[ "$san" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || [[ "$san" =~ : ]]; then
+                        # IP address (IPv4 or IPv6)
+                        SAN_EXT="${SAN_EXT},IP:${san}"
+                    else
+                        # DNS name
+                        SAN_EXT="${SAN_EXT},DNS:${san}"
+                    fi
+                fi
+            done
+            echo -e "${YELLOW}Certificate will include SANs: ${DOMAIN}, localhost, 127.0.0.1, ::1, ${SANS_INPUT}${NC}"
+        else
+            echo -e "${YELLOW}Certificate will include SANs: ${DOMAIN}, localhost, 127.0.0.1, ::1${NC}"
+        fi
+
+        # Generate certificate with SANs
         openssl req -x509 -newkey rsa:4096 -nodes \
             -keyout "$KEY_FILE" \
             -out "$CERT_FILE" \
             -days 365 \
             -subj "/C=US/ST=State/L=City/O=pyIRCX/CN=$DOMAIN" \
+            -addext "subjectAltName = ${SAN_EXT}" \
             2>/dev/null
 
         chmod 600 "$KEY_FILE"

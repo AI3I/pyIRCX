@@ -25,7 +25,7 @@
     "mode": "centralized",
     "is_services_hub": true,
     "hub_server": null,
-    "servicebot_count": 5,
+    "servicebot_count": 10,
     "servicebot_max_channels": 10
   },
   "linking": {

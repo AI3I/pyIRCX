@@ -1591,7 +1591,6 @@ console.log("=== admin.js LOADING ===");
             case 'access': loadAccessList(); break;
             case 'newsflash': loadNewsflash(); loadNewsflashSettings(); break;
             case 'mailbox': loadMailbox(); break;
-            case 'config': initConfigForm(); break;
             case 'logs': loadLogs(); break;
         }
     }

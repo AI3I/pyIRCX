@@ -80,6 +80,11 @@ class ServerLinkManager:
         self.links_config = CONFIG.get('linking', 'links', default=[])
         self.link_server = None
 
+        # Auto-reconnect tracking
+        self.reconnect_attempts: Dict[str, int] = {}  # servername -> retry count
+        self.reconnect_tasks: Dict[str, asyncio.Task] = {}  # servername -> task
+        self.max_reconnect_delay = 60  # Maximum backoff delay in seconds
+
         # Validate server role
         valid_roles = ['standalone', 'trunk', 'branch']
         if self.server_role not in valid_roles:
@@ -279,12 +284,63 @@ class ServerLinkManager:
                 logger.info(f"Successfully linked to {remote_name}")
                 await self.broadcast_to_local(f":{self.irc_server.servername} NOTICE * :Linked to server {remote_name}", exclude_modes='a')
 
+                # Reset reconnect attempts on successful connection
+                self.reconnect_attempts[servername] = 0
+
             elif parts[0] == 'ERROR':
                 logger.error(f"Link to {servername} rejected: {line}")
                 writer.close()
+                # Schedule reconnect if autoconnect is enabled
+                await self.schedule_reconnect(link_cfg)
 
         except Exception as e:
             logger.error(f"Failed to connect to {servername}: {e}")
+            # Schedule reconnect if autoconnect is enabled
+            await self.schedule_reconnect(link_cfg)
+
+    async def schedule_reconnect(self, link_cfg: dict):
+        """Schedule a reconnect attempt with exponential backoff"""
+        servername = link_cfg['name']
+
+        # Only reconnect if autoconnect is enabled
+        if not link_cfg.get('autoconnect', False):
+            logger.debug(f"Not scheduling reconnect for {servername} (autoconnect disabled)")
+            return
+
+        # Cancel existing reconnect task if any
+        if servername in self.reconnect_tasks:
+            self.reconnect_tasks[servername].cancel()
+
+        # Get current retry count
+        retry_count = self.reconnect_attempts.get(servername, 0)
+
+        # Calculate backoff delay: 5s, 10s, 20s, 40s, 60s (max)
+        delay = min(5 * (2 ** retry_count), self.max_reconnect_delay)
+
+        logger.info(f"Scheduling reconnect to {servername} in {delay}s (attempt #{retry_count + 1})")
+
+        # Increment retry count
+        self.reconnect_attempts[servername] = retry_count + 1
+
+        # Schedule reconnect task
+        self.reconnect_tasks[servername] = asyncio.create_task(
+            self._delayed_reconnect(link_cfg, delay)
+        )
+
+    async def _delayed_reconnect(self, link_cfg: dict, delay: float):
+        """Delayed reconnect helper"""
+        servername = link_cfg['name']
+        try:
+            await asyncio.sleep(delay)
+            logger.info(f"Attempting reconnect to {servername}")
+            await self.connect_to_server(link_cfg)
+        except asyncio.CancelledError:
+            logger.debug(f"Reconnect to {servername} cancelled")
+        except Exception as e:
+            logger.error(f"Reconnect attempt to {servername} failed: {e}")
+        finally:
+            # Clean up task reference
+            self.reconnect_tasks.pop(servername, None)
 
     async def burst_to_server(self, server: LinkedServer):
         """Send full state burst to a newly linked server"""
@@ -599,6 +655,76 @@ class ServerLinkManager:
         user.is_remote = True
         user.server = self.irc_server  # Link to server for routing responses
 
+        # Check for nick collision
+        existing_user = self.irc_server.users.get(nickname)
+        if existing_user:
+            # Nick collision detected
+            existing_ts = getattr(existing_user, 'signon_time', 0)
+            incoming_ts = timestamp
+
+            logger.warning(
+                f"Nick collision: {nickname} "
+                f"(existing: {existing_ts} from {getattr(existing_user, 'from_server', 'local')}, "
+                f"incoming: {incoming_ts} from {origin_server})"
+            )
+
+            # Determine which user to keep based on timestamp
+            # Lower timestamp (older signon) wins
+            if incoming_ts < existing_ts:
+                # Incoming user is older, kill the existing user
+                logger.info(f"Collision resolution: Keeping incoming {nickname} (older timestamp)")
+                # KILL existing user
+                if not (hasattr(existing_user, 'is_remote') and existing_user.is_remote):
+                    # Existing is local, send KILL to local user
+                    try:
+                        await existing_user.send(
+                            f":{self.irc_server.servername} KILL {nickname} :Nick collision with {origin_server}"
+                        )
+                        await self.irc_server.quit_user(existing_user)
+                    except Exception as e:
+                        logger.error(f"Error killing local user in collision: {e}")
+                else:
+                    # Existing is remote, send KILL through the network
+                    existing_server = getattr(existing_user, 'from_server', None)
+                    kill_msg = f":{self.irc_server.servername} KILL {nickname} :Nick collision"
+                    await self.broadcast_to_servers(kill_msg)
+                    # Remove existing user locally
+                    self.irc_server.users.pop(nickname, None)
+
+                # Accept incoming user (fall through to add below)
+            elif incoming_ts > existing_ts:
+                # Existing user is older, kill the incoming user
+                logger.info(f"Collision resolution: Keeping existing {nickname} (older timestamp)")
+                # Send KILL for incoming user back through the link
+                kill_msg = f":{self.irc_server.servername} KILL {nickname} :Nick collision"
+                await server.send(kill_msg)
+                # Don't add the incoming user
+                return
+            else:
+                # Timestamps equal, use server name as tiebreaker (alphabetical)
+                existing_server = getattr(existing_user, 'from_server', self.irc_server.servername)
+                if origin_server < existing_server:
+                    # Incoming server name is "smaller", kill existing
+                    logger.info(f"Collision resolution: Tie broken by server name, keeping incoming {nickname}")
+                    if not (hasattr(existing_user, 'is_remote') and existing_user.is_remote):
+                        try:
+                            await existing_user.send(
+                                f":{self.irc_server.servername} KILL {nickname} :Nick collision"
+                            )
+                            await self.irc_server.quit_user(existing_user)
+                        except Exception as e:
+                            logger.error(f"Error killing local user in collision: {e}")
+                    else:
+                        kill_msg = f":{self.irc_server.servername} KILL {nickname} :Nick collision"
+                        await self.broadcast_to_servers(kill_msg)
+                        self.irc_server.users.pop(nickname, None)
+                else:
+                    # Existing server name is "smaller" or equal, kill incoming
+                    logger.info(f"Collision resolution: Tie broken by server name, keeping existing {nickname}")
+                    kill_msg = f":{self.irc_server.servername} KILL {nickname} :Nick collision"
+                    await server.send(kill_msg)
+                    return
+
         self.irc_server.users[nickname] = user
         server.add_user(nickname)
 
@@ -625,6 +751,8 @@ class ServerLinkManager:
 
         # Get or create channel using cached class
         channel = self.irc_server.channels.get(chan_name)
+        channel_existed = channel is not None
+
         if not channel:
             global _Channel
             if _Channel is None:
@@ -638,10 +766,46 @@ class ServerLinkManager:
             channel = _Channel(chan_name)
             channel.created_at = timestamp
             self.irc_server.channels[chan_name] = channel
+            logger.info(f"Created new channel {chan_name} from SJOIN (ts={timestamp})")
+        else:
+            # Channel exists - compare timestamps for merge strategy
+            local_ts = int(channel.created_at)
+            remote_ts = timestamp
 
-        # Set modes
-        for mode in modes:
-            channel.modes[mode] = True
+            logger.info(
+                f"Channel merge for {chan_name}: local_ts={local_ts}, remote_ts={remote_ts}"
+            )
+
+            if remote_ts < local_ts:
+                # Remote channel is older - accept remote state completely
+                logger.info(f"Channel {chan_name}: Remote is older, accepting remote state")
+                # Clear local modes and ops
+                channel.modes = {}
+                channel.owners.clear()
+                channel.hosts.clear()
+                channel.voices.clear()
+                # Update timestamp
+                channel.created_at = remote_ts
+                # Modes will be set below
+
+            elif remote_ts > local_ts:
+                # Local channel is older - keep local state, only merge users
+                logger.info(f"Channel {chan_name}: Local is older, keeping local state")
+                # Don't set modes from remote (keep local modes)
+                modes = ''  # Clear modes so we don't apply them below
+
+            else:
+                # Timestamps equal - merge ops/voices (union)
+                logger.info(f"Channel {chan_name}: Equal timestamp, merging state")
+                # Modes will be merged (union)
+                # Ops/voices will be merged (union)
+                # Keep processing normally
+
+        # Set modes (if remote is older or timestamps equal)
+        if modes:
+            for mode in modes:
+                if mode in channel.modes:
+                    channel.modes[mode] = True
 
         # Add users to channel
         for nick_entry in nicklist:
@@ -659,10 +823,18 @@ class ServerLinkManager:
                 channel.members[nickname] = user
                 user.channels.add(chan_name)
 
-                if prefix == '@':
-                    channel.owners.add(nickname)
-                elif prefix == '+':
-                    channel.hosts.add(nickname)
+                # Only apply prefixes if:
+                # - Remote is older (already cleared local ops), OR
+                # - Timestamps are equal (merge), OR
+                # - New channel (no conflict)
+                remote_ts = timestamp
+                local_ts = int(channel.created_at) if channel_existed else remote_ts
+
+                if remote_ts <= local_ts:
+                    if prefix == '@':
+                        channel.owners.add(nickname)
+                    elif prefix == '+':
+                        channel.hosts.add(nickname)
 
     async def handle_remote_topic(self, server: LinkedServer, parts: list):
         """Handle TOPIC from remote server"""
@@ -1359,10 +1531,16 @@ class ServerLinkManager:
                                 member.send(quit_msg)
 
         # Notify local users
-        self.broadcast_to_local(
+        await self.broadcast_to_local(
             f":{self.irc_server.servername} NOTICE * :Server {server.name} has split",
             exclude_modes='a'
         )
+
+        # Schedule reconnect if this was an autoconnect link
+        for link_cfg in self.links_config:
+            if link_cfg['name'] == server.name:
+                await self.schedule_reconnect(link_cfg)
+                break
 
     async def squit_server(self, servername: str, reason: str = ""):
         """Disconnect a server"""
