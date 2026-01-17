@@ -1810,7 +1810,7 @@ RESPONSES = {
     "473": "{target} :Cannot join channel (invite-only - you must be invited)",
     "474": "{target} :Cannot join channel (you are banned from this channel)",
     "475": "{target} :Cannot join channel (incorrect channel key/password)",
-    "481": "Permission denied: You're not an IRC operator",
+    "481": "You do not have permission - IRC administrator or operator privileges are required",
     "482": "{target} :You're not a channel owner or host (+q or +o required)",
     "696": "{target} {mode} :You must specify a parameter for the {mode} mode",
     "710": "{channel} {nick} {host} :has asked for an invite",
@@ -1880,17 +1880,17 @@ RESPONSES = {
     "871": ":Nickname {nick} is not registered",
     "872": ":You are already identified to a registered nickname",
     "873": ":You must be identified to unregister your nickname",
-    "874": ":Nickname {nick} has been registered (UUID: {uuid})",
-    "875": ":Nickname {nick} has been dropped",
+    "874": ":Your nickname {nick} has been registered (UUID: {uuid})",
+    "875": ":Your nickname {nick} has been dropped",
     "876": ":You are now identified as {nick}",
     "877": ":Password accepted. MFA is enabled - please verify with: MFA VERIFY <code>",
     "878": ":MFA enabled. Save this secret: {secret}. Scan the QR code or enter manually in your authenticator app.",
-    "879": ":MFA has been disabled",
+    "879": ":Your MFA has been disabled",
     # IRCX Staff Management (880-889)
-    "880": ":Staff account {username} created with level {level}",
-    "881": ":Staff account {username} deleted",
-    "882": ":Staff account {username} changed to level {level}",
-    "883": ":Password changed for staff account {username}",
+    "880": ":The staff account {username} was created with level {level}",
+    "881": ":The staff account {username} was deleted",
+    "882": ":The staff account {username} was changed to level {level}",
+    "883": ":The password was changed for staff account {username}",
     "884": ":We couldn't list the staff accounts",
     "885": ":We couldn't create the staff account",
     "886": ":We couldn't delete the staff account",
@@ -1962,7 +1962,7 @@ SERVER_MESSAGES = {
     "message_truncated": "Message truncated to {max} characters",
     "system_no_messages": "The System service does not accept direct messages. Use /HELP for available services, or /msg Registrar for help.",
     "mfa_pending": "MFA verification pending. Send your 6-digit code: /msg Registrar MFA VERIFY <code>",
-    "access_denied": "Access denied: {reason}",
+    "access_denied": "You do not have access: {reason}",
 
     # Transcript
     "transcript_header": "=== Transcript for {channel} ({count} lines) ===",
@@ -5622,11 +5622,11 @@ class pyIRCXServer:
                                 row = await cursor.fetchone()
                                 await user.send(f":{self.servername} NOTICE {user.nickname} :Active news: {row[0]}")
                     except Exception as e:
-                        await user.send(f":{self.servername} NOTICE {user.nickname} :Database query error: {str(e)}")
+                        await user.send(f":{self.servername} NOTICE {user.nickname} :We encountered a database error: {str(e)}")
                 else:
-                    await user.send(f":{self.servername} NOTICE {user.nickname} :Database file not found")
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :The database file was not found")
             except Exception as e:
-                await user.send(f":{self.servername} NOTICE {user.nickname} :An error occurred: {str(e)}")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :We encountered an error: {str(e)}")
             await user.send(f":{self.servername} NOTICE {user.nickname} :--- End ---")
 
         elif flag == 'l':
@@ -6171,7 +6171,7 @@ class pyIRCXServer:
                 return
 
             if len(password) < 6:
-                await user.send(f":{self.servername} NOTICE {user.nickname} :Password must be at least 6 characters")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Your password must be at least 6 characters")
                 return
 
             # Validate username
@@ -6379,7 +6379,7 @@ class pyIRCXServer:
                 return
 
             if len(new_password) < 6:
-                await user.send(f":{self.servername} NOTICE {user.nickname} :Password must be at least 6 characters")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Your password must be at least 6 characters")
                 return
 
             try:
@@ -7509,7 +7509,7 @@ class pyIRCXServer:
 
                 user.set_mode('r', True)
                 await user.send(f":{user.nickname} MODE {user.nickname} :+r")
-                await user.send(f":{self.servername} NOTICE {user.nickname} :Nickname {account} has been registered")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Your nickname {account} has been registered")
                 logger.info(f"REGISTER: {account} registered by {user.prefix()}")
 
         except Exception as e:
@@ -7602,7 +7602,7 @@ class pyIRCXServer:
                 if password:
                     channel.owner_key = password
 
-                await user.send(f":{self.servername} NOTICE {user.nickname} :Channel {chan_name} has been registered")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Your channel {chan_name} has been registered")
                 logger.info(f"REGISTER: {chan_name} registered by {user.nickname}")
 
         except Exception as e:
@@ -7638,7 +7638,7 @@ class pyIRCXServer:
 
                 user.set_mode('r', False)
                 await user.send(f":{user.nickname} MODE {user.nickname} :-r")
-                await user.send(f":{self.servername} NOTICE {user.nickname} :Nickname {account} has been unregistered")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Your nickname {account} has been unregistered")
                 logger.info(f"UNREGISTER: {account} unregistered")
 
         except Exception as e:
@@ -7713,7 +7713,7 @@ class pyIRCXServer:
                 channel.modes['r'] = False  # Remove +r mode
                 # Broadcast mode change to channel
                 await channel.broadcast(f":{user.prefix()} MODE {chan_name} -r")
-                await user.send(f":{self.servername} NOTICE {user.nickname} :Channel {chan_name} has been unregistered")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Your channel {chan_name} has been unregistered")
                 logger.info(f"UNREGISTER: {chan_name} unregistered by {user.nickname}")
 
         except Exception as e:
