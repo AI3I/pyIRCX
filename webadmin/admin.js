@@ -1595,188 +1595,6 @@ console.log("=== admin.js LOADING ===");
         }
     }
 
-    // Branch Config Generator
-    function initBranchConfigGenerator() {
-        const form = $('#branch-config-form');
-        const genPassBtn = $('#gen-password-btn');
-        const resetBtn = $('#reset-form-btn');
-        const outputCard = $('#generated-config-card');
-        const configOutput = $('#config-output');
-        const copyBtn = $('#copy-config-btn');
-        const downloadBtn = $('#download-config-btn');
-        const newConfigBtn = $('#new-config-btn');
-        const configFilename = $('#config-filename');
-        const toggleBtn = $('#branch-gen-toggle');
-        const content = $('#branch-gen-content');
-        const chevron = $('#branch-gen-chevron');
-
-        // Collapsible toggle
-        toggleBtn?.addEventListener('click', () => {
-            const isHidden = content.style.display === 'none';
-            content.style.display = isHidden ? 'block' : 'none';
-            chevron.style.transform = isHidden ? 'rotate(90deg)' : 'rotate(0deg)';
-
-            // When opening, set default port (production scenario: each branch on own server)
-            if (isHidden && !$('#branch-link-port').value) {
-                $('#branch-link-port').value = 7001;
-            }
-        });
-
-        // Generate secure password
-        genPassBtn?.addEventListener('click', () => {
-            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*-_=+';
-            let password = '';
-            for (let i = 0; i < 32; i++) {
-                password += chars.charAt(Math.floor(Math.random() * chars.length));
-            }
-            $('#link-password').value = password;
-            showToast('Password Generated', 'Secure link password generated', 'success');
-        });
-
-        // Reset form
-        resetBtn?.addEventListener('click', () => {
-            form.reset();
-            outputCard.style.display = 'none';
-        });
-
-        // Generate config
-        form?.addEventListener('submit', async (e) => {
-            e.preventDefault();
-
-            const formData = new FormData(form);
-            const branchName = formData.get('server_name');
-            const branchDesc = formData.get('server_desc') || 'Branch Server';
-            const listenAddr = formData.get('listen_addr');
-            const linkPort = parseInt(formData.get('link_port'));
-            const maxUsers = parseInt(formData.get('max_users'));
-            const linkPassword = formData.get('link_password');
-
-            // Fetch trunk config to auto-populate trunk information
-            try {
-                const response = await callAPI('CONFIG_GET');
-                const trunkConfig = JSON.parse(response);
-
-                // Auto-populate from trunk config
-                const networkName = trunkConfig.server?.network || 'IRC Network';
-                const trunkName = trunkConfig.server?.name || 'trunk.network.local';
-                const clientPorts = trunkConfig.network?.listen_ports || [6667];
-                const trunkBindHost = trunkConfig.linking?.bind_host || '127.0.0.1';
-                const trunkBindPort = trunkConfig.linking?.bind_port || 7001;
-
-                // Generate branch config
-                const branchConfig = {
-                    "server": {
-                        "name": branchName,
-                        "network": networkName,
-                        "motd": [
-                            `Welcome to ${networkName}`,
-                            branchDesc,
-                            `Services provided by ${trunkName}`
-                        ],
-                        "restrict_to_staff_only": false
-                    },
-                    "network": {
-                        "listen_addr": listenAddr,
-                        "listen_ports": clientPorts,
-                        "enable_ipv6": trunkConfig.network?.enable_ipv6 || false
-                    },
-                    "limits": {
-                        "max_users": maxUsers,
-                        "max_channels": trunkConfig.limits?.max_channels || 500
-                    },
-                    "services": {
-                        "enabled": true,
-                        "mode": "centralized",
-                        "is_services_hub": false,
-                        "hub_server": trunkName,
-                        "servicebot_count": 0,
-                        "servicebot_max_channels": 10
-                    },
-                    "linking": {
-                        "enabled": true,
-                        "server_role": "branch",
-                        "bind_host": listenAddr,
-                        "bind_port": linkPort,
-                        "links": [
-                            {
-                                "name": trunkName,
-                                "host": trunkBindHost,
-                                "port": trunkBindPort,
-                                "password": linkPassword,
-                                "autoconnect": true
-                            }
-                        ]
-                    },
-                    "admin": {
-                        "default_username": "admin",
-                        "default_password": "changeme"
-                    },
-                    "ssl": {
-                        "enabled": false
-                    },
-                    "webadmin": {
-                        "enabled": false
-                    }
-                };
-
-                // Display generated config
-                const configJson = JSON.stringify(branchConfig, null, 2);
-                configOutput.textContent = configJson;
-
-                // Update filename suggestion
-                const filenameSuggestion = `config_${branchName.split('.')[0]}.json`;
-                configFilename.textContent = filenameSuggestion;
-
-                // Show output card
-                outputCard.style.display = 'block';
-                outputCard.scrollIntoView({ behavior: 'smooth' });
-
-                showToast('Config Generated', `Configuration for ${branchName} generated successfully`, 'success');
-
-                // Store config for download
-                outputCard.dataset.config = configJson;
-                outputCard.dataset.filename = filenameSuggestion;
-
-            } catch (error) {
-                showToast('Error', 'Failed to generate config: ' + error.message, 'error');
-            }
-        });
-
-        // Copy to clipboard
-        copyBtn?.addEventListener('click', () => {
-            const config = configOutput.textContent;
-            navigator.clipboard.writeText(config).then(() => {
-                showToast('Copied', 'Configuration copied to clipboard', 'success');
-            }).catch(err => {
-                showToast('Error', 'Failed to copy to clipboard', 'error');
-            });
-        });
-
-        // Download file
-        downloadBtn?.addEventListener('click', () => {
-            const config = outputCard.dataset.config;
-            const filename = outputCard.dataset.filename;
-
-            const blob = new Blob([config], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-
-            showToast('Downloaded', `Configuration saved as ${filename}`, 'success');
-        });
-
-        // Generate another
-        newConfigBtn?.addEventListener('click', () => {
-            outputCard.style.display = 'none';
-            form.scrollIntoView({ behavior: 'smooth' });
-        });
-    }
-
     document.addEventListener('DOMContentLoaded', function() {
     // Global fetch wrapper to handle 401 unauthorized
     const originalFetch = window.fetch;
@@ -2258,9 +2076,6 @@ console.log("=== admin.js LOADING ===");
                 addBranchEntry('', '', 7001);
             });
         }
-
-        // Initialize branch config generator
-        initBranchConfigGenerator();
     }
 
     // Add a branch server entry (for trunk config)
@@ -2273,7 +2088,7 @@ console.log("=== admin.js LOADING ===");
         div.className = 'branch-entry';
         div.style.cssText = 'border: 1px solid #ddd; padding: 10px; margin-bottom: 10px; border-radius: 4px; background: #f9f9f9;';
         div.innerHTML = `
-            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr auto; gap: 10px; align-items: end;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr auto auto; gap: 10px; align-items: end;">
                 <div>
                     <label style="font-size: 12px; font-weight: bold;">Branch Name</label>
                     <input type="text" class="form-control branch-name" value="${escapeHtml(name)}" placeholder="branch1.example.com">
@@ -2291,6 +2106,9 @@ console.log("=== admin.js LOADING ===");
                     <input type="password" class="form-control branch-password" value="${escapeHtml(password)}" placeholder="secure-pass">
                 </div>
                 <div>
+                    <button type="button" class="btn btn-sm btn-primary branch-gen-config-btn">📄 Config</button>
+                </div>
+                <div>
                     <button type="button" class="btn btn-sm btn-danger" onclick="this.parentElement.parentElement.parentElement.remove()">🗑️</button>
                 </div>
             </div>
@@ -2299,6 +2117,109 @@ console.log("=== admin.js LOADING ===");
             </div>
         `;
         list.appendChild(div);
+
+        // Add config generator handler to the new button
+        const genBtn = div.querySelector('.branch-gen-config-btn');
+        genBtn?.addEventListener('click', async () => {
+            await generateBranchConfig(div);
+        });
+    }
+
+    async function generateBranchConfig(branchEntryDiv) {
+        // Get data from this branch entry
+        const branchName = branchEntryDiv.querySelector('.branch-name').value;
+        const branchHost = branchEntryDiv.querySelector('.branch-host').value;
+        const linkPort = parseInt(branchEntryDiv.querySelector('.branch-port').value) || 7001;
+        const linkPassword = branchEntryDiv.querySelector('.branch-password').value;
+
+        if (!branchName || !branchHost || !linkPassword) {
+            showToast('Error', 'Please fill in all branch fields', 'error');
+            return;
+        }
+
+        try {
+            // Fetch trunk config
+            const response = await callAPI('CONFIG_GET');
+            const trunkConfig = JSON.parse(response);
+
+            const networkName = trunkConfig.server?.network || 'IRC Network';
+            const trunkName = trunkConfig.server?.name || 'trunk.network.local';
+            const clientPorts = trunkConfig.network?.listen_ports || [6667];
+            const trunkBindHost = trunkConfig.linking?.bind_host || '127.0.0.1';
+            const trunkBindPort = trunkConfig.linking?.bind_port || 7001;
+
+            // Generate branch config
+            const branchConfig = {
+                "server": {
+                    "name": branchName,
+                    "network": networkName,
+                    "motd": [
+                        `Welcome to ${networkName}`,
+                        `Services provided by ${trunkName}`
+                    ],
+                    "restrict_to_staff_only": false
+                },
+                "network": {
+                    "listen_addr": "0.0.0.0",
+                    "listen_ports": clientPorts,
+                    "enable_ipv6": trunkConfig.network?.enable_ipv6 || false
+                },
+                "limits": {
+                    "max_users": 10000,
+                    "max_channels": trunkConfig.limits?.max_channels || 500
+                },
+                "services": {
+                    "enabled": true,
+                    "mode": "centralized",
+                    "is_services_hub": false,
+                    "hub_server": trunkName,
+                    "servicebot_count": 0,
+                    "servicebot_max_channels": 10
+                },
+                "linking": {
+                    "enabled": true,
+                    "server_role": "branch",
+                    "bind_host": "0.0.0.0",
+                    "bind_port": linkPort,
+                    "links": [
+                        {
+                            "name": trunkName,
+                            "host": trunkBindHost,
+                            "port": trunkBindPort,
+                            "password": linkPassword,
+                            "autoconnect": true
+                        }
+                    ]
+                },
+                "admin": {
+                    "default_username": "admin",
+                    "default_password": "changeme"
+                },
+                "ssl": {
+                    "enabled": false
+                },
+                "webadmin": {
+                    "enabled": false
+                }
+            };
+
+            const configJson = JSON.stringify(branchConfig, null, 2);
+            const filenameSuggestion = `config_${branchName.split('.')[0]}.json`;
+
+            // Download the config
+            const blob = new Blob([configJson], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filenameSuggestion;
+            a.click();
+            URL.revokeObjectURL(url);
+
+            showToast('Config Generated', `Configuration for ${branchName} downloaded`, 'success');
+
+        } catch (error) {
+            showToast('Error', 'Failed to generate config: ' + error.message, 'error');
+        }
     }
 
     function loadConfigForm() {
