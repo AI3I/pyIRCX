@@ -3692,14 +3692,18 @@ class pyIRCXServer:
         ops = sum(1 for u in self.users.values() if u.is_staff() or u.is_virtual)
         # User count excludes services/bots
         real_users = sum(1 for u in self.users.values() if not u.is_virtual)
+        # Count linked servers
+        server_count = 1  # This server
+        if hasattr(self, 'link_manager') and self.link_manager:
+            server_count += len(self.link_manager.linked_servers)
         # Only show invisible count to staff users
         if auth:
             invisible = sum(1 for u in self.users.values() if u.has_mode('i') and not u.is_virtual)
         else:
             invisible = 0  # Hide from non-staff
-        await user.send(self.get_reply("251", user, users=real_users, invisible=invisible))
+        await user.send(self.get_reply("251", user, users=real_users, invisible=invisible, server_count=server_count))
         await user.send(self.get_reply("252", user, ops=ops))
-        await user.send(self.get_reply("255", user, users=real_users))
+        await user.send(self.get_reply("255", user, users=real_users, server_count=server_count))
         await self.handle_motd(user)
 
         if auth:
