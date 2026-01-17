@@ -3801,7 +3801,10 @@ class pyIRCXServer:
             if channel.modes.get('f', False):
                 text = self._strip_formatting(text)
                 chan_out = f"{source} {cmd} {chan_name} {params[1] + ' ' if cmd in ['DATA'] and len(params) > 2 else ''}:{text}"
-            await channel.broadcast(chan_out, exclude=user)
+            # Broadcast to LOCAL channel members only (exclude remote users to avoid routing loops)
+            for member in channel.members.values():
+                if member != user and not (hasattr(member, 'is_remote') and member.is_remote):
+                    await member.send(chan_out)
             # Propagate channel message to linked servers (if not a remote user)
             if self.link_manager and self.link_manager.enabled:
                 if not (hasattr(user, 'is_remote') and user.is_remote):
@@ -4272,7 +4275,10 @@ class pyIRCXServer:
         await user.send(f":{self.servername} 324 {user.nickname} {chan_name} +{modes}{param_str}")
         
         msg = f":{user.prefix()} JOIN {chan_name}"
-        await channel.broadcast(msg, exclude=user)
+        # Broadcast to LOCAL channel members only (exclude remote users to avoid routing loops)
+        for member in channel.members.values():
+            if member != user and not (hasattr(member, 'is_remote') and member.is_remote):
+                await member.send(msg)
 
         # Propagate JOIN to linked servers (if not a remote user)
         if self.link_manager and self.link_manager.enabled:
@@ -4284,13 +4290,19 @@ class pyIRCXServer:
         # Broadcast MODE after JOIN so other clients see the user first
         if grant_owner:
             mode_msg = f":{user.prefix()} MODE {chan_name} +q {user.nickname}"
-            await channel.broadcast(mode_msg)
+            for member in channel.members.values():
+                if not (hasattr(member, 'is_remote') and member.is_remote):
+                    await member.send(mode_msg)
         elif grant_host:
             mode_msg = f":{user.prefix()} MODE {chan_name} +o {user.nickname}"
-            await channel.broadcast(mode_msg)
+            for member in channel.members.values():
+                if not (hasattr(member, 'is_remote') and member.is_remote):
+                    await member.send(mode_msg)
         elif grant_voice:
             mode_msg = f":{user.prefix()} MODE {chan_name} +v {user.nickname}"
-            await channel.broadcast(mode_msg)
+            for member in channel.members.values():
+                if not (hasattr(member, 'is_remote') and member.is_remote):
+                    await member.send(mode_msg)
 
         # Log to transcript if +y mode is enabled
         self.log_transcript(channel, "JOIN", user)
@@ -4311,7 +4323,10 @@ class pyIRCXServer:
             await user.send(self.get_reply("442", user, target=chan_name))
             return
         msg = f":{user.prefix()} PART {chan_name}"
-        await channel.broadcast(msg)
+        # Broadcast to LOCAL channel members only (exclude remote users to avoid routing loops)
+        for member in channel.members.values():
+            if not (hasattr(member, 'is_remote') and member.is_remote):
+                await member.send(msg)
         # Propagate PART to linked servers (if not a remote user)
         if self.link_manager and self.link_manager.enabled:
             if not (hasattr(user, 'is_remote') and user.is_remote):
