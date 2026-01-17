@@ -3943,7 +3943,7 @@ class pyIRCXServer:
         # WHO * (all users) restricted to SYSOP/ADMIN only
         if target == "*":
             if not is_high_staff:
-                await user.send(f":{self.servername} NOTICE {user.nickname} :WHO * requires SYSOP or ADMIN privileges. Use a pattern like *nick* instead.")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :WHO * requires IRC operator or administrator privileges. Use a pattern like *nick* instead.")
                 await user.send(self.get_reply("315", user, target=target))
                 return
             # Rate limit for full WHO
@@ -6902,9 +6902,9 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :When away, people will see your message when they WHOIS you")
 
         elif topic in ["KILL"] and is_staff:
-            await user.send(f":{self.servername} NOTICE {user.nickname} :=== KILL Command (ADMIN/SYSOP only) ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== KILL Command (IRC administrator/operator only) ===")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /KILL <target> [reason]")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Disconnect users or destroy channels. Requires ADMIN or SYSOP.")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Disconnect users or destroy channels. Requires IRC administrator or operator privileges.")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  /KILL alice Spamming - Disconnect user")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  /KILL #badchannel - Destroy channel and kick all users")
@@ -6968,10 +6968,10 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :  /STATS u - Show server uptime")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Common queries: u (uptime), c (connections), m (commands)")
             if is_staff:
-                await user.send(f":{self.servername} NOTICE {user.nickname} :Note: Staff (ADMIN/SYSOP/GUIDE) can view detailed stats")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Note: Staff members (IRC administrators, operators, and guides) can view detailed stats")
 
         elif topic in ["PROFANITY"] and user.is_admin():
-            await user.send(f":{self.servername} NOTICE {user.nickname} :=== PROFANITY Command (ADMIN only) ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== PROFANITY Command (IRC administrator only) ===")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Manage ServiceBot profanity filter in real-time.")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Commands:")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  /PROFANITY LIST - View current configuration")
@@ -6988,7 +6988,7 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :Changes persist to config file automatically")
 
         elif topic in ["CONFIG"] and user.is_admin():
-            await user.send(f":{self.servername} NOTICE {user.nickname} :=== CONFIG Command (ADMIN only) ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== CONFIG Command (IRC administrator only) ===")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /CONFIG <GET|SET> <key> [value]")
             await user.send(f":{self.servername} NOTICE {user.nickname} :View or modify server configuration at runtime.")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
@@ -7161,7 +7161,7 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :  /UNGAG <#channel> <nick> - Remove channel gag")
             await user.send(f":{self.servername} NOTICE {user.nickname} :")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Requirements:")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  - Global gag: Staff only (ADMIN/SYSOP/GUIDE)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  - Global gag: Staff members only (IRC administrators, operators, and guides)")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  - Channel gag: Channel host/owner or staff")
             await user.send(f":{self.servername} NOTICE {user.nickname} :")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
@@ -7176,14 +7176,14 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :See /HELP JOIN for full details.")
 
         elif topic in ["CONNECT", "SQUIT"] and user.is_admin():
-            await user.send(f":{self.servername} NOTICE {user.nickname} :=== CONNECT/SQUIT Commands (ADMIN only) ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== CONNECT/SQUIT Commands (IRC administrator only) ===")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Server linking commands for network administration.")
             await user.send(f":{self.servername} NOTICE {user.nickname} :")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Usage:")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  /CONNECT <server> <port> [remote_server] - Link to remote server")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  /SQUIT <server> [reason] - Disconnect server from network")
             await user.send(f":{self.servername} NOTICE {user.nickname} :")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Note: Requires ADMIN privileges and proper server configuration")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Note: Requires IRC administrator privileges and proper server configuration")
 
         else:
             # Try fuzzy matching for suggestions
