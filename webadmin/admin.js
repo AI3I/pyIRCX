@@ -2088,7 +2088,7 @@ console.log("=== admin.js LOADING ===");
         div.className = 'branch-entry';
         div.style.cssText = 'border: 1px solid #ddd; padding: 10px; margin-bottom: 10px; border-radius: 4px; background: #f9f9f9;';
         div.innerHTML = `
-            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr auto auto; gap: 10px; align-items: end;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 10px; align-items: end;">
                 <div>
                     <label style="font-size: 12px; font-weight: bold;">Branch Name</label>
                     <input type="text" class="form-control branch-name" value="${escapeHtml(name)}" placeholder="branch1.example.com">
@@ -2105,23 +2105,27 @@ console.log("=== admin.js LOADING ===");
                     <label style="font-size: 12px; font-weight: bold;">Password</label>
                     <input type="password" class="form-control branch-password" value="${escapeHtml(password)}" placeholder="secure-pass">
                 </div>
-                <div>
-                    <button type="button" class="btn btn-sm btn-primary branch-gen-config-btn">📄 Config</button>
-                </div>
-                <div>
-                    <button type="button" class="btn btn-sm btn-danger" onclick="this.parentElement.parentElement.parentElement.remove()">🗑️</button>
-                </div>
             </div>
-            <div style="margin-top: 5px;">
+            <div style="margin-top: 10px; display: flex; gap: 10px; align-items: center;">
                 <label style="font-size: 12px;"><input type="checkbox" class="branch-autoconnect" ${autoconnect ? 'checked' : ''}> Auto-connect</label>
+                <div style="margin-left: auto; display: flex; gap: 10px;">
+                    <button type="button" class="btn btn-sm btn-primary branch-gen-config-btn">Generate Configuration</button>
+                    <button type="button" class="btn btn-sm btn-danger branch-delete-btn">Delete Server</button>
+                </div>
             </div>
         `;
         list.appendChild(div);
 
-        // Add config generator handler to the new button
+        // Add config generator handler
         const genBtn = div.querySelector('.branch-gen-config-btn');
         genBtn?.addEventListener('click', async () => {
             await generateBranchConfig(div);
+        });
+
+        // Add delete handler
+        const deleteBtn = div.querySelector('.branch-delete-btn');
+        deleteBtn?.addEventListener('click', () => {
+            div.remove();
         });
     }
 
