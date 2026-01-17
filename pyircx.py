@@ -3582,12 +3582,28 @@ class pyIRCXServer:
 
         if restrict_to_staff and is_services_hub:
             # Trunk is configured for staff-only access
-            if not auth or level not in ["ADMIN", "SYSOP", "GUIDE"]:
-                # User is not authenticated as staff
-                await user.send(f":{self.servername} NOTICE {user.nickname} :This server is restricted to staff members only")
+            # Allow staff members (ADMIN, SYSOP, GUIDE)
+            is_staff = auth and level in ["ADMIN", "SYSOP", "GUIDE"]
+
+            # Check if user matches any ACCESS GRANT patterns
+            user_hostmask = user.prefix()
+            in_access_grant = False
+            for pattern, set_by, set_at, timeout, reason in self.access_list['GRANT']:
+                # Check if entry has expired
+                if timeout > 0 and time.time() > timeout:
+                    continue
+                # Check if user matches this grant pattern
+                if fnmatch.fnmatch(user_hostmask, pattern) or fnmatch.fnmatch(user.ip or '', pattern):
+                    in_access_grant = True
+                    logger.info(f"User {user.nickname} matches ACCESS GRANT pattern: {pattern}")
+                    break
+
+            # Deny if user is neither staff nor in ACCESS GRANT
+            if not is_staff and not in_access_grant:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :This server is restricted to authenticated staff and authorized users only")
                 await user.send(f":{self.servername} NOTICE {user.nickname} :Regular users should connect to a branch server")
                 await user.send(f"ERROR :Closing Link: {user.nickname} (Staff-only server)")
-                logger.info(f"Rejected non-staff connection attempt: {user.nickname} ({user.ip})")
+                logger.info(f"Rejected non-authorized connection attempt: {user.nickname} ({user.ip})")
                 await self.quit_user(user)
                 return
 
