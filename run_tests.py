@@ -47,7 +47,7 @@ def run_test_suite(name, script_path, description=""):
     try:
         result = subprocess.run(
             [sys.executable, script_path],
-            cwd=os.path.dirname(script_path) or '.',
+            cwd='.',  # Run from project root
             capture_output=True,
             text=True,
             timeout=300  # 5 minute timeout per suite
