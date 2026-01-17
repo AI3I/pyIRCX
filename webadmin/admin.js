@@ -2270,9 +2270,6 @@ console.log("=== admin.js LOADING ===");
             setVal('#cfg-transcript-max', config.transcript?.max_lines || 10000);
             setCheck('#cfg-persist-auto', config.persistence?.auto_save || false);
             setVal('#cfg-persist-interval', config.persistence?.save_interval || 300);
-            setCheck('#cfg-newsflash-connect', config.newsflash?.on_connect || false);
-            setCheck('#cfg-newsflash-periodic', config.newsflash?.periodic_enabled || false);
-            setVal('#cfg-newsflash-interval', config.newsflash?.periodic_interval || 3600);
         });
     }
 
@@ -2453,9 +2450,6 @@ console.log("=== admin.js LOADING ===");
         // Advanced
         newConfig.persistence.auto_save = getCheck('#cfg-persist-auto');
         newConfig.persistence.save_interval = parseInt(getVal('#cfg-persist-interval'));
-        newConfig.newsflash.on_connect = getCheck('#cfg-newsflash-connect');
-        newConfig.newsflash.periodic_enabled = getCheck('#cfg-newsflash-periodic');
-        newConfig.newsflash.periodic_interval = parseInt(getVal('#cfg-newsflash-interval'));
 
         // Confirm and save
         if (confirm('Save configuration and restart server?')) {

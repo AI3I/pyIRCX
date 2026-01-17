@@ -992,20 +992,6 @@ badword3"></textarea>
                                 <small>How often to save state (in seconds). Default: 300 (5 minutes). Lower values = less data loss risk, but more disk I/O.</small>
                             </div>
 
-                            <h4 style="margin-top: 20px;">NewsFlash</h4>
-                            <div class="form-group">
-                                <label><input type="checkbox" id="cfg-newsflash-connect"> Show on Connect</label>
-                                <small>Automatically send NewsFlash messages to users when they connect. Useful for server announcements, rules, and updates.</small>
-                            </div>
-                            <div class="form-group">
-                                <label><input type="checkbox" id="cfg-newsflash-periodic"> Enable Periodic Announcements</label>
-                                <small>Periodically broadcast NewsFlash messages to all connected users. Good for reminders and recurring announcements.</small>
-                            </div>
-                            <div class="form-group">
-                                <label>Periodic Interval (seconds)</label>
-                                <input type="number" class="form-control" id="cfg-newsflash-interval" placeholder="3600">
-                                <small>How often to broadcast NewsFlash messages (in seconds). Default: 3600 (1 hour). Avoid setting too low to prevent spam.</small>
-                            </div>
                         </div>
                     </div>
                 </div>
