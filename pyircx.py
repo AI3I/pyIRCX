@@ -1796,7 +1796,7 @@ RESPONSES = {
     "403": "{target} :No such channel",
     "404": "{channel} :You cannot send to channel (check channel modes or your permissions)",
     "407": "{target} :You specified too many recipients",
-    "421": "{command} :Unknown command",
+    "421": "{command} :This command is not recognized",
     "432": "{target} :Invalid nickname (must be 1-{nicklen} characters, start with a letter, and contain only letters, numbers, -, _, [, ], {{, }}, \\, or |)",
     "433": "{target} :Nickname is already in use",
     "441": "{target} {channel} :They aren't on that channel",
@@ -1854,7 +1854,7 @@ RESPONSES = {
     "847": "{target} :ServiceBot has reached max channels ({max})",
     "848": ":Only staff members can invite ServiceBots",
     # IRCX Access Control (850-859)
-    "850": ":Invalid access level - valid: {levels}",
+    "850": ":That is not a valid access level - valid: {levels}",
     "851": "{mask} :This mask is already in the {level} list",
     "852": "{mask} :This mask was not found in the {level} list",
     "853": ":You cannot remove owner-added entry (you are not the channel owner)",
@@ -1866,8 +1866,8 @@ RESPONSES = {
     "859": ":You are already linked to {server}",
     # IRCX Command Usage (860-869)
     "860": ":Usage: {usage}",
-    "861": ":Invalid path. Use: section.key (e.g., limits.max_users)",
-    "862": ":Invalid level. Use: {levels}",
+    "861": ":That is not a valid configuration path. Use: section.key (e.g., limits.max_users)",
+    "862": ":That is not a valid level. Use: {levels}",
     "863": ":Invalid username: {error}",
     "864": ":Invalid password (minimum 8 characters, must include letters and numbers)",
     "865": ":Invalid MFA code. Please enter the 6-digit code from your authenticator app.",
@@ -1891,21 +1891,21 @@ RESPONSES = {
     "881": ":Staff account {username} deleted",
     "882": ":Staff account {username} changed to level {level}",
     "883": ":Password changed for staff account {username}",
-    "884": ":Error listing staff accounts",
-    "885": ":Error creating staff account",
-    "886": ":Error deleting staff account",
-    "887": ":Error changing staff level",
-    "888": ":Error changing password",
-    "889": ":Staff account {username} not found",
+    "884": ":We couldn't list the staff accounts",
+    "885": ":We couldn't create the staff account",
+    "886": ":We couldn't delete the staff account",
+    "887": ":We couldn't change the staff level",
+    "888": ":We couldn't change the password",
+    "889": ":The staff account {username} was not found",
     # IRCX Config/Admin (890-899)
     "890": ":{key} = {value}",
     "891": ":{key} set to {value}",
-    "892": ":Configuration key not found: {key}",
-    "893": ":Error accessing configuration",
+    "892": ":That configuration key was not found: {key}",
+    "893": ":We couldn't access the configuration",
     "894": ":Connected to {server}",
     "895": ":Disconnected from {server}",
-    "896": ":Error connecting to {server}",
-    "897": ":Server {server} not found in links",
+    "896": ":We couldn't connect to {server}",
+    "897": ":The server {server} was not found in your links",
     "898": ":Link operation in progress",
     "899": ":Link timeout - operation aborted",
     # IRCX Database/System (900-909)
@@ -5626,7 +5626,7 @@ class pyIRCXServer:
                 else:
                     await user.send(f":{self.servername} NOTICE {user.nickname} :Database file not found")
             except Exception as e:
-                await user.send(f":{self.servername} NOTICE {user.nickname} :Error: {str(e)}")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :An error occurred: {str(e)}")
             await user.send(f":{self.servername} NOTICE {user.nickname} :--- End ---")
 
         elif flag == 'l':
@@ -5810,7 +5810,7 @@ class pyIRCXServer:
                 await user.send(f":{self.servername} NOTICE {user.nickname} :--- End ---")
 
         else:
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Unknown STATS flag: {flag}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :That STATS flag is not recognized: {flag}")
 
         await user.send(self.get_reply("219", user, flag=flag))
 
@@ -5846,7 +5846,7 @@ class pyIRCXServer:
                 # List specific section
                 sect_data = CONFIG.get_section(section)
                 if not sect_data:
-                    await user.send(f":{self.servername} NOTICE {user.nickname} :Unknown section: {section}")
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :That section is not recognized: {section}")
                     return
                 await user.send(f":{self.servername} NOTICE {user.nickname} :--- Config [{section}] ---")
                 for key, value in sect_data.items():
@@ -5907,7 +5907,7 @@ class pyIRCXServer:
                 await user.send(f":{self.servername} NOTICE {user.nickname} :Use CONFIG SAVE to persist changes")
                 logger.info(f"CONFIG: {user.nickname} set {params[1]} = {json.dumps(value)}")
             else:
-                await user.send(f":{self.servername} NOTICE {user.nickname} :The value could not be set")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :We couldn't set the value")
 
         elif subcmd == "SAVE":
             # Save to disk - ADMIN only
@@ -5931,7 +5931,7 @@ class pyIRCXServer:
             logger.info(f"CONFIG: {user.nickname} reloaded configuration")
 
         else:
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Unknown subcommand: {subcmd}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :That subcommand is not recognized: {subcmd}")
             await user.send(f":{self.servername} NOTICE {user.nickname} :CONFIG subcommands: LIST, GET, SET, SAVE, RELOAD")
 
     async def handle_connect(self, user, params):
@@ -5978,7 +5978,7 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :Successfully linked to {target_server}")
             logger.info(f"CONNECT: {user.nickname} linked to {target_server}")
         except Exception as e:
-            await user.send(f":{self.servername} NOTICE {user.nickname} :The link could not be established: {e}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :We couldn't establish the link: {e}")
             logger.error(f"CONNECT: Failed to link to {target_server}: {e}")
 
     async def handle_squit(self, user, params):
@@ -6013,7 +6013,7 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :Unlinked from {target_server}")
             logger.info(f"SQUIT: {user.nickname} unlinked {target_server}: {reason}")
         except Exception as e:
-            await user.send(f":{self.servername} NOTICE {user.nickname} :The server could not be unlinked: {e}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :We couldn't unlink the server: {e}")
             logger.error(f"SQUIT: Failed to unlink {target_server}: {e}")
 
     async def handle_links(self, user, params):
@@ -6159,7 +6159,7 @@ class pyIRCXServer:
                         await trunk_server.send(f"STAFFCMD {user.nickname} ADD {params[1]} {params[2]} {params[3]}")
                         await user.send(f":{self.servername} NOTICE {user.nickname} :Staff command forwarded to trunk. Please wait...")
                         return
-                await user.send(f":{self.servername} NOTICE {user.nickname} :Error: Trunk not connected. Staff management unavailable.")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :The trunk server is not connected. Staff management is unavailable.")
                 return
 
             username = params[1]
@@ -6226,7 +6226,7 @@ class pyIRCXServer:
                         await trunk_server.send(f"STAFFCMD {user.nickname} REMOVE {params[1]}")
                         await user.send(f":{self.servername} NOTICE {user.nickname} :Staff command forwarded to trunk. Please wait...")
                         return
-                await user.send(f":{self.servername} NOTICE {user.nickname} :Error: Trunk not connected. Staff management unavailable.")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :The trunk server is not connected. Staff management is unavailable.")
                 return
 
             username = params[1]
@@ -6281,7 +6281,7 @@ class pyIRCXServer:
                         await trunk_server.send(f"STAFFCMD {user.nickname} LEVEL {params[1]} {params[2]}")
                         await user.send(f":{self.servername} NOTICE {user.nickname} :Staff command forwarded to trunk. Please wait...")
                         return
-                await user.send(f":{self.servername} NOTICE {user.nickname} :Error: Trunk not connected. Staff management unavailable.")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :The trunk server is not connected. Staff management is unavailable.")
                 return
 
             username = params[1]
@@ -6352,7 +6352,7 @@ class pyIRCXServer:
                             await trunk_server.send(f"STAFFCMD {user.nickname} PASSWORD {old_password} {new_password}")
                             await user.send(f":{self.servername} NOTICE {user.nickname} :Password change request forwarded to trunk. Please wait...")
                             return
-                    await user.send(f":{self.servername} NOTICE {user.nickname} :Error: Trunk not connected. Staff management unavailable.")
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :The trunk server is not connected. Staff management is unavailable.")
                     return
 
             elif len(params) == 3:
@@ -6411,7 +6411,7 @@ class pyIRCXServer:
                 await user.send(self.get_reply("888", user))
 
         else:
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Unknown subcommand: {subcmd}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :That subcommand is not recognized: {subcmd}")
             await user.send(f":{self.servername} NOTICE {user.nickname} :STAFF subcommands: LIST, ADD, DEL, SET, PASS")
 
     async def handle_profanity(self, user, params):
@@ -6493,7 +6493,7 @@ class pyIRCXServer:
                 try:
                     re.compile(value)
                 except re.error as e:
-                    await user.send(f":{self.servername} NOTICE {user.nickname} :Invalid regex pattern: {e}")
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :That regex pattern is not valid: {e}")
                     return
 
                 current_patterns = CONFIG.get('servicebot', 'profanity_filter', 'patterns', default=[])
@@ -6507,7 +6507,7 @@ class pyIRCXServer:
                 logger.info(f"PROFANITY: {user.nickname} added pattern '{value}'")
 
             else:
-                await user.send(f":{self.servername} NOTICE {user.nickname} :Unknown type '{add_type}'. Use WORD or PATTERN")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :That type '{add_type}' is not recognized. Use WORD or PATTERN")
 
         elif subcmd == "DEL":
             if len(params) < 3:
@@ -6540,7 +6540,7 @@ class pyIRCXServer:
                 logger.info(f"PROFANITY: {user.nickname} removed pattern '{value}'")
 
             else:
-                await user.send(f":{self.servername} NOTICE {user.nickname} :Unknown type '{del_type}'. Use WORD or PATTERN")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :That type '{del_type}' is not recognized. Use WORD or PATTERN")
 
         elif subcmd == "ENABLE":
             CONFIG.set('servicebot', 'profanity_filter', 'enabled', True)
@@ -6569,7 +6569,7 @@ class pyIRCXServer:
                 await user.send(f":{self.servername} NOTICE {user.nickname} :TEST RESULT: Would NOT be caught")
 
         else:
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Unknown subcommand: {subcmd}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :That subcommand is not recognized: {subcmd}")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Available: LIST, ADD, DEL, ENABLE, DISABLE, TEST")
 
     async def handle_help(self, user, params):
@@ -7486,7 +7486,7 @@ class pyIRCXServer:
                     await trunk_server.send(f"REGCMD {user.nickname} REGISTER_NICK {account} {password} {email_param}")
                     await user.send(f":{self.servername} NOTICE {user.nickname} :Registration request sent to services. Please wait...")
                     return
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Error: Services unavailable (trunk not connected)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Services are currently unavailable (the trunk server is not connected)")
             return
 
         try:
@@ -7542,7 +7542,7 @@ class pyIRCXServer:
                     await trunk_server.send(f"REGCMD {user.nickname} REGISTER_CHANNEL {chan_name} {password_param}")
                     await user.send(f":{self.servername} NOTICE {user.nickname} :Channel registration request sent to services. Please wait...")
                     return
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Error: Services unavailable (trunk not connected)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Services are currently unavailable (the trunk server is not connected)")
             return
 
         try:
@@ -7628,7 +7628,7 @@ class pyIRCXServer:
                     await trunk_server.send(f"REGCMD {user.nickname} UNREGISTER_NICK {account}")
                     await user.send(f":{self.servername} NOTICE {user.nickname} :Unregistration request sent to services. Please wait...")
                     return
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Error: Services unavailable (trunk not connected)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Services are currently unavailable (the trunk server is not connected)")
             return
 
         try:
@@ -7666,7 +7666,7 @@ class pyIRCXServer:
                     await trunk_server.send(f"REGCMD {user.nickname} UNREGISTER_CHANNEL {chan_name}")
                     await user.send(f":{self.servername} NOTICE {user.nickname} :Channel unregistration request sent to services. Please wait...")
                     return
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Error: Services unavailable (trunk not connected)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Services are currently unavailable (the trunk server is not connected)")
             return
 
         try:
@@ -7735,7 +7735,7 @@ class pyIRCXServer:
                     await trunk_server.send(f"REGCMD {user.nickname} IDENTIFY {account} {password}")
                     await user.send(f":{self.servername} NOTICE {user.nickname} :Identifying...")
                     return
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Error: Services unavailable (trunk not connected)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Services are currently unavailable (the trunk server is not connected)")
             return
 
         try:
@@ -8186,7 +8186,7 @@ class pyIRCXServer:
                     await trunk_server.send(f"MEMOCMD {user.nickname} SEND {target_nick} :{escaped_message}")
                     await user.send(f":{self.servername} NOTICE {user.nickname} :Memo request sent to services. Please wait...")
                     return
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Error: Services unavailable (trunk not connected)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Services are currently unavailable (the trunk server is not connected)")
             return
 
         try:
@@ -8213,7 +8213,7 @@ class pyIRCXServer:
 
         except Exception as e:
             logger.error(f"MEMO SEND error: {e}")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Failed to send memo")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :We couldn't send the memo")
 
     async def _memo_list(self, user):
         """List user's memos"""
@@ -8229,7 +8229,7 @@ class pyIRCXServer:
                 if trunk_server:
                     await trunk_server.send(f"MEMOCMD {user.nickname} LIST")
                     return
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Error: Services unavailable (trunk not connected)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Services are currently unavailable (the trunk server is not connected)")
             return
 
         try:
@@ -8253,7 +8253,7 @@ class pyIRCXServer:
 
         except Exception as e:
             logger.error(f"MEMO LIST error: {e}")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Failed to list memos")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :We couldn't list the memos")
 
     async def _memo_read(self, user, memo_id=None):
         """Read memo(s)"""
@@ -8272,7 +8272,7 @@ class pyIRCXServer:
                     else:
                         await trunk_server.send(f"MEMOCMD {user.nickname} READ")
                     return
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Error: Services unavailable (trunk not connected)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Services are currently unavailable (the trunk server is not connected)")
             return
 
         try:
@@ -8312,7 +8312,7 @@ class pyIRCXServer:
 
         except Exception as e:
             logger.error(f"MEMO READ error: {e}")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Failed to read memos")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :We couldn't read the memos")
 
     async def _memo_del(self, user, target):
         """Delete memo(s)"""
@@ -8329,7 +8329,7 @@ class pyIRCXServer:
                     await trunk_server.send(f"MEMOCMD {user.nickname} DEL {target}")
                     await user.send(f":{self.servername} NOTICE {user.nickname} :Memo deletion request sent to services. Please wait...")
                     return
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Error: Services unavailable (trunk not connected)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Services are currently unavailable (the trunk server is not connected)")
             return
 
         try:
@@ -8351,7 +8351,7 @@ class pyIRCXServer:
 
         except Exception as e:
             logger.error(f"MEMO DEL error: {e}")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Failed to delete memo")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :We couldn't delete the memo")
 
     async def deliver_pending_memos(self, user):
         """Deliver pending memos when user identifies"""
@@ -10097,7 +10097,7 @@ class pyIRCXServer:
                             logger.info(f"Channel {channel.name} unregistered via MODE -r by {user.nickname}")
                         except Exception as e:
                             logger.error(f"MODE -r database error: {e}")
-                            await user.send(f":{self.servername} NOTICE {user.nickname} :Failed to unregister channel")
+                            await user.send(f":{self.servername} NOTICE {user.nickname} :We couldn't unregister the channel")
                     else:
                         # Not registered, just remove the mode
                         channel.modes['r'] = False
