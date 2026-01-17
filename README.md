@@ -3,7 +3,7 @@
 **A production-ready Python implementation of the IRCX protocol — the modern IRCX server for distributed chat networks**
 
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPLv3-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-1.2.0-brightgreen.svg)](#)
 [![Tests](https://img.shields.io/badge/tests-243%20passing-brightgreen.svg)](#testing)
 
