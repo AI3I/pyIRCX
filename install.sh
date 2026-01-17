@@ -629,6 +629,36 @@ main() {
     echo "Default ports: 6667 (plain), 6697 (SSL)"
     echo ""
     echo "========================================"
+    echo -e "${YELLOW}Optional: Web Server Setup (Apache/httpd)${NC}"
+    echo "========================================"
+    echo ""
+    echo "Setting up Apache/httpd is recommended before SSL configuration."
+    echo "This configures Apache for WebChat, WebAdmin, and SSL certificates."
+    echo ""
+    echo "The setup script will:"
+    echo "  - Install Apache/httpd and PHP (if needed)"
+    echo "  - Configure virtual hosts for WebChat and WebAdmin"
+    echo "  - Set up proper permissions and SELinux contexts"
+    echo "  - Enable required Apache modules"
+    echo ""
+    read -p "Set up Apache/httpd now? [Y/n] " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+        if [ -f "setup_apache.sh" ]; then
+            echo ""
+            echo "Running Apache setup..."
+            ./setup_apache.sh
+        else
+            echo -e "${YELLOW}setup_apache.sh not found in current directory${NC}"
+            echo "You can run it later: sudo ./setup_apache.sh"
+        fi
+    else
+        echo ""
+        echo "Apache setup skipped. You can run it later with:"
+        echo "  sudo ./setup_apache.sh"
+    fi
+    echo ""
+    echo "========================================"
     echo -e "${YELLOW}Optional: SSL/TLS Certificate Setup${NC}"
     echo "========================================"
     echo ""
