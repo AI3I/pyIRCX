@@ -1591,7 +1591,6 @@ console.log("=== admin.js LOADING ===");
             case 'access': loadAccessList(); break;
             case 'newsflash': loadNewsflash(); loadNewsflashSettings(); break;
             case 'mailbox': loadMailbox(); break;
-            case 'branchgen': initBranchConfigGenerator(); break;
             case 'logs': loadLogs(); break;
         }
     }
@@ -1607,6 +1606,16 @@ console.log("=== admin.js LOADING ===");
         const downloadBtn = $('#download-config-btn');
         const newConfigBtn = $('#new-config-btn');
         const configFilename = $('#config-filename');
+        const toggleBtn = $('#branch-gen-toggle');
+        const content = $('#branch-gen-content');
+        const chevron = $('#branch-gen-chevron');
+
+        // Collapsible toggle
+        toggleBtn?.addEventListener('click', () => {
+            const isHidden = content.style.display === 'none';
+            content.style.display = isHidden ? 'block' : 'none';
+            chevron.style.transform = isHidden ? 'rotate(90deg)' : 'rotate(0deg)';
+        });
 
         // Generate secure password
         genPassBtn?.addEventListener('click', () => {
@@ -2265,6 +2274,9 @@ console.log("=== admin.js LOADING ===");
                 addBranchEntry();
             });
         }
+
+        // Initialize branch config generator
+        initBranchConfigGenerator();
     }
 
     // Add a branch server entry (for trunk config)
