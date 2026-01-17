@@ -1744,7 +1744,7 @@ RESPONSES = {
     "219": "{flag} :End of /STATS report",
     "221": "+{modes}",
     "251": "There are {users} users and {invisible} invisible on {server_count} servers",
-    "252": "There are {ops} staff and service(s) online",
+    "252": "{ops} :staff and services online",
     "253": "{unknown} :unknown connection(s)",
     "254": "{channels} :channels formed",
     "255": "I have {users} clients and {server_count} servers",
