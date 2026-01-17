@@ -355,6 +355,10 @@ class ServerLinkManager:
                 if not line:
                     continue
 
+                # Log all messages from branch for debugging
+                if 'servicetest' in line.lower() or 'PRIVMSG' in line:
+                    logger.info(f"TRUNK received from {server.name}: {line}")
+
                 await self.process_server_message(server, line)
 
         except Exception as e:
@@ -661,11 +665,65 @@ class ServerLinkManager:
             return
 
         cmd = parts[1].upper()
+        logger.info(f"handle_prefixed_message: cmd={cmd}, source={source}")
 
         # Route common commands
         if cmd in ('PRIVMSG', 'NOTICE'):
-            # Broadcast to local users in target channel
-            await self.broadcast_to_local(line, exclude_server=server.name)
+            # Extract target and message
+            if len(parts) >= 3:
+                target = parts[2]
+                message_text = ' '.join(parts[3:]).lstrip(':')
+
+                logger.info(f"PRIVMSG/NOTICE: target={target}, message={message_text[:50]}")
+
+                # If target is a local service, process it
+                target_obj = self.irc_server.users.get(target)
+                logger.info(f"target_obj={target_obj}, has_handle_message={hasattr(target_obj, 'handle_message') if target_obj else False}")
+
+                if target_obj and hasattr(target_obj, 'handle_message'):
+                    # Target is a service - create a pseudo-user for the remote sender
+                    # Parse source (nickname!user@host)
+                    if '!' in source:
+                        nickname = source.split('!')[0]
+                        userhost = source.split('!')[1]
+                        username = userhost.split('@')[0].lstrip('~')
+                        hostname = userhost.split('@')[1] if '@' in userhost else 'unknown'
+                    else:
+                        nickname = source
+                        username = source
+                        hostname = server.name
+
+                    # Get or create remote user object
+                    remote_user = self.irc_server.users.get(nickname)
+                    if not remote_user and cmd == 'PRIVMSG':
+                        # Create temporary virtual user for service interaction
+                        global _User
+                        if _User is None:
+                            import sys
+                            if '__main__' in sys.modules and hasattr(sys.modules['__main__'], 'User'):
+                                _User = sys.modules['__main__'].User
+
+                        if _User:
+                            remote_user = _User(None, None, is_virtual=True)
+                            remote_user.nickname = nickname
+                            remote_user.username = username
+                            remote_user.host = hostname
+                            remote_user.from_server = server.name
+                            remote_user.is_remote = True
+                            self.irc_server.users[nickname] = remote_user
+                            server.add_user(nickname)
+                            logger.info(f"Created virtual remote user {nickname} from {server.name}")
+
+                    if remote_user and cmd == 'PRIVMSG':
+                        # Service will handle this message
+                        await target_obj.handle_message(remote_user, message_text)
+                        logger.info(f"Delivered remote PRIVMSG from {nickname} to service {target}")
+                    elif cmd == 'NOTICE':
+                        # Just log notices to services
+                        logger.debug(f"Received NOTICE from {nickname} to service {target}")
+                else:
+                    # Broadcast to local users if target is a channel or remote user
+                    await self.broadcast_to_local(line, exclude_server=server.name)
         elif cmd == 'JOIN':
             # User joined channel
             if len(parts) >= 3:
@@ -808,8 +866,15 @@ class ServerLinkManager:
         """
         hub = self.get_services_hub()
         if hub and hub.is_direct:
+            logger.info(f"Sending to trunk: {message}")
             await hub.send(message)
+            logger.info(f"Sent to trunk successfully")
             return True
+        else:
+            if hub:
+                logger.warning(f"Trunk found but not direct: {hub.name}, is_direct={hub.is_direct}")
+            else:
+                logger.warning("No trunk server found for service routing")
         return False
 
     def is_service_user(self, nickname: str) -> bool:

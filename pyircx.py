@@ -3597,19 +3597,25 @@ class pyIRCXServer:
 
         # If we're in centralized mode and NOT the hub, route to hub
         if services_mode == 'centralized' and not is_services_hub:
+            logger.info(f"Branch mode: checking if {target.lower()} in {service_names}")
             if target.lower() in service_names:
+                logger.info(f"Target {target} IS a service - routing to trunk")
                 # Route to services hub
                 if self.link_manager and self.link_manager.enabled:
                     source = f":{user.prefix()}"
                     message = f"{source} {cmd} {target} :{text}"
+                    logger.info(f"About to route: {message}")
                     routed = await self.link_manager.route_to_services_hub(message)
                     if routed:
-                        logger.debug(f"Routed service message from {user.nickname} to {target} via trunk")
+                        logger.info(f"Routed service message from {user.nickname} to {target} via trunk")
                         return
                     else:
                         # Trunk not available - inform user
+                        logger.warning(f"Routing failed for {target}")
                         await user.send(f":{self.servername} NOTICE {user.nickname} :Services temporarily unavailable (trunk offline)")
                         return
+            else:
+                logger.info(f"Target {target.lower()} NOT in service list")
 
         # System service - provide help about available services
         if target.lower() == CONFIG.get('system', 'nick', default='System').lower():

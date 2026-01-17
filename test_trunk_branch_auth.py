@@ -43,25 +43,34 @@ def test_branch_staff_auth_success():
     # Read welcome
     recv_lines(sock, 0.5)
 
-    # Authenticate with PASS (default admin password is 'changeme')
+    # Authenticate with PASS (default admin username is 'admin', password is 'changeme')
     send_line(sock, "PASS changeme")
     send_line(sock, "NICK testadmin")
-    send_line(sock, "USER testadmin testadmin localhost :Test Admin")
+    send_line(sock, "USER admin admin localhost :Test Admin")
 
     # Wait for response
     lines = recv_lines(sock, 2.0)
 
     # Check for success indicators
     success = False
+    got_admin_mode = False
+    got_admin_notice = False
+
     for line in lines:
-        if 'MODE testadmin' in line and '+o' in line:
-            print("\n✓ Staff authentication successful - received +o mode")
-            success = True
+        if 'MODE testadmin' in line and ('+a' in line or '+o' in line):
+            print(f"\n✓ Staff authentication successful - received admin mode: {line}")
+            got_admin_mode = True
+        if '381' in line or 'IRC administrator' in line:
+            print("✓ Received administrator notice")
+            got_admin_notice = True
         if '001' in line or 'Welcome' in line:
             print("✓ Registration complete")
 
+    if got_admin_mode and got_admin_notice:
+        success = True
+
     if not success:
-        print("\n✗ FAILED: Did not receive staff modes")
+        print("\n✗ FAILED: Did not receive expected staff modes and notices")
         return False
 
     sock.close()
@@ -92,8 +101,11 @@ def test_branch_staff_auth_failure():
     got_registration = False
 
     for line in lines:
-        if 'MODE testuser' in line and '+o' in line:
-            print("\n✗ FAILED: Received staff modes with wrong password!")
+        if 'MODE testuser' in line and ('+a' in line or '+o' in line):
+            print(f"\n✗ FAILED: Received staff modes with wrong password: {line}")
+            got_staff_mode = True
+        if '381' in line or 'IRC administrator' in line:
+            print("\n✗ FAILED: Received administrator notice with wrong password!")
             got_staff_mode = True
         if '001' in line or 'Welcome' in line:
             print("✓ Registration complete (as normal user)")
@@ -130,17 +142,26 @@ def test_branch_service_routing():
     send_line(sock, "PRIVMSG Registrar :HELP")
 
     # Wait for response
-    lines = recv_lines(sock, 2.0)
+    lines = recv_lines(sock, 3.0)
 
     # Check for service response
     success = False
+    got_notice = False
+
     for line in lines:
-        if 'Registrar' in line and ('NOTICE' in line or 'PRIVMSG' in line):
-            print("\n✓ Received response from Registrar service")
-            success = True
+        if 'NOTICE' in line and 'servicetest' in line:
+            got_notice = True
+            if 'Services temporarily unavailable' in line or 'trunk offline' in line:
+                print(f"\n✗ Got error: {line}")
+            elif 'Registrar' in line:
+                print(f"\n✓ Received response from Registrar service")
+                success = True
 
     if not success:
-        print("\n✗ FAILED: No response from Registrar service")
+        if got_notice:
+            print("\n✗ FAILED: Received NOTICE but not from Registrar")
+        else:
+            print("\n✗ FAILED: No response from Registrar service at all")
         return False
 
     sock.close()
