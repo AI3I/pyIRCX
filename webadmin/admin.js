@@ -2191,8 +2191,8 @@ console.log("=== admin.js LOADING ===");
                     "enable_ipv6": trunkConfig.network?.enable_ipv6 || false
                 },
                 "limits": trunkConfig.limits || {
-                    "max_users": 1000,
-                    "max_channels": 500
+                    "max_users": 10000,
+                    "max_channels": 2500
                 },
                 "services": {
                     "enabled": true,
@@ -2280,14 +2280,14 @@ console.log("=== admin.js LOADING ===");
             setVal('#cfg-database-pool', config.database?.pool_size || 5);
 
             // Limits
-            setVal('#cfg-limits-max-users', config.limits?.max_users || 1000);
+            setVal('#cfg-limits-max-users', config.limits?.max_users || 10000);
             setVal('#cfg-limits-msg-length', config.limits?.msg_length || 512);
             setVal('#cfg-limits-nick-cooldown', config.limits?.nick_change_cooldown || 60);
             setVal('#cfg-limits-client-timeout', config.limits?.client_timeout || 300);
             setVal('#cfg-limits-max-nick', config.limits?.max_nick_length || 30);
             setVal('#cfg-limits-max-user', config.limits?.max_user_length || 30);
             setVal('#cfg-limits-max-channel', config.limits?.max_channel_length || 50);
-            setVal('#cfg-limits-max-channels', config.limits?.max_channels || 500);
+            setVal('#cfg-limits-max-channels', config.limits?.max_channels || 2500);
             setVal('#cfg-limits-max-channels-user', config.limits?.max_channels_per_user || 20);
 
             // Security

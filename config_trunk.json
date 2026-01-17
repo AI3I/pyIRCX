@@ -18,8 +18,8 @@
     "pool_size": 10
   },
   "limits": {
-    "max_users": 1000,
-    "max_channels": 500
+    "max_users": 10000,
+    "max_channels": 2500
   },
   "services": {
     "enabled": true,

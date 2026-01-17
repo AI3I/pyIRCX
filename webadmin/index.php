@@ -549,7 +549,7 @@ $csrf_token = $_SESSION['csrf_token'];
                             <div class="form-group">
                                 <label>Maximum Users</label>
                                 <input type="number" class="form-control" id="cfg-limits-max-users">
-                                <small>Maximum concurrent connections. Default: 1000</small>
+                                <small>Maximum concurrent connections. Default: 10000</small>
                             </div>
                             <div class="form-group">
                                 <label>Message Length</label>
@@ -584,7 +584,7 @@ $csrf_token = $_SESSION['csrf_token'];
                             <div class="form-group">
                                 <label>Maximum Total Channels</label>
                                 <input type="number" class="form-control" id="cfg-limits-max-channels">
-                                <small>Maximum number of channels that can exist on the server. Default: 500</small>
+                                <small>Maximum number of channels that can exist on the server. Default: 2500</small>
                             </div>
                             <div class="form-group">
                                 <label>Maximum Channels Per User</label>
