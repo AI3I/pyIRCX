@@ -7912,11 +7912,11 @@ class pyIRCXServer:
 
         elif topic in ["KILL"] and is_staff:
             await user.send(f":{self.servername} NOTICE {user.nickname} :=== KILL Command (IRC Administrator/operator only) ===")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /KILL <target> [reason]")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /KILL <target> <reason>")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Disconnect users or destroy channels. Requires IRC Administrator or IRC Operator privileges.")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  /KILL alice Spamming - Disconnect user")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  /KILL #badchannel - Destroy channel and kick all users")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /KILL #badchannel Inappropriate - Destroy channel and kick all users")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  /KILL 192.168.1.* Network abuse - Kill by IP pattern")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Use with caution!")
 
@@ -11670,11 +11670,11 @@ class pyIRCXServer:
         if not staff.is_high_staff():
             await staff.send(self.get_reply("481", staff))
             return
-        if not params:
+        if len(params) < 2:
             await staff.send(self.get_reply("461", staff, command="KILL"))
             return
         target = params[0]
-        reason = params[1].lstrip(':') if len(params) > 1 else "Terminated"
+        reason = params[1].lstrip(':')
 
         if is_channel(target):
             # KILL #channel or &channel - kick all users and destroy channel
