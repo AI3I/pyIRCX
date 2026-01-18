@@ -1992,7 +1992,7 @@ SERVER_MESSAGES = {
     "ungag_global": "{target} has been globally ungagged (-z)",
 
     # WHO/LIST restrictions
-    "who_requires_staff": "WHO * requires IRC Operator or IRC Administrator privileges. Try using a pattern like *nick* or *@host* instead",
+    "who_requires_staff": "WHO * requires IRC Administrator or IRC Operator privileges. Try using a pattern like *nick* or *@host* instead",
     "who_truncated": "WHO results truncated at {limit} entries. Use a more specific pattern for complete results.",
 
     # Message handling
@@ -3849,7 +3849,7 @@ class pyIRCXServer:
             if self.link_manager and self.link_manager.enabled:
                 await self.link_manager.broadcast_to_servers(mode_msg)
             # Dynamic role name for 381
-            role = "administrator" if level == "ADMIN" else "operator" if level == "SYSOP" else "guide"
+            role = "Administrator" if level == "ADMIN" else "Operator" if level == "SYSOP" else "Guide"
             await user.send(self.get_reply("381", user, role=role))
             # Configurable staff login message
             staff_msg = CONFIG.get('server', 'staff_login_message',
@@ -3889,7 +3889,7 @@ class pyIRCXServer:
         if target == '$':
             # Require staff privileges for server-wide messages
             if not user.is_high_staff():
-                await user.send(f":{self.servername} NOTICE {user.nickname} :Server-wide messaging requires IRC Operator or IRC Administrator privileges")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Server-wide messaging requires IRC Administrator or IRC Operator privileges")
                 return
 
             text = params[1]
@@ -4333,7 +4333,7 @@ class pyIRCXServer:
         # WHO * (all users) restricted to SYSOP/ADMIN only
         if target == "*":
             if not is_high_staff:
-                await user.send(f":{self.servername} NOTICE {user.nickname} :WHO * requires IRC Operator or IRC Administrator privileges. Use a pattern like *nick* instead.")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :WHO * requires IRC Administrator or IRC Operator privileges. Use a pattern like *nick* instead.")
                 await user.send(self.get_reply("315", user, target=target))
                 return
             # Rate limit for full WHO
@@ -5919,7 +5919,7 @@ class pyIRCXServer:
 
             # Show operator/admin flags only if user is operator or admin
             if user.is_high_staff():
-                await user.send(f":{self.servername} NOTICE {user.nickname} :IRC Operator or IRC Administrator flags:")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :IRC Administrator or IRC Operator flags:")
                 await user.send(f":{self.servername} NOTICE {user.nickname} :  d - Database statistics")
                 await user.send(f":{self.servername} NOTICE {user.nickname} :  k - Bans and access lists")
                 await user.send(f":{self.servername} NOTICE {user.nickname} :  l - Server linking statistics")
@@ -5936,7 +5936,7 @@ class pyIRCXServer:
         # STATS * - All stats combined (Operator+ only)
         if flag == '*':
             if not user.is_high_staff():
-                await user.send(f":{self.servername} NOTICE {user.nickname} :STATS * requires IRC Operator or IRC Administrator privileges")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :STATS * requires IRC Administrator or IRC Operator privileges")
                 await user.send(self.get_reply("219", user, flag=flag))
                 return
 
@@ -6217,7 +6217,7 @@ class pyIRCXServer:
         is_high_staff = user.is_high_staff()
 
         if flag in OPERATOR_FLAGS and not is_high_staff:
-            await user.send(f":{self.servername} NOTICE {user.nickname} :STATS {flag} requires IRC Operator or IRC Administrator privileges")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :STATS {flag} requires IRC Administrator or IRC Operator privileges")
             await user.send(self.get_reply("219", user, flag=flag))
             return
 
@@ -7320,7 +7320,7 @@ class pyIRCXServer:
           PROFANITY TEST <text>             - Test if text would be caught
         """
         if not user.is_high_staff():
-            await user.send(f":{self.servername} NOTICE {user.nickname} :PROFANITY command requires IRC Operator or IRC Administrator privileges")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :PROFANITY command requires IRC Administrator or IRC Operator privileges")
             return
 
         if not params:
@@ -10316,7 +10316,7 @@ class pyIRCXServer:
 
         # Require operator or admin privileges for EVENT
         if not user.is_high_staff():
-            await user.send(f":{self.servername} NOTICE {user.nickname} :EVENT command requires IRC Operator or IRC Administrator privileges")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :EVENT command requires IRC Administrator or IRC Operator privileges")
             return
 
         if not params:
