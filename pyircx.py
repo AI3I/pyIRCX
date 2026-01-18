@@ -12666,7 +12666,7 @@ class ServerManager:
                                 await user.send(f":{CONFIG.get('system', 'nick', default='System')} KILL {nickname} :{reason}")
                                 logger.info(f"Admin command: Killed user {nickname} - {reason}")
                                 # Disconnect the user
-                                await self.server.quit_user(user, reason=f"Killed: {reason}")
+                                await self.server.quit_user(user)
 
                     elif cmd == 'BAN_USER':
                         # Format: BAN_USER:nickname:duration:reason
@@ -12687,7 +12687,7 @@ class ServerManager:
                                 await user.send(f":{CONFIG.get('system', 'nick', default='System')} KILL {nickname} :Banned: {reason}")
                                 logger.info(f"Admin command: Banned user {nickname} ({ip}) for {duration}s - {reason}")
                                 # Disconnect the user
-                                await self.server.quit_user(user, reason=f"Banned: {reason}")
+                                await self.server.quit_user(user)
 
                     elif cmd == 'LOCK_CHANNEL':
                         # Format: LOCK_CHANNEL:channel:owner
