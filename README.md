@@ -433,7 +433,7 @@ To create a multi-server network:
 /LINKS
 ```
 
-See [LINKING.md](docs/user/LINKING.md) for complete server linking documentation.
+See [LINKING.md](docs/LINKING.md) for complete server linking documentation.
 
 ### SSL/TLS Setup (Recommended)
 
@@ -505,7 +505,7 @@ For IRCX features, use the IRCX command after connecting:
 
 ## Documentation
 
-- **[LINKING.md](docs/user/LINKING.md)** — Server linking protocol and setup
+- **[LINKING.md](docs/LINKING.md)** — Server linking protocol and setup
 - **[CONFIG.md](docs/user/CONFIG.md)** — Full configuration reference
 - **[MANUAL.md](docs/user/MANUAL.md)** — User and operator command guide
 - **[SELINUX.md](docs/user/SELINUX.md)** — SELinux configuration and troubleshooting
