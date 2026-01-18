@@ -711,12 +711,13 @@ function renderUserList(ch) {
 function addMsg(target, html, cls = '') {
     const ch = getChannel(target);
     if (!ch) return;
+    // Skip messages with no content (prevents empty timestamp-only lines)
+    if (!html || html.trim() === '') return;
     // For system messages in Status, use spans instead of divs for tighter spacing
     const elem = (cls === 'system' && target === 'Status') ? document.createElement('span') : document.createElement('div');
     elem.className = 'message' + (cls ? ' ' + cls : '');
-    // Don't show timestamp for system messages to save space
-    const timestamp = (cls === 'system') ? '' : `<span class="ts">${ts()}</span>`;
-    elem.innerHTML = `${timestamp}${html}`;
+    // Always show timestamp
+    elem.innerHTML = `<span class="ts">${ts()}</span>${html}`;
     // Add line break after system message spans
     if (cls === 'system' && target === 'Status') {
         elem.innerHTML += '<br>';
@@ -742,7 +743,11 @@ function sysMsg(text, cls = 'system') {
         const div = document.createElement('div');
         div.className = 'message motd';
         div.style.whiteSpace = 'pre';
-        // Don't add timestamp for MOTD to save space
+        // Add timestamp for MOTD
+        const tsSpan = document.createElement('span');
+        tsSpan.className = 'ts';
+        tsSpan.textContent = ts();
+        div.appendChild(tsSpan);
         div.appendChild(document.createTextNode(text));
         ch.messages.push(div);
         if (ch.messages.length > 500) ch.messages.shift();
