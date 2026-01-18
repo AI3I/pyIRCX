@@ -357,8 +357,6 @@ The server supports IRCX protocol extensions:
 | `KILL` | ADMIN, SYSOP | Disconnect user |
 | `KILL #channel` | ADMIN, SYSOP | Destroy channel and kick all users |
 | `KILL pattern` | ADMIN, SYSOP | Disconnect users matching IP/hostmask |
-| `KLINE/GLINE` | ADMIN, SYSOP | Ban by pattern |
-| `UNKLINE/UNGLINE` | ADMIN, SYSOP | Remove ban |
 | `GAG` | ADMIN, SYSOP, GUIDE | Silence user |
 | `UNGAG` | ADMIN, SYSOP, GUIDE | Remove gag |
 | `STATS` | All staff | Server statistics |

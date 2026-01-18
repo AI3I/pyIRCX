@@ -229,7 +229,7 @@ Three-tier staff hierarchy matching the original MECS design:
 | Level | Mode | Capabilities |
 |-------|------|--------------|
 | **ADMIN** | +a | Full server control, CONFIG access, can promote SYSOPs, **can link servers** |
-| **SYSOP** | +o | Server operator, can KILL/KLINE, promote GUIDEs, **can link servers** |
+| **SYSOP** | +o | Server operator, can KILL/GAG, promote GUIDEs, **can link servers** |
 | **GUIDE** | +g | Channel moderation assistance, limited staff commands |
 
 ### Modern Infrastructure
@@ -264,21 +264,15 @@ async def handle_client(self, reader, writer):
 
 ### Server Linking Architecture
 
-The linking system enables distributed IRC networks:
+The linking system enables distributed IRC networks with a robust server-to-server protocol:
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│  Server Linking Protocol                                     │
-├─────────────────────────────────────────────────────────────┤
-│  1. Handshake          — SERVER command with authentication  │
-│  2. State Burst        — Sync all users and channels         │
-│  3. Message Routing    — Propagate messages across network   │
-│  4. Collision Handling — Timestamp-based nick resolution     │
-│  5. Network divergence Recovery  — Automatic cleanup and rejoins       │
-└─────────────────────────────────────────────────────────────┘
-```
+1. **Handshake** — SERVER command with password authentication
+2. **State Burst** — Synchronize all users and channels on link
+3. **Message Routing** — Propagate messages across network efficiently
+4. **Collision Handling** — Timestamp-based nick/channel resolution
+5. **Split Recovery** — Automatic cleanup and network rejoins
 
-**Protocol Features:**
+**Additional Features:**
 - Password-authenticated server connections
 - Full state synchronization on link establishment
 - Efficient message routing with loop prevention
@@ -304,19 +298,15 @@ Persistent storage with enterprise-grade reliability:
 pyIRCX implements defense-in-depth with multiple security layers:
 
 #### Connection Security
-```
-┌─────────────────────────────────────────────────────────────┐
-│  Incoming Connection                                         │
-├─────────────────────────────────────────────────────────────┤
-│  1. Connection Throttle    — Max N connections/IP/window     │
-│  2. DNSBL Check            — Query Spamhaus, DroneBL, etc.   │
-│  3. Proxy Detection        — Scan for open proxy ports       │
-│  4. Connection Scoring     — Aggregate risk score            │
-│  5. TLS Handshake          — TLS 1.2/1.3 with modern ciphers │
-│  6. Rate Limiting          — Per-command cooldowns           │
-│  7. Flood Protection       — Message frequency limits        │
-└─────────────────────────────────────────────────────────────┘
-```
+
+**Incoming connections are protected by multiple layers:**
+1. **Connection Throttle** — Max N connections per IP per time window
+2. **DNSBL Check** — Query Spamhaus, DroneBL, etc.
+3. **Proxy Detection** — Scan for open proxy ports
+4. **Connection Scoring** — Aggregate risk score evaluation
+5. **TLS Handshake** — TLS 1.2/1.3 with modern ciphers
+6. **Rate Limiting** — Per-command cooldowns
+7. **Flood Protection** — Message frequency limits
 
 #### DNSBL Integration
 - **IPv4 and IPv6 support** — Full nibble-reversed IPv6 DNSBL queries

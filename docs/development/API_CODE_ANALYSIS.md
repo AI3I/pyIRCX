@@ -282,9 +282,9 @@ def send_irc_kill_user(nickname, reason="Killed by administrator"):
     )
 
 def send_irc_ban_user(nickname, reason="Banned by administrator", duration=3600):
-    """Ban a user from the server"""
+    """Ban a user from the server (using GAG for IRCX)"""
     return send_irc_command(
-        f"KLINE {duration} {nickname} :{reason}",
+        f"GAG {nickname} {duration} :{reason}",
         f"Ban user {nickname}"
     )
 

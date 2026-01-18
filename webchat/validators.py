@@ -347,8 +347,6 @@ def validate_raw_command(command):
         'DIE',     # Server shutdown
         'RESTART', # Server restart
         'KILL',    # Kill user (admin only)
-        'KLINE',   # Ban management (admin only)
-        'GLINE',   # Global ban (admin only)
         'SQUIT',   # Server disconnect
         'CONNECT', # Server linking
     ]
