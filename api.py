@@ -135,6 +135,24 @@ def get_admin_queue_path():
     else:
         return os.path.join(USER_INSTALL, "admin_commands.queue")
 
+def write_admin_command(command_string, success_message):
+    """Write a command to the admin command queue file
+
+    Args:
+        command_string: Command string to write (e.g., "KILL_CHANNEL:#test")
+        success_message: Success message to return
+
+    Returns:
+        dict with success/error status
+    """
+    try:
+        cmd_file = get_admin_queue_path()
+        with open(cmd_file, 'a') as f:
+            f.write(f"{command_string}\n")
+        return {"success": True, "message": success_message}
+    except Exception as e:
+        return {"error": f"Failed to write admin command: {str(e)}"}
+
 
 def init_db_pool(pool_size=10):
     """Initialize the database connection pool
@@ -284,6 +302,7 @@ def get_services_list():
 # IRC SERVER COMMUNICATION
 # ============================================================================
 
+@api_error_handler
 def send_irc_kill_channel(channel_name):
     """Kill a channel by writing to pyircx admin command queue
 
@@ -293,18 +312,13 @@ def send_irc_kill_channel(channel_name):
     Returns:
         dict with success/error status
     """
-    try:
-        cmd_file = get_admin_queue_path()
+    validate_channel_name(channel_name)
+    return write_admin_command(
+        f"KILL_CHANNEL:{channel_name}",
+        f"Channel {channel_name} will be reset"
+    )
 
-        # Append command to queue file
-        with open(cmd_file, 'a') as f:
-            f.write(f"KILL_CHANNEL:{channel_name}\n")
-
-        return {"success": True, "message": f"Channel {channel_name} will be reset"}
-
-    except Exception as e:
-        return {"error": f"Failed to write admin command: {str(e)}"}
-
+@api_error_handler
 def send_irc_kill_user(nickname, reason="Killed by administrator"):
     """Kill a user connection by writing to pyircx admin command queue
 
@@ -315,20 +329,17 @@ def send_irc_kill_user(nickname, reason="Killed by administrator"):
     Returns:
         dict with success/error status
     """
-    try:
-        cmd_file = get_admin_queue_path()
+    validate_nickname(nickname)
+    if not reason or len(reason) > 500:
+        raise ValueError("Reason must be between 1 and 500 characters")
+    return write_admin_command(
+        f"KILL_USER:{nickname}:{reason}",
+        f"User {nickname} will be disconnected"
+    )
 
-        # Append command to queue file
-        with open(cmd_file, 'a') as f:
-            f.write(f"KILL_USER:{nickname}:{reason}\n")
-
-        return {"success": True, "message": f"User {nickname} will be disconnected"}
-
-    except Exception as e:
-        return {"error": f"Failed to write admin command: {str(e)}"}
-
+@api_error_handler
 def send_irc_ban_user(nickname, reason="Banned by administrator", duration=3600):
-    """Ban a user (K-Line) by writing to pyircx admin command queue
+    """Ban a user by writing to pyircx admin command queue
 
     Args:
         nickname: Nickname to ban
@@ -338,18 +349,17 @@ def send_irc_ban_user(nickname, reason="Banned by administrator", duration=3600)
     Returns:
         dict with success/error status
     """
-    try:
-        cmd_file = get_admin_queue_path()
+    validate_nickname(nickname)
+    if not isinstance(duration, int) or duration < 0:
+        raise ValueError("Duration must be a non-negative integer")
+    if not reason or len(reason) > 500:
+        raise ValueError("Reason must be between 1 and 500 characters")
+    return write_admin_command(
+        f"BAN_USER:{nickname}:{duration}:{reason}",
+        f"User {nickname} will be banned for {duration} seconds"
+    )
 
-        # Append command to queue file - format: BAN_USER:nickname:duration:reason
-        with open(cmd_file, 'a') as f:
-            f.write(f"BAN_USER:{nickname}:{duration}:{reason}\n")
-
-        return {"success": True, "message": f"User {nickname} will be banned for {duration} seconds"}
-
-    except Exception as e:
-        return {"error": f"Failed to write admin command: {str(e)}"}
-
+@api_error_handler
 def send_irc_lock_channel(channel_name, owner="System"):
     """Lock a channel (register + set auth-only) by writing to pyircx admin command queue
 
@@ -360,18 +370,15 @@ def send_irc_lock_channel(channel_name, owner="System"):
     Returns:
         dict with success/error status
     """
-    try:
-        cmd_file = get_admin_queue_path()
+    validate_channel_name(channel_name)
+    if not owner or len(owner) > 30:
+        raise ValueError("Owner must be between 1 and 30 characters")
+    return write_admin_command(
+        f"LOCK_CHANNEL:{channel_name}:{owner}",
+        f"Channel {channel_name} will be locked and registered to {owner}"
+    )
 
-        # Append command to queue file - format: LOCK_CHANNEL:channel:owner
-        with open(cmd_file, 'a') as f:
-            f.write(f"LOCK_CHANNEL:{channel_name}:{owner}\n")
-
-        return {"success": True, "message": f"Channel {channel_name} will be locked and registered to {owner}"}
-
-    except Exception as e:
-        return {"error": f"Failed to write admin command: {str(e)}"}
-
+@api_error_handler
 def set_channel_mode(channel_name, mode_string):
     """Set channel mode via admin command queue
 
@@ -382,14 +389,17 @@ def set_channel_mode(channel_name, mode_string):
     Returns:
         dict with success/error status
     """
-    try:
-        cmd_file = get_admin_queue_path()
-        with open(cmd_file, 'a') as f:
-            f.write(f"SET_CHANNEL_MODE:{channel_name}:{mode_string}\n")
-        return {"success": True, "message": f"Mode {mode_string} will be set on {channel_name}"}
-    except Exception as e:
-        return {"error": f"Failed to write admin command: {str(e)}"}
+    validate_channel_name(channel_name)
+    if not mode_string or len(mode_string) > 50:
+        raise ValueError("Mode string must be between 1 and 50 characters")
+    if not re.match(r'^[+-][a-zA-Z]+$', mode_string):
+        raise ValueError("Mode string must start with + or - followed by mode letters")
+    return write_admin_command(
+        f"SET_CHANNEL_MODE:{channel_name}:{mode_string}",
+        f"Mode {mode_string} will be set on {channel_name}"
+    )
 
+@api_error_handler
 def set_channel_topic(channel_name, topic):
     """Set channel topic via admin command queue
 
@@ -400,13 +410,13 @@ def set_channel_topic(channel_name, topic):
     Returns:
         dict with success/error status
     """
-    try:
-        cmd_file = get_admin_queue_path()
-        with open(cmd_file, 'a') as f:
-            f.write(f"SET_CHANNEL_TOPIC:{channel_name}:{topic}\n")
-        return {"success": True, "message": f"Topic will be set on {channel_name}"}
-    except Exception as e:
-        return {"error": f"Failed to write admin command: {str(e)}"}
+    validate_channel_name(channel_name)
+    if topic and len(topic) > 500:
+        raise ValueError("Topic must not exceed 500 characters")
+    return write_admin_command(
+        f"SET_CHANNEL_TOPIC:{channel_name}:{topic}",
+        f"Topic will be set on {channel_name}"
+    )
 
 def apply_channel_modes_live(channel_name, modes):
     """Apply channel modes by killing channel to force reload from database
