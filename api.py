@@ -755,24 +755,16 @@ def send_mailbox_message(sender_nick, recipient_nick, message):
         recipient_row = cursor.fetchone()
 
         if not recipient_row:
-            # Check if recipient is a staff member
-            cursor.execute("SELECT username FROM users WHERE LOWER(username) = LOWER(?)", (recipient_nick,))
-            staff_row = cursor.fetchone()
+            # Auto-create registered_nicks entry for recipient
+            # This allows sending messages to any nickname via webadmin
+            import uuid as uuid_mod
+            recipient_uuid = str(uuid_mod.uuid4())
+            now = int(time.time())
 
-            if staff_row:
-                # Auto-create registered_nicks entry for staff member
-                import uuid as uuid_mod
-                staff_uuid = str(uuid_mod.uuid4())
-                now = int(time.time())
-
-                cursor.execute("""
-                    INSERT INTO registered_nicks (uuid, nickname, password_hash, registered_at, last_seen, registered_by)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                """, (staff_uuid, recipient_nick, "", now, now, "AUTO (staff member)"))
-
-                recipient_uuid = staff_uuid
-            else:
-                return {"error": f"Recipient '{recipient_nick}' is not registered"}
+            cursor.execute("""
+                INSERT INTO registered_nicks (uuid, nickname, password_hash, registered_at, last_seen, registered_by)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (recipient_uuid, recipient_nick, "", now, now, "AUTO (mailbox)"))
         else:
             recipient_uuid = recipient_row[0]
         sent_at = int(time.time())
