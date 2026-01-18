@@ -2,11 +2,14 @@
 """
 Database Initialization Script for pyIRCX
 
-Creates a new database with all required tables and a default admin account.
+Creates a new database with all required tables and default staff accounts (admin/sysop/guide).
 Can be used for:
 - Fresh installation
 - Database repair/regeneration
 - Testing environments
+
+IMPORTANT: This script creates tables matching the exact schema expected by pyircx.py.
+Do NOT modify the table schemas without also updating pyircx.py.
 
 Usage:
     python3 init_database.py [database_path] [--admin-username USERNAME] [--admin-password PASSWORD]
@@ -45,70 +48,72 @@ def create_database(db_path, admin_username=None, admin_password=None):
 
     print("Creating tables...")
 
-    # Users table (online users)
+    # Staff accounts (local server administration)
     cursor.execute("""CREATE TABLE IF NOT EXISTS users (
-        nickname TEXT PRIMARY KEY,
-        username TEXT,
+        username TEXT PRIMARY KEY,
+        password_hash TEXT,
+        level TEXT,
+        created_at INTEGER DEFAULT 0,
+        last_login INTEGER DEFAULT 0,
+        registered_nick TEXT,
+        email TEXT,
         realname TEXT,
-        hostname TEXT,
-        modes TEXT DEFAULT '',
-        registered INTEGER DEFAULT 0,
-        identified INTEGER DEFAULT 0,
-        connection_time INTEGER,
-        last_activity INTEGER,
-        channels TEXT DEFAULT '',
-        away_message TEXT DEFAULT NULL
+        force_realname INTEGER DEFAULT 0
     )""")
-    print("✓ users table")
+    print("✓ users table (staff accounts)")
 
     # Registered nicknames
     cursor.execute("""CREATE TABLE IF NOT EXISTS registered_nicks (
-        nickname TEXT PRIMARY KEY COLLATE NOCASE,
-        password TEXT NOT NULL,
+        uuid TEXT PRIMARY KEY,
+        nickname TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
         email TEXT,
-        registered_at INTEGER NOT NULL,
+        registered_at INTEGER,
         last_seen INTEGER,
-        user_uuid TEXT UNIQUE NOT NULL,
-        totp_secret TEXT DEFAULT NULL,
-        verified INTEGER DEFAULT 0
+        mfa_enabled INTEGER DEFAULT 0,
+        mfa_secret TEXT,
+        registered_by TEXT
     )""")
     print("✓ registered_nicks table")
 
     # Registered channels
     cursor.execute("""CREATE TABLE IF NOT EXISTS registered_channels (
-        channel TEXT PRIMARY KEY COLLATE NOCASE,
-        owner_nickname TEXT NOT NULL,
-        registered_at INTEGER NOT NULL,
+        uuid TEXT PRIMARY KEY,
+        channel_name TEXT UNIQUE NOT NULL,
+        owner_uuid TEXT,
+        registered_at INTEGER,
+        last_used INTEGER,
         topic TEXT DEFAULT '',
         modes TEXT DEFAULT '',
-        description TEXT DEFAULT '',
-        channel_uuid TEXT UNIQUE NOT NULL,
-        FOREIGN KEY (owner_nickname) REFERENCES registered_nicks(nickname) ON DELETE CASCADE
+        onjoin TEXT DEFAULT '',
+        onpart TEXT DEFAULT '',
+        account_data TEXT DEFAULT '{}',
+        ownerkey TEXT,
+        properties TEXT DEFAULT '{}'
     )""")
     print("✓ registered_channels table")
 
     # Server access (ban/allow lists)
     cursor.execute("""CREATE TABLE IF NOT EXISTS server_access (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        access_type TEXT NOT NULL,
+        type TEXT NOT NULL,
         pattern TEXT NOT NULL,
         set_by TEXT NOT NULL,
         set_at INTEGER NOT NULL,
         reason TEXT,
         timeout INTEGER DEFAULT 0,
-        UNIQUE(access_type, pattern)
+        UNIQUE(type, pattern)
     )""")
     print("✓ server_access table")
 
     # Mailbox (offline messages)
     cursor.execute("""CREATE TABLE IF NOT EXISTS mailbox (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        recipient TEXT NOT NULL COLLATE NOCASE,
-        sender TEXT NOT NULL,
+        recipient_uuid TEXT NOT NULL,
+        sender_nick TEXT NOT NULL,
         message TEXT NOT NULL,
-        timestamp INTEGER NOT NULL,
-        read INTEGER DEFAULT 0,
-        FOREIGN KEY (recipient) REFERENCES registered_nicks(nickname) ON DELETE CASCADE
+        sent_at INTEGER NOT NULL,
+        read INTEGER DEFAULT 0
     )""")
     print("✓ mailbox table")
 
@@ -125,40 +130,26 @@ def create_database(db_path, admin_username=None, admin_password=None):
     # Memos
     cursor.execute("""CREATE TABLE IF NOT EXISTS memos (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        recipient TEXT NOT NULL COLLATE NOCASE,
-        sender TEXT NOT NULL,
+        recipient_uuid TEXT NOT NULL,
+        sender_nick TEXT NOT NULL,
         subject TEXT,
         message TEXT NOT NULL,
-        timestamp INTEGER NOT NULL,
+        sent_at INTEGER NOT NULL,
         read INTEGER DEFAULT 0,
-        priority INTEGER DEFAULT 0,
-        FOREIGN KEY (recipient) REFERENCES registered_nicks(nickname) ON DELETE CASCADE
+        priority INTEGER DEFAULT 0
     )""")
     print("✓ memos table")
-
-    # Staff accounts (local server administration)
-    cursor.execute("""CREATE TABLE IF NOT EXISTS staff (
-        username TEXT PRIMARY KEY COLLATE NOCASE,
-        password TEXT NOT NULL,
-        level TEXT NOT NULL,
-        created_at INTEGER NOT NULL,
-        created_by TEXT,
-        last_login INTEGER,
-        totp_secret TEXT DEFAULT NULL,
-        uuid TEXT UNIQUE NOT NULL
-    )""")
-    print("✓ staff table")
 
     # Channel access lists
     cursor.execute("""CREATE TABLE IF NOT EXISTS channel_access (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        channel TEXT NOT NULL COLLATE NOCASE,
-        nickname TEXT NOT NULL COLLATE NOCASE,
+        channel_uuid TEXT NOT NULL,
+        user_uuid TEXT NOT NULL,
         level TEXT NOT NULL,
         set_by TEXT NOT NULL,
         set_at INTEGER NOT NULL,
         timeout INTEGER DEFAULT 0,
-        UNIQUE(channel, nickname, level)
+        UNIQUE(channel_uuid, user_uuid, level)
     )""")
     print("✓ channel_access table")
 
@@ -184,9 +175,9 @@ def create_database(db_path, admin_username=None, admin_password=None):
 
     # Create indexes for performance
     print("Creating indexes...")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_mailbox_recipient ON mailbox(recipient)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_memos_recipient ON memos(recipient)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_channel_access_channel ON channel_access(channel)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_mailbox_recipient ON mailbox(recipient_uuid)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_memos_recipient ON memos(recipient_uuid)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_channel_access_channel ON channel_access(channel_uuid)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_user_audit_nickname ON user_audit_log(nickname)")
     print("✓ Indexes created")
 
@@ -208,11 +199,10 @@ def create_database(db_path, admin_username=None, admin_password=None):
 
     for account in staff_accounts:
         hashed = bcrypt.hashpw(account['password'].encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-        account_uuid = str(uuid.uuid4())
 
-        cursor.execute("""INSERT INTO staff (username, password, level, created_at, created_by, uuid)
-                          VALUES (?, ?, ?, ?, 'install_script', ?)""",
-                       (account['username'], hashed, account['level'], timestamp, account_uuid))
+        cursor.execute("""INSERT INTO users (username, password_hash, level, created_at, last_login)
+                          VALUES (?, ?, ?, ?, 0)""",
+                       (account['username'], hashed, account['level'], timestamp))
 
         print(f"✓ {account['level']:<6} account: {account['username']}")
 
