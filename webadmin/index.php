@@ -119,7 +119,7 @@ $csrf_token = $_SESSION['csrf_token'];
                         <div id="service-status">Loading...</div>
                         <div class="button-group">
                             <button class="btn btn-success" id="btn-start">▶️ Start</button>
-                            <button class="btn btn-warning" id="btn-restart">🔄 Restart</button>
+                            <button class="btn btn-warning" id="btn-restart">🔄 Reload Config</button>
                             <button class="btn btn-danger" id="btn-stop">⏹️ Stop</button>
                         </div>
                     </div>
@@ -1084,12 +1084,12 @@ badword3"></textarea>
                 <div class="modal-header"><h4>✏️ Edit Configuration</h4></div>
                 <div class="modal-body">
                     <div class="alert alert-warning">
-                        <strong>⚠️ Warning:</strong> Invalid JSON will be rejected. Service will restart after saving.
+                        <strong>⚠️ Warning:</strong> Invalid JSON will be rejected. Service will reload after saving.
                     </div>
                     <textarea id="config-editor" class="form-control" rows="35" style="font-family: monospace; font-size: 13px; width: 100%;"></textarea>
                 </div>
                 <div class="modal-footer">
-                    <button class="btn btn-primary" id="btn-save-config">💾 Save & Restart</button>
+                    <button class="btn btn-primary" id="btn-save-config">💾 Save & Reload</button>
                     <button class="btn btn-default" id="btn-cancel-config">Cancel</button>
                 </div>
             </div>

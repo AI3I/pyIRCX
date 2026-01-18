@@ -69,7 +69,7 @@ if (!file_exists($API_PATH)) {
 // Special handling for service control commands
 if ($command === 'service-control') {
     $action = $_POST['action'] ?? '';
-    if (!in_array($action, ['start', 'stop', 'restart', 'status'])) {
+    if (!in_array($action, ['start', 'stop', 'restart', 'reload', 'status'])) {
         echo json_encode(['error' => 'Invalid service action']);
         exit(1);
     }

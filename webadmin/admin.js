@@ -132,7 +132,8 @@ console.log("=== admin.js LOADING ===");
         const actionLabels = {
             start: '▶️ Starting',
             stop: '⏹️ Stopping',
-            restart: '🔄 Restarting'
+            restart: '🔄 Restarting',
+            reload: '🔄 Reloading'
         };
 
         showToast('Service Control', `${actionLabels[action]} pyIRCX service...`, 'info');
@@ -1681,7 +1682,7 @@ console.log("=== admin.js LOADING ===");
 
         // Service buttons
         if ($('#btn-start')) $('#btn-start').addEventListener('click', () => controlService('start'));
-        if ($('#btn-restart')) $('#btn-restart').addEventListener('click', () => controlService('restart'));
+        if ($('#btn-restart')) $('#btn-restart').addEventListener('click', () => controlService('reload'));
         if ($('#btn-stop')) $('#btn-stop').addEventListener('click', () => controlService('stop'));
 
         // Access management
@@ -1823,13 +1824,13 @@ console.log("=== admin.js LOADING ===");
                     showToast('Invalid JSON', e.message, 'error');
                     return;
                 }
-                if (confirm('Save config and restart?')) {
+                if (confirm('Save config and reload?')) {
                     callAPI('set-config', [configText]).then(res => {
                         if (res.error) showToast('Error', res.error, 'error');
                         else {
                             $('#modal-edit-config').style.display = 'none';
-                            showToast('Success', 'Configuration saved, restarting service...', 'success');
-                            controlService('restart');
+                            showToast('Success', 'Configuration saved, reloading service...', 'success');
+                            controlService('reload');
                         }
                     });
                 }
@@ -2716,7 +2717,7 @@ console.log("=== admin.js LOADING ===");
         newConfig.persistence.save_interval = parseInt(getVal('#cfg-persist-interval'));
 
         // Confirm and save
-        if (confirm('Save configuration and restart server?')) {
+        if (confirm('Save configuration and reload server?')) {
             console.log('Saving configuration...');
             const configStr = JSON.stringify(newConfig);
             console.log('Config length:', configStr.length);
@@ -2727,8 +2728,8 @@ console.log("=== admin.js LOADING ===");
                     console.error('Save error:', res.error);
                     showToast('Error', res.error, 'error');
                 } else if (res.success) {
-                    showToast('Success', 'Configuration saved, restarting service...', 'success');
-                    controlService('restart');
+                    showToast('Success', 'Configuration saved, reloading service...', 'success');
+                    controlService('reload');
                     currentConfig = newConfig;
                 } else {
                     console.warn('Unexpected response:', res);
