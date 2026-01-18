@@ -6,15 +6,27 @@ pyIRCX implements a **trunk-branch** (hub-spoke) topology for server linking. Th
 
 ## Architecture
 
-```
-         ┌────────┐
-         │ TRUNK  │ ← Services hub, routing, minimal load
-         └───┬────┘
-      ┌──────┼──────┬──────┬──────┐
-      │      │      │      │      │
-   ┌──▼──┐┌──▼──┐┌──▼──┐┌──▼──┐┌──▼──┐
-   │ BR1 ││ BR2 ││ BR3 ││ BR4 ││ BR5 │ ← User-facing servers
-   └─────┘└─────┘└─────┘└─────┘└─────┘
+```mermaid
+graph TB
+    Trunk["🏛️ TRUNK<br/>Services Hub<br/>Routing<br/>Minimal Load"]
+    BR1["💻 BR1<br/>User-Facing"]
+    BR2["💻 BR2<br/>User-Facing"]
+    BR3["💻 BR3<br/>User-Facing"]
+    BR4["💻 BR4<br/>User-Facing"]
+    BR5["💻 BR5<br/>User-Facing"]
+
+    Trunk --> BR1
+    Trunk --> BR2
+    Trunk --> BR3
+    Trunk --> BR4
+    Trunk --> BR5
+
+    style Trunk fill:#e1f5ff,stroke:#0288d1,stroke-width:3px
+    style BR1 fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    style BR2 fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    style BR3 fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    style BR4 fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    style BR5 fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
 ```
 
 **Key Points:**
