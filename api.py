@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 pyIRCX Management API
-Provides comprehensive data access and management for Cockpit web interface
+Provides comprehensive data access and management for web administration
 
 Copyright (C) 2026 John D. Lewis
 
@@ -1320,7 +1320,7 @@ def register_nickname(nickname, password, email=None):
         cursor.execute("""
             INSERT INTO registered_nicks (uuid, nickname, password_hash, email, registered_at, last_seen, registered_by)
             VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (nick_uuid, nickname, password_hash, email_val, now, now, "Cockpit Admin"))
+        """, (nick_uuid, nickname, password_hash, email_val, now, now, "API Admin"))
 
         conn.commit()
         conn.close()

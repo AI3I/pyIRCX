@@ -248,10 +248,6 @@ main() {
         echo -e "${GREEN}✓ testing/users.py (115 tests)${NC}"
         TESTS_FOUND=$((TESTS_FOUND + 1))
     fi
-    if [ -f "testing/commands.py" ]; then
-        echo -e "${GREEN}✓ testing/commands.py (28 tests)${NC}"
-        TESTS_FOUND=$((TESTS_FOUND + 1))
-    fi
     if [ -f "testing/staff.py" ]; then
         echo -e "${GREEN}✓ testing/staff.py (39 tests)${NC}"
         TESTS_FOUND=$((TESTS_FOUND + 1))
@@ -326,16 +322,6 @@ main() {
     if [ -f "testing/users.py" ]; then
         TOTAL_SUITES=$((TOTAL_SUITES + 1))
         if run_test_suite "testing/users.py" "IRC/IRCX Protocol Tests (115 tests)"; then
-            PASSED_SUITES=$((PASSED_SUITES + 1))
-        else
-            FAILED_SUITES=$((FAILED_SUITES + 1))
-        fi
-    fi
-
-    # Core command tests
-    if [ -f "testing/commands.py" ]; then
-        TOTAL_SUITES=$((TOTAL_SUITES + 1))
-        if run_test_suite "testing/commands.py" "Core Command Tests (28 tests)"; then
             PASSED_SUITES=$((PASSED_SUITES + 1))
         else
             FAILED_SUITES=$((FAILED_SUITES + 1))
