@@ -3280,6 +3280,10 @@ class pyIRCXServer:
             # Undocumented easter egg - God's response
             if "God" in self.users:
                 await user.send(f":God!God@{self.servername} NOTICE {user.nickname} :That is not the command you're looking for.")
+        elif cmd == "WALLOPS":
+            # Undocumented easter egg - System complains about violence
+            if "System" in self.users:
+                await user.send(f":System!System@{self.servername} NOTICE {user.nickname} :Ouch, that hurts! Violence is not the answer.")
         elif cmd == "AWAY":
             await self.handle_away(user, params)
         elif cmd == "TOPIC":
