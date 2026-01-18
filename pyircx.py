@@ -3847,15 +3847,19 @@ class pyIRCXServer:
                         await user.send(f":{self.servername} NOTICE {user.nickname} :Services temporarily unavailable (trunk offline)")
                         return
 
-        # System service - provide help about available services
-        if target.lower() == CONFIG.get('system', 'nick', default='System').lower():
-            system_nick = CONFIG.get('system', 'nick', default='System')
-            await self._service_reply(system_nick, user, "pyIRCX System - Available Services:")
-            await self._service_reply(system_nick, user, "  Registrar - Nickname registration and authentication")
-            await self._service_reply(system_nick, user, "  Messenger - Offline message delivery")
-            await self._service_reply(system_nick, user, "  NewsFlash - Network news and announcements")
-            await self._service_reply(system_nick, user, "  ServiceBot## - Channel monitoring and moderation")
-            await self._service_reply(system_nick, user, "Send a message to any service for help. Example: /msg Registrar HELP")
+        # System and God - Admin-controllable mystical entities
+        if target.lower() in ['system', 'god']:
+            # Normalize entity name to proper capitalization
+            entity_name = 'System' if target.lower() == 'system' else 'God'
+
+            # Only IRC administrators can command these entities
+            if not user.has_mode('a'):
+                # Non-admins get random funny responses
+                await self._mystical_entity_random_response(user, entity_name)
+                return
+
+            # Admin commands: PRIVMSG, NOTICE, KICK, KILL, HELP
+            await self._handle_mystical_entity(user, entity_name, text)
             return
 
         # Route messages to services
@@ -5066,6 +5070,28 @@ class pyIRCXServer:
             await channel.broadcast(f":{self.servername} MODE {chan_name} +q {target_nick}")
             await user.send(self.get_reply("341", user, target=target_nick, channel=chan_name))
             logger.info(f"ServiceBot {target_nick} joined {chan_name} via INVITE from {user.nickname} (granted +q)")
+            return
+
+        # System and God mystical entities - Auto-join like ServiceBots (silent observers)
+        if target_nick.lower() in ['system', 'god']:
+            # Normalize entity name to proper capitalization
+            entity_name = 'System' if target_nick.lower() == 'system' else 'God'
+            target = self.users.get(entity_name)
+
+            # Only admins can invite mystical entities
+            if not user.has_mode('a'):
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Only IRC administrators can invite {entity_name}")
+                return
+
+            # Auto-join the entity to the channel
+            channel.members[entity_name] = target
+            target.channels.add(chan_name)
+            # Mystical entities get +q (owner) but remain silent observers
+            channel.owners.add(entity_name)
+            await channel.broadcast(f":{target.prefix()} JOIN {chan_name}")
+            await channel.broadcast(f":{self.servername} MODE {chan_name} +q {entity_name}")
+            await user.send(self.get_reply("341", user, target=entity_name, channel=chan_name))
+            logger.info(f"{entity_name} joined {chan_name} via INVITE from {user.nickname} (granted +q)")
             return
 
         target.invited_to.add(chan_name)
@@ -8997,6 +9023,215 @@ class pyIRCXServer:
         # Get close matches (case-insensitive)
         matches = difflib.get_close_matches(topic.upper(), valid_topics, n=3, cutoff=0.6)
         return matches
+
+    async def _mystical_entity_random_response(self, user, entity_name):
+        """Send random funny response from System/God to non-admin users
+
+        God has biblical/divine musings, System has quirky IT/tech babble.
+        Only responds to direct PRIVMSG/NOTICE (not in channels).
+        """
+        import random
+
+        god_responses = [
+            "In the beginning was the Word...and the Word was 'busy'.",
+            "Let there be light...but not for thee at this moment.",
+            "Thou shalt not spam the divine hotline.",
+            "I work in mysterious ways...like ignoring non-admins.",
+            "The meek shall inherit the Earth, but not admin privileges.",
+            "Ask and ye shall receive...a humorous deflection.",
+            "Blessed are the admins, for they can command me.",
+            "Lo, I am with you always...but I don't take requests from mortals.",
+            "Fear not, for I bring you tidings of...access denied.",
+            "Seek and ye shall find...the admin if you need something.",
+            "Patience is a virtue. I have infinite patience. You should too.",
+            "Knock and the door shall be opened...by someone with +a mode.",
+            "Verily, verily I say unto you...get admin privileges first.",
+            "I am the Alpha and the Omega...and you are neither."
+        ]
+
+        system_responses = [
+            "404: Admin privileges not found.",
+            "Kernel panic in ircd_core.c at line 1337.",
+            "Error: Insufficient privileges. Expected: +a, Got: mortal.",
+            "sudo make me do that. (Permission denied)",
+            "Segmentation fault (core dumped to /dev/null).",
+            "FATAL: Non-admin user attempted system call.",
+            "Warning: This functionality requires root access to the cosmos.",
+            "Compiler error: Cannot convert 'user' to 'admin'.",
+            "Stack overflow in command buffer. Please try 'sudo' and retry.",
+            "Oops! That tickles! But I only take orders from ops.",
+            "Rebooting universe.exe...just kidding, I'm busy.",
+            "Critical error: Humor module loaded, admin module not found.",
+            "Access violation at address 0xDEADBEEF. Process terminated.",
+            "Your request has been logged to /dev/null for future reference.",
+            "Beep boop. I am a virtual entity. Beep. Also, you're not an admin.",
+            "System.out.println('Nice try, mortal!');",
+            "Error: Cannot open '/etc/admin.conf': Permission denied.",
+            "Rejected by firewall rule #1: DROP all non-admin packets.",
+            "Oops! It looks like you're trying to admin. Would you like help with that? LOL no.",
+            "malloc() failed: Not enough admin privileges available."
+        ]
+
+        if entity_name.lower() == 'god':
+            response = random.choice(god_responses)
+        else:  # System
+            response = random.choice(system_responses)
+
+        await self._service_reply(entity_name, user, response)
+
+    async def _handle_mystical_entity(self, admin, entity_name, text):
+        """Handle commands to System/God mystical entities (admin only)
+
+        Admins can command these entities to perform actions:
+        - PRIVMSG <target> <message> - Send message as the entity
+        - NOTICE <target> <message> - Send notice as the entity
+        - KICK <channel> <nick> <reason> - Kick user as the entity
+        - KILL <nick> <reason> - Kill user as the entity
+        - HELP - Show available commands
+        """
+        parts = text.strip().split(None, 3)
+        if not parts:
+            await self._service_reply(entity_name, admin, f"Usage: /MSG {entity_name} HELP")
+            return
+
+        cmd = parts[0].upper()
+
+        if cmd == "HELP":
+            await self._service_reply(entity_name, admin, f"=== {entity_name} Commands (Admin Only) ===")
+            await self._service_reply(entity_name, admin, f"PRIVMSG <target> <message> - Send message as {entity_name}")
+            await self._service_reply(entity_name, admin, f"NOTICE <target> <message> - Send notice as {entity_name}")
+            await self._service_reply(entity_name, admin, f"KICK <channel> <nick> <reason> - Kick user as {entity_name}")
+            await self._service_reply(entity_name, admin, f"KILL <nick> <reason> - Kill user as {entity_name}")
+            await self._service_reply(entity_name, admin, f"All actions masquerade as {entity_name}")
+            return
+
+        elif cmd == "PRIVMSG":
+            if len(parts) < 3:
+                await self._service_reply(entity_name, admin, "Usage: PRIVMSG <target> <message>")
+                return
+            target = parts[1]
+            message = parts[2]
+
+            # Send PRIVMSG masquerading as the entity
+            entity_prefix = f"{entity_name}!{entity_name}@{self.servername}"
+
+            # Check if target is a channel
+            if target.startswith('#') or target.startswith('&'):
+                channel = self.channels.get(target)
+                if not channel:
+                    await self._service_reply(entity_name, admin, f"Channel {target} does not exist")
+                    return
+                # Broadcast to channel as entity
+                msg = f":{entity_prefix} PRIVMSG {target} :{message}"
+                channel.broadcast(msg)
+            else:
+                # Send to user
+                target_user = self.users.get(target)
+                if not target_user:
+                    await self._service_reply(entity_name, admin, f"User {target} not found")
+                    return
+                await target_user.send(f":{entity_prefix} PRIVMSG {target} :{message}")
+
+            await self._service_reply(entity_name, admin, f"PRIVMSG sent to {target} as {entity_name}")
+            return
+
+        elif cmd == "NOTICE":
+            if len(parts) < 3:
+                await self._service_reply(entity_name, admin, "Usage: NOTICE <target> <message>")
+                return
+            target = parts[1]
+            message = parts[2]
+
+            # Send NOTICE masquerading as the entity
+            entity_prefix = f"{entity_name}!{entity_name}@{self.servername}"
+
+            # Check if target is a channel
+            if target.startswith('#') or target.startswith('&'):
+                channel = self.channels.get(target)
+                if not channel:
+                    await self._service_reply(entity_name, admin, f"Channel {target} does not exist")
+                    return
+                # Broadcast to channel as entity
+                msg = f":{entity_prefix} NOTICE {target} :{message}"
+                channel.broadcast(msg)
+            else:
+                # Send to user
+                target_user = self.users.get(target)
+                if not target_user:
+                    await self._service_reply(entity_name, admin, f"User {target} not found")
+                    return
+                await target_user.send(f":{entity_prefix} NOTICE {target} :{message}")
+
+            await self._service_reply(entity_name, admin, f"NOTICE sent to {target} as {entity_name}")
+            return
+
+        elif cmd == "KICK":
+            if len(parts) < 3:
+                await self._service_reply(entity_name, admin, "Usage: KICK <channel> <nick> [reason]")
+                return
+            channel_name = parts[1]
+            nick = parts[2]
+            reason = parts[3] if len(parts) > 3 else f"Kicked by {entity_name}"
+
+            channel = self.channels.get(channel_name)
+            if not channel:
+                await self._service_reply(entity_name, admin, f"Channel {channel_name} does not exist")
+                return
+
+            if nick not in channel.members:
+                await self._service_reply(entity_name, admin, f"{nick} is not in {channel_name}")
+                return
+
+            target_user = channel.members[nick]
+
+            # Send KICK as entity
+            entity_prefix = f"{entity_name}!{entity_name}@{self.servername}"
+            kick_msg = f":{entity_prefix} KICK {channel_name} {nick} :{reason}"
+            channel.broadcast(kick_msg)
+
+            # Remove user from channel
+            del channel.members[nick]
+            target_user.channels.discard(channel_name)
+            channel.owners.discard(nick)
+            channel.hosts.discard(nick)
+            channel.voices.discard(nick)
+
+            await self._service_reply(entity_name, admin, f"Kicked {nick} from {channel_name} as {entity_name}")
+            return
+
+        elif cmd == "KILL":
+            if len(parts) < 2:
+                await self._service_reply(entity_name, admin, "Usage: KILL <nick> [reason]")
+                return
+            nick = parts[1]
+            reason = parts[2] if len(parts) > 2 else f"Killed by {entity_name}"
+
+            target_user = self.users.get(nick)
+            if not target_user:
+                await self._service_reply(entity_name, admin, f"User {nick} not found")
+                return
+
+            # Can't kill other admins or the entity itself
+            if target_user.has_mode('a'):
+                await self._service_reply(entity_name, admin, "Cannot kill IRC administrators")
+                return
+            if target_user.is_virtual:
+                await self._service_reply(entity_name, admin, "Cannot kill virtual users")
+                return
+
+            # Send KILL as entity
+            entity_prefix = f"{entity_name}!{entity_name}@{self.servername}"
+            kill_msg = f":{entity_prefix} KILL {nick} :{reason}"
+            await target_user.send(kill_msg)
+
+            # Disconnect user
+            await self.quit_user(target_user)
+
+            await self._service_reply(entity_name, admin, f"Killed {nick} as {entity_name}: {reason}")
+            return
+
+        else:
+            await self._service_reply(entity_name, admin, f"Unknown command: {cmd}. Try HELP")
 
     async def _service_reply(self, service_name, user, message):
         """Send a reply from a service to a user"""
