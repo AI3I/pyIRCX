@@ -373,6 +373,12 @@ if [ $NEEDS_SELINUX -eq 1 ] && command -v semodule &> /dev/null; then
             echo -e "${GREEN}✓ Installed pyircx-httpd-journal-v3 policy${NC}"
         fi
 
+        # Install httpd-reload policy (allows webadmin to reload pyircx service)
+        if [ -f pyircx-httpd-reload.pp ]; then
+            semodule -i pyircx-httpd-reload.pp
+            echo -e "${GREEN}✓ Installed pyircx-httpd-reload policy${NC}"
+        fi
+
         cd - > /dev/null
     else
         echo -e "${YELLOW}⚠ SELinux policies not found, skipping${NC}"

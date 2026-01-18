@@ -584,6 +584,12 @@ install_selinux() {
         echo -e "${GREEN}✓ httpd-journal policy installed${NC}"
     fi
 
+    # Install httpd-reload policy (allows webadmin to reload pyircx service)
+    if [ -f pyircx-httpd-reload.pp ]; then
+        semodule -i pyircx-httpd-reload.pp
+        echo -e "${GREEN}✓ httpd-reload policy installed${NC}"
+    fi
+
     cd - > /dev/null
 
     # Configure SELinux file contexts (comprehensive configuration)

@@ -249,6 +249,13 @@ if [ -d "$WEB_ADMIN_DIR" ]; then
             echo -e "${YELLOW}⚠${NC} SELinux httpd-journal policy missing ${YELLOW}(FIXABLE)${NC}"
             ((WEB_ISSUES++))
         fi
+
+        if semodule -l 2>/dev/null | grep -q pyircx-httpd-reload; then
+            echo -e "${GREEN}✓${NC} SELinux httpd-reload policy installed"
+        else
+            echo -e "${YELLOW}⚠${NC} SELinux httpd-reload policy missing ${YELLOW}(FIXABLE)${NC}"
+            ((WEB_ISSUES++))
+        fi
     fi
 
     if [ $WEB_ISSUES -gt 0 ]; then
