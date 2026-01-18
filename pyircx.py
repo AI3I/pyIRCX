@@ -3722,7 +3722,7 @@ class pyIRCXServer:
         # Send complete LUSERS info during registration
         await user.send(self.get_reply("251", user, users=real_users, invisible=invisible, server_count=server_count))
         await user.send(self.get_reply("252", user, ops=ops))
-        channels = len([ch for ch in self.channels.values() if not ch.is_local()])
+        channels = len([ch for ch in self.channels.values() if not ch.is_local])
         await user.send(self.get_reply("254", user, channels=channels))
         await user.send(self.get_reply("255", user, users=real_users, server_count=server_count))
         # Local and global user counts
