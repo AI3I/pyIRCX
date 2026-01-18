@@ -2863,17 +2863,18 @@ class pyIRCXServer:
         """Load a registered channel from database if it exists"""
         try:
             async with aiosqlite.connect(CONFIG.get('database', 'path')) as db:
-                # Check registered_channels table
-                async with db.execute("SELECT uuid, owner_uuid, properties FROM registered_channels WHERE LOWER(channel_name) = LOWER(?)", (channel_name,)) as cursor:
+                # Check registered_channels table - get canonical channel_name from DB
+                async with db.execute("SELECT channel_name, uuid, owner_uuid, properties FROM registered_channels WHERE LOWER(channel_name) = LOWER(?)", (channel_name,)) as cursor:
                     row = await cursor.fetchone()
                     if row:
-                        # Create a new channel object and mark it as registered
-                        channel = Channel(channel_name)
+                        # Create a new channel object using canonical name from database
+                        canonical_name = row[0]
+                        channel = Channel(canonical_name)
                         channel.registered = True
-                        channel.account_uuid = row[0]
+                        channel.account_uuid = row[1]
                         channel.modes['r'] = True  # Set +r mode for registered channels
                         # Load saved properties (owners, hosts, voices, ACCESS, topic, keys, etc.)
-                        channel.load_properties_json(row[2])
+                        channel.load_properties_json(row[3])
                         logger.info(f"Loaded registered channel: {channel.name}")
                         return channel
         except Exception as e:
@@ -4687,12 +4688,14 @@ class pyIRCXServer:
                     chan_name = original_name
 
             if not channel:
-                # New channel - use provided name as canonical
-                chan_name = channel_name
                 # Try to load from database first if registered
-                channel = await self.load_registered_channel(chan_name)
-                if not channel:
-                    # Not registered - create new dynamic channel
+                channel = await self.load_registered_channel(channel_name)
+                if channel:
+                    # Use canonical name from registered channel
+                    chan_name = channel.name
+                else:
+                    # Not registered - create new dynamic channel with provided name
+                    chan_name = channel_name
                     channel = Channel(chan_name)
                     # Fire CHANNEL/CREATE event for monitoring (new dynamic channel)
                     await self.fire_trap("CHANNEL", "CREATE", user, chan_name)
