@@ -1,8 +1,10 @@
 [Unit]
 Description=pyIRCX Internet Relay Chat Service
-Documentation=https://github.com/AI3I/pyIRCX
+Documentation=https://github.com/0x8007000E/pyIRCX
 After=network.target
 Wants=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=3
 
 [Service]
 Type=simple
@@ -43,8 +45,6 @@ ReadWritePaths=/etc/pyircx
 # Restart policy
 Restart=on-failure
 RestartSec=5
-StartLimitIntervalSec=60
-StartLimitBurst=3
 
 # Timeouts
 TimeoutStartSec=30

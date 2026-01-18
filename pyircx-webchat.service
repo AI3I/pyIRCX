@@ -1,6 +1,6 @@
 [Unit]
 Description=pyIRCX WebChat Gateway
-Documentation=https://github.com/AI3I/pyIRCX
+Documentation=https://github.com/0x8007000E/pyIRCX
 After=network.target pyircx.service
 Wants=pyircx.service
 
@@ -10,7 +10,7 @@ User=pyircx
 Group=pyircx
 WorkingDirectory=/opt/pyircx/webchat
 EnvironmentFile=-/etc/pyircx/webchat.conf
-ExecStart=/usr/bin/python3 /opt/pyircx/webchat/gateway.py --ws-port ${WS_PORT} --ws-host ${WS_HOST} --irc-host ${IRC_HOST} --irc-port ${IRC_PORT} --webirc-pass ${WEBIRC_PASS}
+ExecStart=/usr/bin/python3 /opt/pyircx/webchat/gateway.py --config /dev/null --ws-port ${WS_PORT} --ws-host ${WS_HOST} --irc-host ${IRC_HOST} --irc-port ${IRC_PORT} --webirc-pass ${WEBIRC_PASS}
 Restart=on-failure
 RestartSec=5
 
