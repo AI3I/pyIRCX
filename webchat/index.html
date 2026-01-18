@@ -976,7 +976,15 @@ function handleMessage(data) {
                 else if (status.includes('administrator')) staffUsers.set(targetNick, 'ADMIN');
                 else if (status.includes('operator')) staffUsers.set(targetNick, 'SYSOP');
                 else if (status.includes('guide')) staffUsers.set(targetNick, 'GUIDE');
-                appendWhois('Status', p[p.length-1]);
+                // Clean up display: extract role name from "is an IRC administrator" etc
+                let cleanStatus = p[p.length-1];
+                if (status.includes('administrator')) cleanStatus = 'IRC Administrator';
+                else if (status.includes('operator')) cleanStatus = 'IRC Operator';
+                else if (status.includes('guide')) cleanStatus = 'IRC Guide';
+                else if (status.includes('service')) cleanStatus = 'IRC Service';
+                else if (status.includes('omnipresence')) cleanStatus = 'Omnipresent System';
+                else if (status.includes('watching over')) cleanStatus = 'Divine Overseer';
+                appendWhois('Status', cleanStatus);
                 if (currentChannel) renderUserList(getChannel(currentChannel));
             }
             break;
