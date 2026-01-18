@@ -966,7 +966,7 @@ function handleMessage(data) {
 
         // WHOIS
         case '311': if (p.length >= 5) showWhoisStart(p[1], p[2], p[3], p[5]); break;
-        case '307': if (p.length >= 2) appendWhois('Registered', p[p.length-1]); break;
+        case '307': if (p.length >= 2) appendWhois('Registered', 'Identified'); break;
         case '312': if (p.length >= 3) appendWhois('Server', p[2]); break;
         case '313': // Staff status
             if (p.length >= 2) {
