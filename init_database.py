@@ -58,7 +58,9 @@ def create_database(db_path, admin_username=None, admin_password=None):
         registered_nick TEXT,
         email TEXT,
         realname TEXT,
-        force_realname INTEGER DEFAULT 0
+        force_realname INTEGER DEFAULT 0,
+        mfa_enabled INTEGER DEFAULT 0,
+        mfa_secret TEXT
     )""")
     print("✓ users table (staff accounts)")
 
