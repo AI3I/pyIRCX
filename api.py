@@ -884,33 +884,22 @@ def get_staff_list():
 # STAFF MANAGEMENT
 # ============================================================================
 
+@api_error_handler
 def add_staff(username, password, level, realname=None, email=None, force_realname=False):
     """Add a new staff member"""
-    db_path = get_db_path()
-
-    if not os.path.exists(db_path):
-        return {"error": f"Database not found at {db_path}"}
-
-    # Validate level
-    if level not in ['ADMIN', 'SYSOP', 'GUIDE']:
-        return {"error": "Invalid staff level. Must be ADMIN, SYSOP, or GUIDE"}
-
-    # Validate username
+    # Validate inputs
+    validate_staff_level(level)
     if not re.match(r'^[a-zA-Z0-9_-]{3,20}$', username):
-        return {"error": "Username must be 3-20 characters (letters, numbers, _, -)"}
-
-    # Validate password strength
+        raise ValueError("Username must be 3-20 characters (letters, numbers, _, -)")
     if len(password) < 8:
-        return {"error": "Password must be at least 8 characters"}
+        raise ValueError("Password must be at least 8 characters")
 
-    try:
-        conn = sqlite3.connect(db_path)
+    with db_pool.get_connection() as conn:
         cursor = conn.cursor()
 
         # Check if username already exists
         cursor.execute("SELECT username FROM users WHERE username = ?", (username,))
         if cursor.fetchone():
-            conn.close()
             return {"error": f"Staff member '{username}' already exists"}
 
         # Hash password (same method as pyircx.py uses)
@@ -922,65 +911,48 @@ def add_staff(username, password, level, realname=None, email=None, force_realna
             VALUES (?, ?, ?, ?, ?, ?)
         """, (username, password_hash, level, realname, email, 1 if force_realname else 0))
 
-        conn.commit()
-        conn.close()
-
         return {"success": True, "message": f"Staff member '{username}' added as {level}"}
 
-    except Exception as e:
-        return {"error": str(e)}
-
+@api_error_handler
 def delete_staff(username):
     """Delete a staff member"""
-    db_path = get_db_path()
+    # Validate input
+    if not username or len(username) < 3:
+        raise ValueError("Invalid username")
 
-    if not os.path.exists(db_path):
-        return {"error": f"Database not found at {db_path}"}
-
-    try:
-        conn = sqlite3.connect(db_path)
+    with db_pool.get_connection() as conn:
         cursor = conn.cursor()
 
         # Check if user exists
         cursor.execute("SELECT username FROM users WHERE username = ?", (username,))
         if not cursor.fetchone():
-            conn.close()
             return {"error": f"Staff member '{username}' not found"}
 
         # Delete staff member
         cursor.execute("DELETE FROM users WHERE username = ?", (username,))
 
         rows_affected = cursor.rowcount
-        conn.commit()
-        conn.close()
 
         if rows_affected > 0:
             return {"success": True, "message": f"Staff member '{username}' deleted"}
         else:
             return {"error": "Failed to delete staff member"}
 
-    except Exception as e:
-        return {"error": str(e)}
-
+@api_error_handler
 def change_staff_password(username, new_password):
     """Change a staff member's password"""
-    db_path = get_db_path()
-
-    if not os.path.exists(db_path):
-        return {"error": f"Database not found at {db_path}"}
-
-    # Validate password strength
+    # Validate inputs
+    if not username or len(username) < 3:
+        raise ValueError("Invalid username")
     if len(new_password) < 8:
-        return {"error": "Password must be at least 8 characters"}
+        raise ValueError("Password must be at least 8 characters")
 
-    try:
-        conn = sqlite3.connect(db_path)
+    with db_pool.get_connection() as conn:
         cursor = conn.cursor()
 
         # Check if user exists
         cursor.execute("SELECT username FROM users WHERE username = ?", (username,))
         if not cursor.fetchone():
-            conn.close()
             return {"error": f"Staff member '{username}' not found"}
 
         # Hash password
@@ -991,33 +963,22 @@ def change_staff_password(username, new_password):
             UPDATE users SET password_hash = ? WHERE username = ?
         """, (password_hash, username))
 
-        conn.commit()
-        conn.close()
-
         return {"success": True, "message": f"Password changed for '{username}'"}
 
-    except Exception as e:
-        return {"error": str(e)}
-
+@api_error_handler
 def change_staff_level(username, new_level):
     """Change a staff member's privilege level"""
-    db_path = get_db_path()
+    # Validate inputs
+    if not username or len(username) < 3:
+        raise ValueError("Invalid username")
+    validate_staff_level(new_level)
 
-    if not os.path.exists(db_path):
-        return {"error": f"Database not found at {db_path}"}
-
-    # Validate level
-    if new_level not in ['ADMIN', 'SYSOP', 'GUIDE']:
-        return {"error": "Invalid staff level. Must be ADMIN, SYSOP, or GUIDE"}
-
-    try:
-        conn = sqlite3.connect(db_path)
+    with db_pool.get_connection() as conn:
         cursor = conn.cursor()
 
         # Check if user exists
         cursor.execute("SELECT username FROM users WHERE username = ?", (username,))
         if not cursor.fetchone():
-            conn.close()
             return {"error": f"Staff member '{username}' not found"}
 
         # Update level
@@ -1025,29 +986,21 @@ def change_staff_level(username, new_level):
             UPDATE users SET level = ? WHERE username = ?
         """, (new_level, username))
 
-        conn.commit()
-        conn.close()
-
         return {"success": True, "message": f"Level changed for '{username}' to {new_level}"}
 
-    except Exception as e:
-        return {"error": str(e)}
-
+@api_error_handler
 def update_staff_profile(username, realname=None, email=None, force_realname=None):
     """Update staff member's profile information (realname and email)"""
-    db_path = get_db_path()
+    # Validate input
+    if not username or len(username) < 3:
+        raise ValueError("Invalid username")
 
-    if not os.path.exists(db_path):
-        return {"error": f"Database not found at {db_path}"}
-
-    try:
-        conn = sqlite3.connect(db_path)
+    with db_pool.get_connection() as conn:
         cursor = conn.cursor()
 
         # Check if user exists
         cursor.execute("SELECT username FROM users WHERE username = ?", (username,))
         if not cursor.fetchone():
-            conn.close()
             return {"error": f"Staff member '{username}' not found"}
 
         # Update profile fields
@@ -1056,13 +1009,7 @@ def update_staff_profile(username, realname=None, email=None, force_realname=Non
             WHERE username = ?
         """, (realname, email, 1 if force_realname else 0, username))
 
-        conn.commit()
-        conn.close()
-
         return {"success": True, "message": f"Profile updated for '{username}'"}
-
-    except Exception as e:
-        return {"error": str(e)}
 
 
 def get_server_config():
