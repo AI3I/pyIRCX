@@ -3423,7 +3423,7 @@ class pyIRCXServer:
             await user.send(self.get_reply("259", user))
         elif cmd == "INFO":
             await self.handle_info(user)
-        elif cmd == "HELP":
+        elif cmd in ["HELP", "H"]:
             await self.handle_help(user, params)
         elif cmd == "MOTD":
             await self.handle_motd(user)

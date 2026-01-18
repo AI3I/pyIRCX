@@ -1587,7 +1587,7 @@ function sendMessage() {
             case 'raw':
                 if (args.length) queueCmd(args.join(' '));
                 break;
-            case 'help':
+            case 'help': case 'h':
                 sysMsg('Commands: /join /part /msg /nick /me /topic /kick /ban /mode /owner /host /voice /invite /knock /whois /who /list /prop /access /whisper /away /quit /clear /raw', 'system');
                 break;
             default:
