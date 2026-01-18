@@ -9,8 +9,117 @@ import logging
 import sqlite3
 import socket
 import re
+import time
+from collections import defaultdict
+from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# RATE LIMITING
+# =============================================================================
+
+# Global rate limit storage
+_rate_limits = defaultdict(list)
+
+def rate_limit(calls_per_minute=10):
+    """Decorator to rate limit function calls
+
+    Prevents brute force attacks by limiting the number of calls per minute
+    for a given function and username combination.
+
+    Args:
+        calls_per_minute: Maximum number of calls allowed per minute (default: 10)
+
+    Usage:
+        @rate_limit(calls_per_minute=5)
+        @api_error_handler
+        def test_staff_login(username, password):
+            # ... function code ...
+
+    Returns:
+        Wrapped function that enforces rate limiting
+
+    Raises:
+        ValueError: If rate limit is exceeded
+    """
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            # Create a unique key based on function name and first argument (usually username)
+            key = f"{func.__name__}:{args[0] if args else 'global'}"
+            now = datetime.now()
+            minute_ago = now - timedelta(minutes=1)
+
+            # Clean old entries (older than 1 minute)
+            _rate_limits[key] = [ts for ts in _rate_limits[key] if ts > minute_ago]
+
+            # Check if rate limit exceeded
+            if len(_rate_limits[key]) >= calls_per_minute:
+                logger.warning(f"Rate limit exceeded for {key}")
+                raise ValueError(f"Too many attempts - please try again in a moment")
+
+            # Record this call
+            _rate_limits[key].append(now)
+
+            return func(*args, **kwargs)
+        return wrapper
+    return decorator
+
+
+# =============================================================================
+# CACHING
+# =============================================================================
+
+def timed_cache(seconds=60):
+    """Decorator to cache function results for a specified duration
+
+    Reduces disk I/O for frequently called read-only functions by caching
+    their results for a specified number of seconds.
+
+    Args:
+        seconds: Cache duration in seconds (default: 60)
+
+    Usage:
+        @timed_cache(seconds=60)
+        @api_error_handler
+        def get_server_config():
+            # ... function code ...
+
+    Returns:
+        Wrapped function that caches results
+
+    Note:
+        - Only use for read-only functions that return the same data
+        - Cache is cleared after the specified duration
+        - Different arguments create separate cache entries
+    """
+    def decorator(func):
+        cache = {}
+
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            # Create cache key from function args
+            cache_key = (args, tuple(sorted(kwargs.items())))
+            now = time.time()
+
+            # Check if cached result exists and is still valid
+            if cache_key in cache:
+                result, timestamp = cache[cache_key]
+                if now - timestamp < seconds:
+                    logger.debug(f"Cache hit for {func.__name__}")
+                    return result
+
+            # Cache miss or expired - call function
+            logger.debug(f"Cache miss for {func.__name__}")
+            result = func(*args, **kwargs)
+            cache[cache_key] = (result, now)
+
+            return result
+
+        return wrapper
+    return decorator
 
 
 # =============================================================================

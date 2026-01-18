@@ -21,6 +21,8 @@ import logging
 import db_pool
 from api_helpers import (
     api_error_handler,
+    rate_limit,
+    timed_cache,
     validate_access_type,
     validate_pattern,
     validate_timeout,
@@ -68,9 +70,10 @@ def save_config(config):
         json.dump(config, f, indent=2)
     return {"success": True}
 
+@timed_cache(seconds=60)
 @api_error_handler
 def get_motd():
-    """Get MOTD (Message of the Day) from configuration"""
+    """Get MOTD (Message of the Day) from configuration (cached for 60 seconds)"""
     config = load_config()
     if 'server' in config and 'motd' in config['server']:
         motd = config['server']['motd']
@@ -1050,9 +1053,10 @@ def update_staff_profile(username, realname=None, email=None, force_realname=Non
         return {"success": True, "message": f"Profile updated for '{username}'"}
 
 
+@timed_cache(seconds=60)
 @api_error_handler
 def get_server_config():
-    """Get server configuration"""
+    """Get server configuration (cached for 60 seconds)"""
     config = load_config()
 
     # Return safe config info (no sensitive data)
@@ -1074,9 +1078,10 @@ def get_server_config():
 
     return safe_config
 
+@timed_cache(seconds=30)
 @api_error_handler
 def get_full_config():
-    """Get full configuration for editing"""
+    """Get full configuration for editing (cached for 30 seconds)"""
     return load_config()
 
 @api_error_handler
@@ -1144,9 +1149,10 @@ def get_logs(lines=100, level_filter=None, search=None):
 # NEWSFLASH SETTINGS
 # ============================================================================
 
+@timed_cache(seconds=60)
 @api_error_handler
 def get_newsflash_settings():
-    """Get NewsFlash broadcast settings"""
+    """Get NewsFlash broadcast settings (cached for 60 seconds)"""
     config = load_config()
     newsflash = config.get('newsflash', {})
     return {
@@ -1383,9 +1389,10 @@ def reset_mfa(nickname):
 
         return {"success": True, "message": f"MFA disabled for '{nickname}'"}
 
+@rate_limit(calls_per_minute=5)
 @api_error_handler
 def test_identify(nickname, password):
-    """Test if a nickname/password combination is valid"""
+    """Test if a nickname/password combination is valid (rate limited: 5 attempts/minute)"""
     # Validate inputs
     validate_nickname(nickname)
     if not password:
@@ -1415,9 +1422,10 @@ def test_identify(nickname, password):
         else:
             return {"success": False, "message": "Password incorrect"}
 
+@rate_limit(calls_per_minute=5)
 @api_error_handler
 def test_staff_login(username, password):
-    """Test if a staff username/password combination is valid"""
+    """Test if a staff username/password combination is valid (rate limited: 5 attempts/minute)"""
     # Validate inputs
     if not username or not password:
         raise ValueError("Username and password are required")
