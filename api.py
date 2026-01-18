@@ -750,14 +750,31 @@ def send_mailbox_message(sender_nick, recipient_nick, message):
     with db_pool.get_connection() as conn:
         cursor = conn.cursor()
 
-        # Look up recipient's UUID
+        # Look up recipient's UUID in registered_nicks
         cursor.execute("SELECT uuid FROM registered_nicks WHERE LOWER(nickname) = LOWER(?)", (recipient_nick,))
         recipient_row = cursor.fetchone()
 
         if not recipient_row:
-            return {"error": f"Recipient '{recipient_nick}' is not registered"}
+            # Check if recipient is a staff member
+            cursor.execute("SELECT username FROM users WHERE LOWER(username) = LOWER(?)", (recipient_nick,))
+            staff_row = cursor.fetchone()
 
-        recipient_uuid = recipient_row[0]
+            if staff_row:
+                # Auto-create registered_nicks entry for staff member
+                import uuid as uuid_mod
+                staff_uuid = str(uuid_mod.uuid4())
+                now = int(time.time())
+
+                cursor.execute("""
+                    INSERT INTO registered_nicks (uuid, nickname, password_hash, registered_at, last_seen, registered_by)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (staff_uuid, recipient_nick, "", now, now, "AUTO (staff member)"))
+
+                recipient_uuid = staff_uuid
+            else:
+                return {"error": f"Recipient '{recipient_nick}' is not registered"}
+        else:
+            recipient_uuid = recipient_row[0]
         sent_at = int(time.time())
 
         # Insert message
