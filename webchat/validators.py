@@ -50,11 +50,11 @@ def validate_nickname(nick):
     if len(nick) > MAX_NICKNAME_LENGTH:
         raise ValueError(f"Nickname is too long - please use {MAX_NICKNAME_LENGTH} characters or less")
 
-    # IRC nickname rules: must start with letter, can contain letters, numbers, -, [, ], \, `, ^, {, }, |
-    if not re.match(r'^[a-zA-Z][a-zA-Z0-9\-\[\]\\`^{}|]*$', nick):
+    # IRC nickname rules: must start with letter, can contain letters, numbers, -, _, [, ], \, `, ^, {, }, |
+    if not re.match(r'^[a-zA-Z][a-zA-Z0-9_\-\[\]\\`^{}|]*$', nick):
         raise ValueError(
             "Nickname must start with a letter and contain only letters, numbers, "
-            "and special characters: - [ ] \\ ` ^ { } |"
+            "and special characters: - _ [ ] \\ ` ^ { } |"
         )
 
     return nick

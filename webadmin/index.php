@@ -1404,7 +1404,7 @@ badword3"></textarea>
                             <div>
                                 <label style="display: flex; align-items: center; margin-bottom: 8px;">
                                     <input type="checkbox" id="mode-g" style="margin-right: 8px;">
-                                    <strong>+g</strong>&nbsp;(Guide Op)
+                                    <strong>+g</strong>&nbsp;(Guide access)
                                 </label>
                                 <small class="text-muted" style="display: block; margin-left: 24px;">Auto-grant owner to guides on join</small>
                             </div>

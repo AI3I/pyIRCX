@@ -1018,7 +1018,7 @@ function handleMessage(data) {
                 sysMsg(`${p[1]} (${p[2]} users, ${p[3]}): ${p[4]||''}`, 'system');
             }
             break;
-        case '323': case '813':
+        case '323': case '817':
             sysMsg('End of channel list', 'system');
             if (listData.length > 0) showListModal();
             break;
@@ -1118,10 +1118,10 @@ function handleMessage(data) {
         case '804': sysMsg('Authentication successful', 'system'); break;
 
         // ACCESS
-        case '805': case '806': sysMsg(p.join(' '), 'system'); break;
+        case '801': case '802': case '803': case '804': case '805': sysMsg(p.join(' '), 'system'); break;
 
         // PROP
-        case '817': case '818': case '819':
+        case '818': case '819':
             if (p.length >= 3) {
                 const ch = getChannel(p[1]);
                 if (ch) ch.props[p[2]] = p[3] || '';
