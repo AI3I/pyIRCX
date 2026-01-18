@@ -30,7 +30,7 @@ This is a standalone web admin panel for pyIRCX that runs on any standard webser
 ### 1. Copy files to web root
 
 ```bash
-sudo cp -r /home/jdlewis/GitHub/pyIRCX/webadmin/* /var/www/html/webadmin/
+sudo cp -r ./webadmin/* /var/www/html/webadmin/
 sudo chown -R www-data:www-data /var/www/html/webadmin/
 sudo chmod 755 /var/www/html/webadmin/
 ```
@@ -275,5 +275,5 @@ The standalone version has these improvements:
 
 ## Support
 
-- GitHub: https://github.com/jdlewis/pyIRCX
+- GitHub: https://github.com/0x8007000E/pyIRCX
 - Issues: Report bugs via GitHub Issues

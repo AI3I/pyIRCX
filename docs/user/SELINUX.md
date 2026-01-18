@@ -220,4 +220,4 @@ The `install.sh` script automatically configures all SELinux contexts. If you're
 
 ---
 
-For questions or issues, see: https://github.com/AI3I/pyIRCX
+For questions or issues, see: https://github.com/0x8007000E/pyIRCX

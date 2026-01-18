@@ -567,6 +567,10 @@ class User:
             peername = writer.get_extra_info('peername')
             if peername:
                 self.ip, self.port = peername[0], peername[1]
+            # Detect SSL/TLS connection
+            self.using_ssl = writer.get_extra_info('ssl_object') is not None
+        else:
+            self.using_ssl = False
 
         self.is_virtual = is_virtual
         # User modes: a=ADMIN, g=GUIDE, i=invisible, o=SYSOP, r=registered, s=service, x=IRCX, z=gagged
@@ -2085,15 +2089,15 @@ class pyIRCXServer:
             window=CONFIG.get('security', 'auth_lockout_window', default=600)
         )
 
-        # Database connection pool (only for trunk servers)
-        server_role = CONFIG.get('linking', 'server_role', default='trunk')
-        if server_role == 'trunk':
+        # Database connection pool (trunk and standalone servers need database, branches don't)
+        server_role = CONFIG.get('linking', 'server_role', default='standalone')
+        if server_role in ['trunk', 'standalone']:
             self.db_pool = DatabasePool(
                 CONFIG.get('database', 'path', default='pyircx.db'),
                 pool_size=CONFIG.get('database', 'pool_size', default=5)
             )
         else:
-            self.db_pool = None  # Branch servers don't need database
+            self.db_pool = None  # Branch servers don't need database (services are centralized)
 
         # CAP negotiation timeout (seconds)
         self.cap_timeout = CONFIG.get('security', 'cap_timeout', default=60)
@@ -3263,7 +3267,7 @@ class pyIRCXServer:
                 await user.send(f":{self.servername} NOTICE {user.nickname} :MFA verification pending. Use: PRIVMSG Registrar :MFA VERIFY <code>")
                 return
 
-        if cmd in ["JOIN", "CREATE"]:
+        if cmd == "JOIN":
             if not params:
                 await user.send(self.get_reply("461", user, command=cmd))
                 return
@@ -3274,6 +3278,8 @@ class pyIRCXServer:
                 if channel_name:
                     key = keys[idx].strip() if idx < len(keys) else None
                     await self.handle_join(user, channel_name, key)
+        elif cmd == "CREATE":
+            await self.handle_create(user, params)
         elif cmd == "PART":
             if not params:
                 await user.send(self.get_reply("461", user, command=cmd))
@@ -3714,11 +3720,14 @@ class pyIRCXServer:
                     # If admin token didn't match, try normal password authentication
                     if not auth:
                         try:
+                            # DEBUG: Log authentication attempt
+                            logger.info(f"PASS auth attempt: username='{user.username}' ip={user.ip}")
                             row = await self.db_pool.execute_one(
                                 "SELECT password_hash, level, email, realname, force_realname FROM users WHERE username=?",
                                 (user.username,)
                             )
                             if row:
+                                logger.info(f"PASS auth: Found staff account for '{user.username}'")
                                 # Use non-blocking bcrypt check
                                 if await check_password_async(user.provided_pass, row[0]):
                                     auth, level = True, row[1]
@@ -3726,11 +3735,14 @@ class pyIRCXServer:
                                     user.staff_realname = row[3]
                                     user.force_staff_realname = bool(row[4])
                                     self.failed_auth_tracker.record_success(user.ip)
+                                    logger.info(f"PASS auth: SUCCESS for '{user.username}' as {level}")
                                 else:
                                     self.failed_auth_tracker.record_failure(user.ip)
+                                    logger.warning(f"PASS auth: FAILED for '{user.username}' - wrong password")
+                            else:
+                                logger.info(f"PASS auth: No staff account found for '{user.username}'")
                         except Exception as e:
-                            if self.debug_mode:
-                                logger.error(f"Auth error: {e}")
+                            logger.error(f"PASS auth error for '{user.username}': {e}")
 
         if auth and level in ["ADMIN", "SYSOP", "GUIDE"]:
             user.host = self.servername
@@ -4340,6 +4352,8 @@ class pyIRCXServer:
                     flags += "i"
                 if member.has_mode('x') or member.is_ircx:
                     flags += "x"
+                if member.has_mode('r'):
+                    flags += "r"
                 if user.is_ircx:
                     if member.has_mode('s'):
                         flags += "s"
@@ -4384,6 +4398,8 @@ class pyIRCXServer:
                     flags += "i"
                 if member.has_mode('x') or member.is_ircx:
                     flags += "x"
+                if member.has_mode('r'):
+                    flags += "r"
                 if user.is_ircx:
                     if member.has_mode('s'):
                         flags += "s"
@@ -4422,6 +4438,10 @@ class pyIRCXServer:
                 # IRCX mode flag
                 if member.has_mode('x') or member.is_ircx:
                     flags += "x"
+
+                # Registered nickname flag
+                if member.has_mode('r'):
+                    flags += "r"
 
                 # Staff/operator flags depend on IRCX mode
                 if user.is_ircx:
@@ -4559,6 +4579,10 @@ class pyIRCXServer:
             if role:
                 await user.send(self.get_reply(
                     "313", user, target=target.nickname, role=role))
+
+            # Show registered nickname status
+            if target.has_mode('r'):
+                await user.send(f":{self.servername} 307 {user.nickname} {target.nickname} :has identified for this nickname")
 
             if target.away_msg:
                 await user.send(self.get_reply(
@@ -4828,6 +4852,192 @@ class pyIRCXServer:
                 if line.strip():
                     await user.send(f":{chan_name}!{chan_name}@{self.servername} PRIVMSG {user.nickname} :{line}")
 
+    async def handle_create(self, user, params):
+        """Handle IRCX CREATE command - create channel with initial modes
+
+        IRCX Syntax: CREATE <channel> [<modes> [<modeargs>]]
+
+        Examples:
+          CREATE #test
+          CREATE #test +mnt
+          CREATE #test +mntkl 50 secretkey
+          CREATE #test +cmnt (fail if channel exists)
+
+        Requirements:
+          - User must be in IRCX mode (user.is_ircx)
+          - Modes can only be applied to newly created channels
+          - The 'c' flag causes failure if channel already exists
+        """
+        # IRCX mode requirement
+        if not user.is_ircx:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :CREATE is an IRCX command. Use IRCX first to enable IRCX mode.")
+            return
+
+        # Parse parameters
+        if not params:
+            await user.send(self.get_reply("461", user, command="CREATE"))
+            return
+
+        channel_name = params[0]
+        modes_str = params[1] if len(params) > 1 else None
+        mode_args = params[2:] if len(params) > 2 else []
+
+        # Normalize mode string - add '+' if not present
+        if modes_str and not modes_str.startswith('+') and not modes_str.startswith('-'):
+            modes_str = '+' + modes_str
+
+        is_staff = user.is_staff()
+
+        # Validate channel name
+        valid, error = validate_channel_name(channel_name)
+        if not valid:
+            await user.send(f":{self.servername} 479 {user.nickname} {channel_name} :{error}")
+            return
+
+        # Case-insensitive #System check
+        if channel_name.lower() == "#system":
+            await user.send(self.get_reply("473", user, target="#System"))
+            return
+
+        # Parse mode flags to check for 'c' (create-only) flag
+        create_only = False
+        if modes_str and modes_str.startswith('+'):
+            create_only = 'c' in modes_str
+
+        # Check if channel exists
+        async with self.channel_creation_lock:
+            channel, chan_name = self.get_channel(channel_name)
+
+            # Handle 'c' flag - fail if channel already exists
+            if create_only and channel:
+                # ERR_CHANNELEXIST (IRCX extension - 926)
+                await user.send(f":{self.servername} 926 {user.nickname} {channel_name} :Channel already exists (cannot CREATE with +c flag)")
+                return
+
+            # If channel exists, join it (modes are ignored for existing channels)
+            if channel:
+                # Channel exists - just join it (like regular JOIN)
+                # Note: IRCX spec says modes cannot be applied to existing channels via CREATE
+                await self.handle_join(user, channel_name, None)
+                return
+
+            # Channel doesn't exist - create it
+            chan_name = channel_name
+
+            # Try to load from database first if registered
+            channel = await self.load_registered_channel(chan_name)
+            if channel:
+                # Registered channel loaded from DB - cannot apply modes via CREATE
+                self.channels[chan_name] = channel
+                # Just join it
+                await self.handle_join(user, channel_name, None)
+                return
+            else:
+                # Create new dynamic channel
+                channel = Channel(chan_name)
+                self.channels[chan_name] = channel
+
+                # Fire CHANNEL/CREATE event for monitoring
+                await self.fire_trap("CHANNEL", "CREATE", user, chan_name)
+
+                # Apply initial modes if specified (only for new channels)
+                if modes_str and modes_str.startswith('+'):
+                    # Remove the 'c' flag from modes_str before applying (it's not a channel mode)
+                    modes_to_apply = modes_str.replace('c', '')
+
+                    if modes_to_apply and len(modes_to_apply) > 1:  # More than just '+'
+                        # Parse and apply channel modes
+                        await self._apply_create_modes(channel, user, modes_to_apply, mode_args)
+
+        # Add user to channel
+        channel.members[user.nickname] = user
+        user.channels.add(chan_name)
+
+        # User becomes owner of the channel
+        channel.owners.add(user.nickname)
+
+        # Send JOIN confirmation to user
+        join_msg = f":{user.prefix()} JOIN {chan_name}"
+        await user.send(join_msg)
+
+        # Notify all other channel members
+        for member in channel.members.values():
+            if member != user and not (hasattr(member, 'is_remote') and member.is_remote):
+                await member.send(join_msg)
+
+        # Propagate JOIN to linked servers
+        if self.link_manager and self.link_manager.enabled:
+            if not (hasattr(user, 'is_remote') and user.is_remote):
+                await self.link_manager.broadcast_to_servers(join_msg)
+
+        # Send topic if set
+        if channel.topic:
+            await user.send(self.get_reply("332", user, channel=chan_name, topic=channel.topic))
+            if channel.topic_set_by and channel.topic_set_at:
+                await user.send(self.get_reply("333", user, channel=chan_name,
+                                         setter=channel.topic_set_by, time=channel.topic_set_at))
+        else:
+            await user.send(self.get_reply("331", user, channel=chan_name))
+
+        # Send NAMES list
+        names = " ".join([channel.get_prefix(nick) + nick for nick in channel.members])
+        await user.send(self.get_reply("353", user, channel=chan_name, names=names))
+        await user.send(self.get_reply("366", user, channel=chan_name))
+
+        # Send MODE message showing applied modes
+        if modes_str:
+            mode_msg = f":{self.servername} MODE {chan_name} {modes_str}"
+            if mode_args:
+                mode_msg += " " + " ".join(mode_args)
+            await user.send(mode_msg)
+
+        # Send ONJOIN message if set (IRCX PROP ONJOIN)
+        if channel.onjoin:
+            # ONJOIN supports \n for multiple lines
+            for line in channel.onjoin.replace('\\n', '\n').split('\n'):
+                if line.strip():
+                    await user.send(f":{chan_name}!{chan_name}@{self.servername} PRIVMSG {user.nickname} :{line}")
+
+    async def _apply_create_modes(self, channel, user, modes_str, mode_args):
+        """Apply initial modes during CREATE command
+
+        Parses mode string like '+mntk' with arguments like ['secretkey']
+        and applies them to the newly created channel.
+        """
+        if not modes_str or not modes_str.startswith('+'):
+            return
+
+        mode_chars = modes_str[1:]  # Remove the '+'
+        arg_index = 0
+
+        for mode_char in mode_chars:
+            if mode_char in ['k', 'l', 'u']:
+                # Modes that require arguments
+                if arg_index < len(mode_args):
+                    arg = mode_args[arg_index]
+                    arg_index += 1
+
+                    if mode_char == 'k':
+                        # Channel key (password)
+                        channel.key = arg
+                        channel.modes['k'] = True
+                    elif mode_char == 'l':
+                        # User limit
+                        try:
+                            limit = int(arg)
+                            if limit > 0:
+                                channel.user_limit = limit
+                                channel.modes['l'] = True
+                        except ValueError:
+                            pass
+                    elif mode_char == 'u':
+                        # IRCX: Owner key
+                        channel.owner_key = arg
+                        channel.modes['u'] = True
+            else:
+                # Modes without arguments
+                if mode_char in channel.modes:
+                    channel.modes[mode_char] = True
     async def handle_part(self, user, channel_name):
         channel, chan_name = self.get_channel(channel_name)
         if not channel:
@@ -7320,6 +7530,7 @@ class pyIRCXServer:
         elif topic == "IRCX":
             await user.send(f":{self.servername} NOTICE {user.nickname} :=== IRCX Commands ===")
             await user.send(f":{self.servername} NOTICE {user.nickname} :IRCX - Enable IRCX mode")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :CREATE #chan [key] - Create/join channel (alias for JOIN)")
             await user.send(f":{self.servername} NOTICE {user.nickname} :ACCESS #chan LIST [level] - List access entries")
             await user.send(f":{self.servername} NOTICE {user.nickname} :ACCESS #chan ADD level mask [reason] - Add access entry")
             await user.send(f":{self.servername} NOTICE {user.nickname} :ACCESS #chan DEL level mask - Remove access entry")
@@ -7962,10 +8173,23 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :  /UNGAG spammer - Restore global ability to talk")
 
         elif topic in ["CREATE"]:
-            await user.send(f":{self.servername} NOTICE {user.nickname} :=== CREATE Command ===")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /CREATE <#channel> [key]")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Alias for /JOIN - Creates a new channel or joins existing one.")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :See /HELP JOIN for full details.")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== CREATE Command (IRCX) ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /CREATE <#channel> [modes] [mode arguments]")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Create a new channel with initial modes. Requires IRCX mode.")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /CREATE #test - Create simple channel")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /CREATE #test mnt - Create with modes (moderated, no external, topic)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /CREATE #test ntl 50 - Create with modes and limit of 50 users")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /CREATE #test ntkl 25 secret - Limit 25 users with key 'secret'")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /CREATE #test c - Fail if channel exists (create-only flag)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Common modes: m=moderated n=no external t=topic protect i=invite-only")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :With arguments: k=key l=limit u=owner key")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Special: c=create-only (fail if exists)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Note: Modes only apply to new channels. Use /MODE to change existing channels.")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :See also: /HELP IRCX, /HELP CHANMODES, /HELP JOIN")
 
         elif topic in ["CONNECT", "SQUIT"] and user.is_admin():
             await user.send(f":{self.servername} NOTICE {user.nickname} :=== CONNECT/SQUIT Commands (IRC administrator only) ===")
@@ -8600,8 +8824,11 @@ class pyIRCXServer:
                             await user.send(f":{self.servername} NOTICE {user.nickname} :Password accepted. MFA required - use: MFA VERIFY <code>")
                             return
 
-                        user.set_mode('r', True)
-                        await user.send(f":{user.nickname} MODE {user.nickname} :+r")
+                        # Only set +r mode if not already set
+                        if not user.has_mode('r'):
+                            user.set_mode('r', True)
+                            await user.send(f":{user.nickname} MODE {user.nickname} :+r")
+
                         await db.execute("UPDATE registered_nicks SET last_seen = ? WHERE uuid = ?",
                                         (int(time.time()), nick_uuid))
                         await db.commit()

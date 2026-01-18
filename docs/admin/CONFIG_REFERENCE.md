@@ -975,5 +975,5 @@ Click "Reload Server" button
 ## Support
 
 For configuration help:
-- GitHub Issues: https://github.com/yourusername/pyIRCX/issues
+- GitHub Issues: https://github.com/0x8007000E/pyIRCX/issues
 - IRC: #pyircx on irc.example.com

@@ -9,12 +9,12 @@
 ## Executive Summary
 
 **Total Tests:** 158 active tests
-- `testing/users.py`: 115 tests ✅
-- `testing/staff.py`: 39 tests ✅
-- `testing/links.py`: 4 tests ✅
-- `testing/access.py`: 0 tests (incomplete harness)
-- `testing/services.py`: 0 tests (incomplete harness)
-- `testing/webchat.py`: 0 tests (incomplete harness)
+- `tests/integration/users.py`: 115 tests ✅
+- `tests/integration/staff.py`: 39 tests ✅
+- `tests/integration/links.py`: 4 tests ✅
+- `tests/integration/access.py`: 0 tests (incomplete harness)
+- `tests/integration/services.py`: 0 tests (incomplete harness)
+- `tests/integration/webchat.py`: 0 tests (incomplete harness)
 
 **Critical Commands Coverage:**
 - ✅ **WHO** - Tested (RFC format validation)
@@ -44,15 +44,15 @@
 
 **Test Coverage:**
 ```
-✅ testing/users.py:316 - "WHO Command"
+✅ tests/integration/users.py:316 - "WHO Command"
    - Tests basic WHO response format
    - Validates 352 numeric
 
-✅ testing/users.py:2855 - "Custom: WHO Flags Format"
+✅ tests/integration/users.py:2855 - "Custom: WHO Flags Format"
    - Tests H/G flags
    - Tests operator flags
 
-✅ testing/staff.py - WHOIS shows IP to staff (implicit WHO behavior)
+✅ tests/integration/staff.py - WHOIS shows IP to staff (implicit WHO behavior)
 ```
 
 **Coverage:** GOOD ✅
@@ -82,12 +82,12 @@
 
 **Test Coverage:**
 ```
-✅ testing/users.py:1585 - "RFC: NAMES Command Format"
+✅ tests/integration/users.py:1585 - "RFC: NAMES Command Format"
    - Tests 353/366 numerics
    - Tests member list format
    - Tests prefixes (., @, +)
 
-✅ testing/users.py:221 - "Channel Join and Part"
+✅ tests/integration/users.py:221 - "Channel Join and Part"
    - Implicitly tests NAMES on join
 ```
 
@@ -121,59 +121,59 @@
 
 **Test Coverage:**
 ```
-✅ testing/users.py:221 - "Channel Join and Part"
+✅ tests/integration/users.py:221 - "Channel Join and Part"
    - Basic join/part flow
 
-✅ testing/users.py:242 - "Channel Owner on First Join"
+✅ tests/integration/users.py:242 - "Channel Owner on First Join"
    - Tests +q grant on empty channel
 
-✅ testing/users.py:645 - "Invite-Only Mode (+i)"
+✅ tests/integration/users.py:645 - "Invite-Only Mode (+i)"
    - Tests 473 error on +i without invite
 
-✅ testing/users.py:672 - "INVITE Command"
+✅ tests/integration/users.py:672 - "INVITE Command"
    - Tests invite clearing after join
 
-✅ testing/users.py:692 - "Channel Key Mode (+k)"
+✅ tests/integration/users.py:692 - "Channel Key Mode (+k)"
    - Tests 475 error on wrong key
    - Tests successful join with key
 
-✅ testing/users.py:725 - "User Limit Mode (+l)"
+✅ tests/integration/users.py:725 - "User Limit Mode (+l)"
    - Tests 471 error when channel full
 
-✅ testing/users.py:1055 - "Clone Channel - Basic Creation"
+✅ tests/integration/users.py:1055 - "Clone Channel - Basic Creation"
    - Tests automatic clone creation on +l limit
 
-✅ testing/users.py:1159 - "ACCESS DENY Blocks Join"
+✅ tests/integration/users.py:1159 - "ACCESS DENY Blocks Join"
    - Tests 474 error on ACCESS DENY match
 
-✅ testing/users.py:1182 - "ACCESS GRANT Bypasses +i"
+✅ tests/integration/users.py:1182 - "ACCESS GRANT Bypasses +i"
    - Tests invite-only bypass with ACCESS GRANT
 
-✅ testing/users.py:1206 - "ACCESS HOST Grants +o on Join"
+✅ tests/integration/users.py:1206 - "ACCESS HOST Grants +o on Join"
    - Tests mode grant from ACCESS list
 
-✅ testing/users.py:1230 - "ACCESS VOICE Grants +v on Join"
+✅ tests/integration/users.py:1230 - "ACCESS VOICE Grants +v on Join"
    - Tests voice grant from ACCESS list
 
-✅ testing/users.py:1796 - "PROP HOSTKEY Grants +o"
+✅ tests/integration/users.py:1796 - "PROP HOSTKEY Grants +o"
    - Tests host key → +o grant
 
-✅ testing/users.py:2220 - "IRCX: PROP OWNERKEY"
+✅ tests/integration/users.py:2220 - "IRCX: PROP OWNERKEY"
    - Tests owner key → +q grant
 
-✅ testing/staff.py:223 - "#System Channel Access - Regular User"
+✅ tests/integration/staff.py:223 - "#System Channel Access - Regular User"
    - Tests #System restriction
 
-✅ testing/staff.py:393 - "Staff Bypass - Ban (+b)"
+✅ tests/integration/staff.py:393 - "Staff Bypass - Ban (+b)"
    - Tests staff bypass of ban list
 
-✅ testing/staff.py:411 - "Staff Bypass - Invite Only (+i)"
+✅ tests/integration/staff.py:411 - "Staff Bypass - Invite Only (+i)"
    - Tests staff bypass of +i
 
-✅ testing/staff.py:427 - "Staff Bypass - Channel Key (+k)"
+✅ tests/integration/staff.py:427 - "Staff Bypass - Channel Key (+k)"
    - Tests staff bypass of +k
 
-✅ testing/staff.py:443 - "Staff Bypass - User Limit (+l)"
+✅ tests/integration/staff.py:443 - "Staff Bypass - User Limit (+l)"
    - Tests staff bypass of +l
 ```
 
@@ -208,13 +208,13 @@
 
 **Test Coverage:**
 ```
-✅ testing/users.py:221 - "Channel Join and Part"
+✅ tests/integration/users.py:221 - "Channel Join and Part"
    - Basic part flow
 
-✅ testing/users.py:1938 - "RFC: PART with Reason"
+✅ tests/integration/users.py:1938 - "RFC: PART with Reason"
    - Tests PART with optional reason message
 
-✅ testing/users.py:1810 - "PROP ONPART Message"
+✅ tests/integration/users.py:1810 - "PROP ONPART Message"
    - Tests ONPART message sent after PART
 ```
 
@@ -246,18 +246,18 @@
 
 **Test Coverage:**
 ```
-✅ testing/users.py:1861 - "RFC: MODE Query"
+✅ tests/integration/users.py:1861 - "RFC: MODE Query"
    - Tests MODE <nick> query
    - Tests 221 numeric
 
-✅ testing/users.py:2547 - "User Mode: Invisible (+i)"
+✅ tests/integration/users.py:2547 - "User Mode: Invisible (+i)"
    - Tests setting +i mode
    - Tests WHO hiding with +i
 
-✅ testing/users.py:2569 - "User Mode: Host Masking (+x)"
+✅ tests/integration/users.py:2569 - "User Mode: Host Masking (+x)"
    - Tests +x mode setting via IRCX
 
-✅ testing/users.py:2588 - "User Mode: Wallops (+w)"
+✅ tests/integration/users.py:2588 - "User Mode: Wallops (+w)"
    - Tests +w mode (note: unused in codebase)
 ```
 
@@ -288,52 +288,52 @@
 
 **Test Coverage:**
 ```
-✅ testing/users.py:374 - "Channel MODE Query"
+✅ tests/integration/users.py:374 - "Channel MODE Query"
    - Tests MODE #channel query
    - Tests 324 numeric
 
-✅ testing/users.py:545 - "Ban Mode (+b) - Set and List"
+✅ tests/integration/users.py:545 - "Ban Mode (+b) - Set and List"
    - Tests +b <mask>
    - Tests MODE #channel b (list bans)
    - Tests 367/368 numerics
 
-✅ testing/users.py:580 - "Ban Mode (+b) - Blocked Join"
+✅ tests/integration/users.py:580 - "Ban Mode (+b) - Blocked Join"
    - Tests ban blocking join attempt
 
-✅ testing/users.py:645 - "Invite-Only Mode (+i)"
+✅ tests/integration/users.py:645 - "Invite-Only Mode (+i)"
    - Tests +i setting
    - Tests join restriction
 
-✅ testing/users.py:692 - "Channel Key Mode (+k)"
+✅ tests/integration/users.py:692 - "Channel Key Mode (+k)"
    - Tests +k <key>
    - Tests key requirement on join
 
-✅ testing/users.py:725 - "User Limit Mode (+l)"
+✅ tests/integration/users.py:725 - "User Limit Mode (+l)"
    - Tests +l <limit>
    - Tests limit enforcement
 
-✅ testing/users.py:751 - "MODE Display with Parameters"
+✅ tests/integration/users.py:751 - "MODE Display with Parameters"
    - Tests MODE output with +k and +l params
 
-✅ testing/users.py:1095 - "Clone Channel - Mode Sync"
+✅ tests/integration/users.py:1095 - "Clone Channel - Mode Sync"
    - Tests mode propagation to clones
 
-✅ testing/users.py:2411 - "Mode: Moderated Channel (+m)"
+✅ tests/integration/users.py:2411 - "Mode: Moderated Channel (+m)"
    - Tests +m restricting non-voice users
 
-✅ testing/users.py:2439 - "Mode: No External Messages (+n)"
+✅ tests/integration/users.py:2439 - "Mode: No External Messages (+n)"
    - Tests +n blocking non-members
 
-✅ testing/users.py:2464 - "Mode: Topic Lock (+t)"
+✅ tests/integration/users.py:2464 - "Mode: Topic Lock (+t)"
    - Tests +t restricting topic changes
 
-✅ testing/users.py:2492 - "Mode: Secret Channel (+s)"
+✅ tests/integration/users.py:2492 - "Mode: Secret Channel (+s)"
    - Tests +s hiding from LIST/WHOIS
 
-✅ testing/users.py:2516 - "Mode: Private Channel (+p)"
+✅ tests/integration/users.py:2516 - "Mode: Private Channel (+p)"
    - Tests +p hiding from WHOIS only
 
-✅ testing/users.py:2533 - "Mode: Registered Only (+r)"
+✅ tests/integration/users.py:2533 - "Mode: Registered Only (+r)"
    - Tests +a mode (auth-only, probably meant +r)
 ```
 
@@ -381,14 +381,14 @@
 
 **Test Coverage:**
 ```
-✅ testing/users.py:351 - "KICK Command"
+✅ tests/integration/users.py:351 - "KICK Command"
    - Basic kick functionality
    - Tests permission requirement
 
-✅ testing/users.py:1971 - "RFC: KICK with Reason"
+✅ tests/integration/users.py:1971 - "RFC: KICK with Reason"
    - Tests KICK with reason parameter
 
-✅ testing/staff.py:305 - "KICK Command - Admin"
+✅ tests/integration/staff.py:305 - "KICK Command - Admin"
    - Tests admin bypass of permissions
 ```
 
@@ -419,12 +419,12 @@
 
 **Test Coverage:**
 ```
-✅ testing/users.py:1653 - "RFC: TOPIC Set and Get"
+✅ tests/integration/users.py:1653 - "RFC: TOPIC Set and Get"
    - Tests TOPIC query (332/333)
    - Tests TOPIC set
    - Tests broadcast
 
-✅ testing/users.py:2464 - "Mode: Topic Lock (+t)"
+✅ tests/integration/users.py:2464 - "Mode: Topic Lock (+t)"
    - Tests +t restricting non-ops
    - BUT only checks one scenario
 ```
@@ -459,11 +459,11 @@
 
 **Test Coverage:**
 ```
-✅ testing/users.py:672 - "INVITE Command"
+✅ tests/integration/users.py:672 - "INVITE Command"
    - Tests basic invite flow
    - Tests invite clearing after join
 
-✅ testing/users.py:1713 - "RFC: INVITE Command"
+✅ tests/integration/users.py:1713 - "RFC: INVITE Command"
    - Tests 341 numeric to inviter
    - Tests 346 numeric to invitee
 ```
@@ -486,48 +486,48 @@
 
 ### Well-Tested Commands ✅
 
-**WHOIS:** (testing/users.py:298, 1612, staff.py:250)
+**WHOIS:** (tests/integration/users.py:298, 1612, staff.py:250)
 - Complete response validation
 - Staff IP visibility
 - Regular user IP hiding
 - Operator status display
 
-**PRIVMSG/NOTICE:** (testing/users.py:256, 273, 1733, 1754)
+**PRIVMSG/NOTICE:** (tests/integration/users.py:256, 273, 1733, 1754)
 - Private messages
 - Channel messages
 - NOTICE format
 - Error cases
 
-**LIST:** (testing/users.py:334, 1776, 2076)
+**LIST:** (tests/integration/users.py:334, 1776, 2076)
 - Basic LIST
 - LISTX (IRCX extended)
 - Hidden/secret channel filtering
 
-**AWAY:** (testing/users.py:390, 2797)
+**AWAY:** (tests/integration/users.py:390, 2797)
 - Set away status
 - Clear away status
 - WHOIS shows away
 
-**PING/PONG:** (testing/users.py:408)
+**PING/PONG:** (tests/integration/users.py:408)
 - Basic ping response
 
 ---
 
 ### Partially-Tested Commands ⚠️
 
-**KNOCK:** (testing/users.py:770, 782, 795, 2969, 2985)
+**KNOCK:** (tests/integration/users.py:770, 782, 795, 2969, 2985)
 - Basic knock on +i channel
 - Rate limiting tested
 - Full flow validated
 - Missing: knock on banned user
 
-**WHISPER:** (testing/users.py:2149, 2960)
+**WHISPER:** (tests/integration/users.py:2149, 2960)
 - Privacy validation
 - Missing: +w mode blocking
 - Missing: rate limiting
 - Missing: target not in channel
 
-**PROP:** (testing/users.py:810, 828, 1796, 1810, 2220, 2246, 2957)
+**PROP:** (tests/integration/users.py:810, 828, 1796, 1810, 2220, 2246, 2957)
 - Standard properties tested
 - ONJOIN/ONPART tested
 - HOSTKEY/OWNERKEY tested
@@ -535,7 +535,7 @@
 - Missing: ACCOUNT (read-only)
 - Missing: permission checks
 
-**ACCESS:** (testing/users.py:1159-1230, 2278, 2298, 2957, staff.py:541-577)
+**ACCESS:** (tests/integration/users.py:1159-1230, 2278, 2298, 2957, staff.py:541-577)
 - All levels tested (DENY, GRANT, OWNER, HOST, VOICE)
 - ADD/DELETE tested
 - CLEAR tested
@@ -547,7 +547,7 @@
 
 ### Minimally-Tested Commands 🔶
 
-**REGISTER/IDENTIFY:** (testing/users.py:2607, 2631)
+**REGISTER/IDENTIFY:** (tests/integration/users.py:2607, 2631)
 - Basic nick registration
 - CHGPASS tested
 - Missing: MFA enable/disable/verify
@@ -555,19 +555,19 @@
 - Missing: collision handling
 - Missing: UUID tracking
 
-**KILL:** (testing/staff.py:208, 459)
+**KILL:** (tests/integration/staff.py:208, 459)
 - Permission check tested
 - Basic kill tested
 - Missing: kill reason broadcast
 - Missing: QUIT message format
 
-**GAG/UNGAG:** (testing/staff.py:492, 509)
+**GAG/UNGAG:** (tests/integration/staff.py:492, 509)
 - Channel gag tested
 - Global gag tested
 - Missing: cannot gag services
 - Missing: gag expiration
 
-**STATS:** (testing/users.py:2819, 2834, 2845, staff.py:531, 600)
+**STATS:** (tests/integration/users.py:2819, 2834, 2845, staff.py:531, 600)
 - Some STATS subcmds tested
 - Missing: many STATS subcmds
 
@@ -586,25 +586,25 @@
    - Online/offline notifications (600/601)
 
 3. **ISON** - Check if users online
-   - (testing/users.py:1843 exists but may be incomplete)
+   - (tests/integration/users.py:1843 exists but may be incomplete)
 
 4. **USERHOST** - Get user hostmask
-   - (testing/users.py:1829 exists but may be incomplete)
+   - (tests/integration/users.py:1829 exists but may be incomplete)
 
 5. **TRACE** - Connection trace
    - Complete trace output
 
 6. **LINKS** - Server links list
-   - (testing/links.py:117 exists)
+   - (tests/integration/links.py:117 exists)
 
 7. **CONNECT** - Link to server
-   - (testing/links.py:141 exists)
+   - (tests/integration/links.py:141 exists)
 
 8. **SQUIT** - Server disconnect
    - No tests
 
 9. **EVENT/TRAP** - Admin event trapping
-   - (testing/staff.py:335 has one EVENT test)
+   - (tests/integration/staff.py:335 has one EVENT test)
    - Missing: all TRAP scenarios
 
 10. **STAFF commands:**
@@ -847,7 +847,7 @@ Coverage for state changes:
 
 ### Before Refactoring, Add These Tests:
 
-#### **Critical Command Tests** (testing/users.py)
+#### **Critical Command Tests** (tests/integration/users.py)
 
 ```python
 # MODE edge cases
@@ -873,7 +873,7 @@ Coverage for state changes:
 @runner.test("INVITE Error Cases (401/403/442/443)")
 ```
 
-#### **MFA Tests** (new file: testing/mfa.py)
+#### **MFA Tests** (new file: tests/integration/mfa.py)
 
 ```python
 @runner.test("MFA Enable Complete Flow")
@@ -884,7 +884,7 @@ Coverage for state changes:
 @runner.test("MFA Invalid Code During Setup")
 ```
 
-#### **Security Tests** (new file: testing/security.py)
+#### **Security Tests** (new file: tests/integration/security.py)
 
 ```python
 @runner.test("Flood Protection Triggers")
@@ -896,7 +896,7 @@ Coverage for state changes:
 @runner.test("Service Protection - Cannot ACCESS DENY")
 ```
 
-#### **WEBIRC Tests** (testing/webchat.py - implement!)
+#### **WEBIRC Tests** (tests/integration/webchat.py - implement!)
 
 ```python
 @runner.test("WEBIRC IP Pass-through")
@@ -913,17 +913,17 @@ Coverage for state changes:
 
 1. **Run existing tests:**
    ```bash
-   python3 testing/users.py > test_baseline_users.log
-   python3 testing/staff.py > test_baseline_staff.log
-   python3 testing/links.py > test_baseline_links.log
+   python3 tests/integration/users.py > test_baseline_users.log
+   python3 tests/integration/staff.py > test_baseline_staff.log
+   python3 tests/integration/links.py > test_baseline_links.log
    ```
 
 2. **Add critical missing tests** (Priority 1 & 2)
 
 3. **Re-run full test suite:**
    ```bash
-   python3 testing/users.py > test_complete_users.log
-   python3 testing/staff.py > test_complete_staff.log
+   python3 tests/integration/users.py > test_complete_users.log
+   python3 tests/integration/staff.py > test_complete_staff.log
    # etc.
    ```
 

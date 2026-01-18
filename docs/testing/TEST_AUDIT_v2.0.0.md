@@ -31,49 +31,49 @@
 
 ### Testing Directory Tests (241 total via @runner.test)
 
-**testing/users.py** - User Management & Core IRC Commands
+**tests/integration/users.py** - User Management & Core IRC Commands
 - Registration, authentication, nickname management
 - User modes, WHOIS, WHO, WHOWAS
 - Basic channel operations
 
-**testing/commands.py** - IRC Command Coverage
+**tests/integration/commands.py** - IRC Command Coverage
 - JOIN, PART, MODE, TOPIC, KICK, INVITE
 - PRIVMSG, NOTICE
 - LIST, NAMES
 - Standard IRC command suite
 
-**testing/staff.py** - Staff Features
+**tests/integration/staff.py** - Staff Features
 - ADMIN, SYSOP, GUIDE authentication
 - STAFF command (LIST, ADD, DEL, SET, PASS)
 - Staff-only commands
 - Permission hierarchies
 
-**testing/services.py** - Service Bot Tests
+**tests/integration/services.py** - Service Bot Tests
 - Registrar service (REGISTER, IDENTIFY, DROP, INFO)
 - Messenger service (SEND, READ, DEL)
 - NewsFlash service
 - ServiceBot HELP commands
 
-**testing/access.py** - IRCX Access Control
+**tests/integration/access.py** - IRCX Access Control
 - ACCESS command (GRANT, DENY, LIST, CLEAR)
 - Permission masks and wildcards
 - Owner/Host/Voice privileges
 
-**testing/help.py** - Help System
+**tests/integration/help.py** - Help System
 - HELP command for all topics
 - Fuzzy matching ("Did you mean?")
 - Service help text
 
-**testing/stats.py** - STATS Command
+**tests/integration/stats.py** - STATS Command
 - STATS u (uptime)
 - STATS c (connections)
 - STATS a (admins), STATS o (operators), STATS g (guides)
 
-**testing/links.py** - Basic Server Linking
+**tests/integration/links.py** - Basic Server Linking
 - Server-to-server connection establishment
 - Link authentication
 
-**testing/webchat.py** - WebChat Integration
+**tests/integration/webchat.py** - WebChat Integration
 - WebSocket gateway functionality
 
 **tests/test_v1_2_0_features.py** - v1.2.0 Feature Tests
@@ -99,7 +99,7 @@
    - User state propagation (NICK, AWAY, QUIT, KILL)
 
 3. **Core IRC Protocol**
-   - 241 tests in testing/ directory
+   - 241 tests in tests/integration/ directory
    - All 48 commands covered
    - User modes, channel modes
    - Services (Registrar, Messenger, NewsFlash)
@@ -122,7 +122,7 @@
    - ❌ No validation of actionable guidance in errors
 
 2. **Enhanced Help System (v2.0.0)**
-   - ⚠️ Basic help tests exist (testing/help.py)
+   - ⚠️ Basic help tests exist (tests/integration/help.py)
    - ❌ No tests for NEW help topics (MOTD, MEMO, GAG, CREATE, CONNECT, SQUIT)
    - ❌ No tests for command examples in help output
    - ⚠️ Fuzzy matching tested but may need v2.0.0 updates
@@ -169,13 +169,13 @@
 
 1. **Scattered Tests**
    - Distributed tests in root (test_*.py)
-   - Unit tests in testing/ directory
+   - Unit tests in tests/integration/ directory
    - v1.2.0 tests in tests/ directory
    - No clear organization
 
 2. **Test Runner Inconsistency**
    - Root tests use raw sockets + manual assertions
-   - testing/ uses custom TestRunner with @runner.test
+   - tests/integration/ uses custom TestRunner with @runner.test
    - tests/ uses different approach
    - Hard to run "all tests" at once
 
@@ -190,7 +190,7 @@
 
 ### Priority 1: v2.0.0 Feature Tests (CRITICAL)
 
-Create **testing/v2_0_0_features.py**:
+Create **tests/integration/v2_0_0_features.py**:
 - Test all 12 command aliases work
 - Test personalized error messages contain "You" pronouns
 - Test new help topics exist and have examples
@@ -202,7 +202,7 @@ Create **testing/v2_0_0_features.py**:
 
 ### Priority 2: Distributed Robustness Tests
 
-Create **testing/distributed_edge_cases.py**:
+Create **tests/integration/distributed_edge_cases.py**:
 - Service routing when trunk is unreachable
 - ServiceBot invites on branch when trunk has bots
 - Channel state conflicts (simultaneous MODE from 2 servers)
@@ -217,7 +217,7 @@ Create **testing/distributed_edge_cases.py**:
    - Create master test script (run_all_tests.sh)
 
 2. **Add test documentation**
-   - testing/README.md explaining test structure
+   - tests/integration/README.md explaining test structure
    - How to run tests (individual, all, specific category)
    - How to add new tests
 
@@ -228,7 +228,7 @@ Create **testing/distributed_edge_cases.py**:
 
 ### Priority 4: Documentation Tests
 
-Create **testing/documentation.py**:
+Create **tests/integration/documentation.py**:
 - Verify all commands have help text
 - Verify license headers in all source files
 - Verify MANUAL.md numeric table matches code
@@ -237,7 +237,7 @@ Create **testing/documentation.py**:
 
 ## Test Execution Status
 
-**Current Test Count:** 241 (testing/) + 19 (root distributed) = 260 total
+**Current Test Count:** 241 (tests/integration/) + 19 (root distributed) = 260 total
 
 **Passing:** Unknown (need to run all tests)
 

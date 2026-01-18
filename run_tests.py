@@ -83,52 +83,76 @@ def main():
     print(f"Python: {sys.version.split()[0]}")
     print(f"Working Directory: {os.getcwd()}\n")
     
-    # Define test suites
+    # Define test suites (organized by category)
     test_suites = [
+        # Core IRC Functionality
         {
             'name': 'User Management Tests',
-            'path': 'testing/users.py',
+            'path': 'tests/integration/core/users.py',
             'description': 'Registration, authentication, user modes, WHOIS/WHO'
         },
         {
             'name': 'IRC Command Tests',
-            'path': 'testing/commands.py',
-            'description': 'JOIN, PART, MODE, TOPIC, KICK, INVITE, PRIVMSG, NOTICE'
-        },
-        {
-            'name': 'Staff Features Tests',
-            'path': 'testing/staff.py',
-            'description': 'ADMIN/SYSOP/GUIDE authentication, STAFF command, permissions'
-        },
-        {
-            'name': 'Services Tests',
-            'path': 'testing/services.py',
-            'description': 'Registrar, Messenger, NewsFlash, ServiceBots'
-        },
-        {
-            'name': 'Access Control Tests',
-            'path': 'testing/access.py',
-            'description': 'IRCX ACCESS lists, permissions, masks'
+            'path': 'tests/integration/core/commands.py',
+            'description': 'Core IRC and IRCX commands (JOIN, PART, MODE, CREATE, etc.)'
         },
         {
             'name': 'Help System Tests',
-            'path': 'testing/help.py',
+            'path': 'tests/integration/core/help.py',
             'description': 'HELP command, fuzzy matching, all topics'
         },
         {
             'name': 'STATS Command Tests',
-            'path': 'testing/stats.py',
+            'path': 'tests/integration/core/stats.py',
             'description': 'STATS u/c/a/o/g/v, uptime, connections'
         },
+
+        # IRCX Extensions
+        {
+            'name': 'Access Control Tests',
+            'path': 'tests/integration/ircx/access.py',
+            'description': 'IRCX ACCESS lists, permissions, masks'
+        },
+        {
+            'name': 'Services Tests',
+            'path': 'tests/integration/ircx/services.py',
+            'description': 'Registrar, Messenger, NewsFlash, ServiceBots'
+        },
+
+        # Staff & Administration
+        {
+            'name': 'Staff Features Tests',
+            'path': 'tests/integration/staff/staff.py',
+            'description': 'ADMIN/SYSOP/GUIDE authentication, STAFF command, permissions'
+        },
+        {
+            'name': 'Authentication Tests',
+            'path': 'tests/integration/staff/authentication.py',
+            'description': 'PASS, AUTH, SASL authentication methods'
+        },
+
+        # Distributed Networking
         {
             'name': 'Distributed Networking Tests',
-            'path': 'testing/distributed.py',
+            'path': 'tests/integration/network/distributed.py',
             'description': 'Trunk/branch topology, cross-server operations, 3-server network'
         },
         {
             'name': 'Network Topology Tests',
-            'path': 'testing/network_topology.py',
-            'description': 'Server divergences (SQUIT), convergences (CONNECT), channel/user state during topology changes'
+            'path': 'tests/integration/network/topology.py',
+            'description': 'Server divergences (SQUIT), convergences (CONNECT), channel/user state'
+        },
+        {
+            'name': 'Server Linking Tests',
+            'path': 'tests/integration/network/links.py',
+            'description': 'Server-to-server connections and protocol'
+        },
+
+        # Web Integration
+        {
+            'name': 'WebChat Gateway Tests',
+            'path': 'tests/integration/web/webchat.py',
+            'description': 'WebSocket gateway, HTTP/IRC bridging'
         },
     ]
     

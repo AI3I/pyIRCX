@@ -1,5 +1,0 @@
-# Test run logs
-test_run_*.md
-
-# Keep this directory
-!.gitignore

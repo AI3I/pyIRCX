@@ -33,6 +33,7 @@ $csrf_token = $_SESSION['csrf_token'];
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="<?php echo $csrf_token; ?>">
     <title>pyIRCX Server Administration</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔧</text></svg>">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -159,9 +160,12 @@ $csrf_token = $_SESSION['csrf_token'];
                     </div>
                     <div class="card-body">
                         <div class="search-box">
-                            <input type="text" id="search-nicks-input" class="form-control" placeholder="Enter nickname...">
+                            <input type="text" id="search-nicks-input" class="form-control" placeholder="Search by nickname (partial match, case-insensitive)">
                             <button class="btn btn-primary btn-sm" id="btn-search-nicks">🔍 Search</button>
                         </div>
+                        <small class="text-muted" style="display: block; margin-top: 5px; margin-bottom: 10px;">
+                            💡 Searches for partial matches - Examples: "admin", "john", "bot"
+                        </small>
                         <div id="search-nicks-results"></div>
                     </div>
                 </div>
@@ -203,9 +207,12 @@ $csrf_token = $_SESSION['csrf_token'];
                     </div>
                     <div class="card-body">
                         <div class="search-box">
-                            <input type="text" id="search-channels-input" class="form-control" placeholder="Enter channel name...">
+                            <input type="text" id="search-channels-input" class="form-control" placeholder="Search by channel name (partial match, case-insensitive)">
                             <button class="btn btn-primary btn-sm" id="btn-search-channels">🔍 Search</button>
                         </div>
+                        <small class="text-muted" style="display: block; margin-top: 5px; margin-bottom: 10px;">
+                            💡 Searches for partial matches - Examples: "test", "#chat", "help" (# optional)
+                        </small>
                         <div id="search-channels-results"></div>
                     </div>
                 </div>
@@ -1111,9 +1118,6 @@ badword3"></textarea>
         </div>
     </div>
 
-</body>
-</html>
-
     <!-- Modal: Add Staff -->
     <div id="modal-add-staff" class="modal" style="display: none;">
         <div class="modal-dialog">
@@ -1613,48 +1617,5 @@ badword3"></textarea>
         </div>
     </div>
 
-    <!-- Modal: Send Mailbox Message -->
-    <div id="modal-send-mailbox" class="modal" style="display: none;">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header"><h4>✉️ Send Message</h4></div>
-                <div class="modal-body">
-                    <label>From (Sender):</label>
-                    <input type="text" id="mailbox-from" class="form-control" placeholder="Sender nickname">
-                    <label style="margin-top: 10px;">To (Recipient):</label>
-                    <input type="text" id="mailbox-to" class="form-control" placeholder="Recipient nickname">
-                    <label style="margin-top: 10px;">Message:</label>
-                    <textarea id="mailbox-message" class="form-control" rows="4" placeholder="Enter message..."></textarea>
-                </div>
-                <div class="modal-footer">
-                    <button class="btn btn-primary" id="btn-save-mailbox">Send</button>
-                    <button class="btn btn-default" id="btn-cancel-mailbox">Cancel</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
 </body>
-
-    <!-- Modal: Send Mailbox Message -->
-    <div id="modal-send-mailbox" class="modal" style="display: none;">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header"><h4>✉️ Send Message</h4></div>
-                <div class="modal-body">
-                    <label>From (Sender):</label>
-                    <input type="text" id="mailbox-from" class="form-control" placeholder="Sender nickname">
-                    <label style="margin-top: 10px;">To (Recipient):</label>
-                    <input type="text" id="mailbox-to" class="form-control" placeholder="Recipient nickname">
-                    <label style="margin-top: 10px;">Message:</label>
-                    <textarea id="mailbox-message" class="form-control" rows="4" placeholder="Enter message..."></textarea>
-                </div>
-                <div class="modal-footer">
-                    <button class="btn btn-primary" id="btn-save-mailbox">Send</button>
-                    <button class="btn btn-default" id="btn-cancel-mailbox">Cancel</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-</body></html>
+</html>

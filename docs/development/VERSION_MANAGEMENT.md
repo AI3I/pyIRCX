@@ -28,7 +28,7 @@ This document explains how version management works in pyIRCX and the tools avai
 
 1. **Read the checklist FIRST:**
    ```bash
-   Read /home/jdlewis/GitHub/pyIRCX/RELEASE_CHECKLIST.md
+   Read docs/development/RELEASE_CHECKLIST.md
    ```
 
 2. **Use the bump script:**

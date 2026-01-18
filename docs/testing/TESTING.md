@@ -16,14 +16,14 @@ pyIRCX includes **243 comprehensive tests** covering all major functionality:
 
 ### Core IRC/IRCX (5 suites, 206 tests)
 
-1. **testing/users.py** - 115 tests
+1. **tests/integration/users.py** - 115 tests
    - IRC protocol basics (NICK/USER/PING/PONG)
    - IRCX extensions (ISIRCX/WHISPER/LISTX/PROP)
    - User modes (+i/+w/+s/+o/+r/+x)
    - Channel operations
    - Error handling
 
-2. **testing/commands.py** - 28 tests
+2. **tests/integration/commands.py** - 28 tests
    - **JOIN** (4 tests): basic, owner mode, multiple users, channel key
    - **PART** (2 tests): basic, broadcast
    - **QUIT** (2 tests): disconnect, broadcast
@@ -39,17 +39,17 @@ pyIRCX includes **243 comprehensive tests** covering all major functionality:
    - **PING** (1 test): ping/pong
    - **MOTD** (1 test): message of the day
 
-3. **testing/staff.py** - 39 tests
+3. **tests/integration/staff.py** - 39 tests
    - Staff authentication (STAFF LOGIN/LOGOUT)
    - Privilege levels (ADMIN/SYSOP/GUIDE)
    - Staff management commands (ADD/DEL/PASS/LEVEL/LIST)
    - Permission enforcement
 
-4. **testing/links.py** - 4 tests
+4. **tests/integration/links.py** - 4 tests
    - Server linking (LINKS/CONNECT/SQUIT)
    - Network topology
 
-5. **testing/access.py** - 10 tests
+5. **tests/integration/access.py** - 10 tests
    - ACCESS command (OWNER/HOST/VOICE/DENY)
    - Server-level access (GRANT/DENY)
    - Wildcard patterns
@@ -57,7 +57,7 @@ pyIRCX includes **243 comprehensive tests** covering all major functionality:
 
 ### v1.1.5 Features (3 suites, 44 tests)
 
-6. **testing/stats.py** - 16 tests
+6. **tests/integration/stats.py** - 16 tests
    - STATS p (peak usage)
    - STATS f (flood protection)
    - STATS m (message statistics)
@@ -67,14 +67,14 @@ pyIRCX includes **243 comprehensive tests** covering all major functionality:
    - STATS k (ban statistics, no limits)
    - STATS * (comprehensive report, admin-only)
 
-7. **testing/help.py** - 15 tests
+7. **tests/integration/help.py** - 15 tests
    - HELP main menu
    - HELP REGISTER (new topic for v1.1.5)
    - HELP COMMANDS (with Registration category)
    - HELP CHANNEL, IRCX, USERMODES, CHANMODES, SERVICES
    - HELP STAFF (privilege-restricted)
 
-8. **testing/services.py** - 13 tests
+8. **tests/integration/services.py** - 13 tests
    - Registrar HELP command
    - ServiceBot HELP/STATUS commands
    - ServiceBot case-insensitive routing fix
@@ -115,7 +115,7 @@ No additional packages required for testing.
 Tests require staff accounts in the database. Run this once before testing:
 
 ```bash
-sudo python3 testing/setup_test_accounts.py
+sudo python3 tests/integration/setup_test_accounts.py
 ```
 
 This creates three test accounts:
@@ -187,8 +187,8 @@ Tests output results in real-time:
 
 Each test run creates a timestamped Markdown report:
 
-- **Report Location:** `testing/logs/test_run_<epoch>.md`
-- **Latest Symlink:** `testing/logs/latest.md`
+- **Report Location:** `tests/integration/logs/test_run_<epoch>.md`
+- **Latest Symlink:** `tests/integration/logs/latest.md`
 
 **Log Contents:**
 - Test environment details (hostname, Python version, pyIRCX version)
@@ -199,10 +199,10 @@ Each test run creates a timestamped Markdown report:
 
 **View Latest Report:**
 ```bash
-cat testing/logs/latest.md
+cat tests/integration/logs/latest.md
 
 # Or with markdown rendering:
-glow testing/logs/latest.md
+glow tests/integration/logs/latest.md
 ```
 
 ## Test Implementation Details
@@ -309,7 +309,7 @@ python3 pyircx.py
 **Solution:**
 ```bash
 # Create test accounts
-sudo python3 testing/setup_test_accounts.py
+sudo python3 tests/integration/setup_test_accounts.py
 
 # Verify accounts exist
 sqlite3 /opt/pyircx/pyircx.db "SELECT username, level FROM users WHERE username IN ('admin','sysop','guide')"
@@ -407,7 +407,7 @@ jobs:
           pip install bcrypt aiosqlite pyotp
       - name: Setup test accounts
         run: |
-          sudo python3 testing/setup_test_accounts.py
+          sudo python3 tests/integration/setup_test_accounts.py
       - name: Run tests
         run: |
           ./run_tests.sh
@@ -483,7 +483,7 @@ When contributing new features:
 
 If tests fail unexpectedly:
 
-1. Check `testing/logs/latest.md` for detailed results
+1. Check `tests/integration/logs/latest.md` for detailed results
 2. Review server logs: `journalctl -u pyircx -f`
 3. Verify test accounts exist in database
 4. Open an issue on GitHub with:

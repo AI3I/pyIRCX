@@ -24,7 +24,7 @@ You may not:
 
 All access, use, modification, and redistribution require explicit written permission from the copyright holder.
 
-Copyright © 2026 John D. Lewis. All rights reserved.
+Copyright © 2026 0x8007000E. All rights reserved.
 
 ---
 
@@ -95,11 +95,11 @@ Study the IRCX protocol, teach network programming, or research distributed chat
 
 ## Why pyIRCX?
 
-### The Only Open-Source IRCX Server with Server Linking
+### Full-Featured IRCX Server with Server Linking
 
-pyIRCX offers feature parity with commercial IRCX servers like [OfficeIRC](https://www.officeirc.com/), but as **open-source software** you can deploy anywhere. While OfficeIRC supports both IRCX and server linking, it's commercial/closed-source. UnrealIRCd and other major IRC servers support linking but lack IRCX protocol extensions.
+pyIRCX provides complete IRCX protocol support with distributed networking capabilities. Other servers like OfficeIRC support IRCX, while UnrealIRCd and other major IRC servers support linking but lack IRCX protocol extensions.
 
-**pyIRCX is the only open-source server combining full IRCX protocol support with server-to-server linking capabilities.**
+**pyIRCX combines full IRCX protocol support with server-to-server linking capabilities in a production-ready package.**
 
 *See detailed feature comparison below.*
 
@@ -187,7 +187,7 @@ pyIRCX implements the full IRCX specification developed by Microsoft:
 - **WHISPER command**: Private messages within channels
 - **LISTX command**: Extended channel listing with metadata
 - **KNOCK command**: Request invitation to invite-only channels
-- **CREATE command**: Create channels with initial modes
+- **CREATE command**: IRCX-compliant channel creation with initial modes (supports +mntikl, mode arguments, +c create-only flag)
 - **ISIRCX command**: Protocol capability detection
 
 ### Channel Cloning (Overflow Rooms)
@@ -350,7 +350,7 @@ pyIRCX implements defense-in-depth with multiple security layers:
 
 ```bash
 # Clone the repository
-git clone https://github.com/AI3I/pyIRCX.git
+git clone https://github.com/0x8007000E/pyIRCX.git
 cd pyIRCX
 
 # Automated installation (recommended)
@@ -547,8 +547,8 @@ python3 services.py     # 13 service improvements tests
 - **Total: 243 tests across 8 suites, 100% passing**
 
 **Automated Logging:**
-- Test reports saved as `testing/logs/test_run_<epoch>.md`
-- Latest report symlinked to `testing/logs/latest.md`
+- Test reports saved as `tests/integration/logs/test_run_<epoch>.md`
+- Latest report symlinked to `tests/integration/logs/latest.md`
 - Full test output captured for failure diagnosis
 
 See [TESTING.md](docs/testing/TESTING.md) for detailed test harness documentation and [TESTHARNESS.md](docs/testing/TESTHARNESS.md) for test harness implementation details.
@@ -687,8 +687,7 @@ Comprehensive comparison of pyIRCX with major IRC server implementations:
 | **Transcript Logging** | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | **Single-File Deploy** | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ |
 | **Web Admin** | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ |
-| **Open Source** | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **Cost** | Free | Commercial | Free | Free | Free | Free | Free | Free | Free | Free | Free |
+| **License** | Proprietary | Proprietary | GPL/BSD/MIT | GPL/BSD/MIT | GPL/BSD/MIT | GPL/BSD/MIT | GPL/BSD/MIT | GPL/BSD/MIT | GPL/BSD/MIT | GPL/BSD/MIT | GPL/BSD/MIT |
 
 *\* Requires external services package (Anope or Atheme)*
 
@@ -700,7 +699,7 @@ Comprehensive comparison of pyIRCX with major IRC server implementations:
 - **ircd-hybrid** - EFnet
 - **ngIRCd** - Lightweight/portable
 
-**pyIRCX is the only open-source server combining full IRCX protocol support with server-to-server linking capabilities.**
+**pyIRCX provides production-ready IRCX with server linking, comprehensive services, and enterprise features.**
 
 ---
 
@@ -748,7 +747,7 @@ Please open an issue or pull request on GitHub.
 
 ```bash
 # Clone the repository
-git clone https://github.com/AI3I/pyIRCX.git
+git clone https://github.com/0x8007000E/pyIRCX.git
 cd pyIRCX
 
 # Install dev dependencies
@@ -777,14 +776,14 @@ python3 -m py_compile pyircx.py linking.py
 ## Support
 
 - **Documentation**: See docs in this repository
-- **Issues**: [GitHub Issues](https://github.com/AI3I/pyIRCX/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/AI3I/pyIRCX/discussions)
+- **Issues**: [GitHub Issues](https://github.com/0x8007000E/pyIRCX/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/0x8007000E/pyIRCX/discussions)
 
 ---
 
 ## Keywords
 
-*For searchability: IRC server, IRCX server, IRCX protocol, Microsoft Exchange Chat, MECS, MSN Chat server, MSN Chat clone, TalkCity, Comic Chat server, Microsoft Comic Chat, chat server Python, asyncio IRC, self-hosted chat, open source IRC server, IRC with registration, NickServ alternative, ChanServ alternative, SASL IRC, channel cloning, overflow rooms, IRC flood protection, DNSBL IRC, IRC access control, enterprise chat server, team chat self-hosted, Slack alternative self-hosted, Discord alternative self-hosted, retro chat, vintage IRC, 90s chat, web chat server, IRC network, server linking, distributed IRC, IRC hub, IRC services, UnrealIRCd alternative, InspIRCd alternative*
+*For searchability: IRC server, IRCX server, IRCX protocol, Microsoft Exchange Chat, MECS, MSN Chat server, MSN Chat clone, TalkCity, Comic Chat server, Microsoft Comic Chat, chat server Python, asyncio IRC, self-hosted chat, IRC with registration, NickServ alternative, ChanServ alternative, SASL IRC, channel cloning, overflow rooms, IRC flood protection, DNSBL IRC, IRC access control, enterprise chat server, team chat self-hosted, Slack alternative self-hosted, Discord alternative self-hosted, retro chat, vintage IRC, 90s chat, web chat server, IRC network, server linking, distributed IRC, IRC hub, IRC services, UnrealIRCd alternative, InspIRCd alternative*
 
 ---
 

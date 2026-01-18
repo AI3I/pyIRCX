@@ -1957,8 +1957,8 @@ except Exception as e:
 ## Support
 
 For issues or questions:
-- GitHub Issues: https://github.com/anthropics/pyIRCX/issues
-- Documentation: /home/jdlewis/GitHub/pyIRCX/docs/
+- GitHub Issues: https://github.com/0x8007000E/pyIRCX/issues
+- Documentation: docs/
 
 ---
 

@@ -472,11 +472,13 @@ console.log("=== admin.js LOADING ===");
     }
 
     function loadAccessList() {
-        callAPI('server-access-list').then(data => {
-            if (data.error) {
-                $('#access-list').innerHTML = `<div class="alert alert-danger">${escapeHtml(data.error)}</div>`;
+        callAPI('server-access-list').then(response => {
+            if (response.error) {
+                $('#access-list').innerHTML = `<div class="alert alert-danger">${escapeHtml(response.error)}</div>`;
                 return;
             }
+
+            const data = response.data || [];
 
             // Filter out expired rules
             const activeRules = data.filter(r => !r.expired);
@@ -545,13 +547,16 @@ console.log("=== admin.js LOADING ===");
     }
 
     function loadNewsflash() {
-        callAPI('newsflash-list').then(data => {
-            if (data.error) {
-                $('#newsflash-list').innerHTML = `<div class="alert alert-danger">${escapeHtml(data.error)}</div>`;
+        callAPI('newsflash-list').then(response => {
+            if (response.error) {
+                $('#newsflash-list').innerHTML = `<div class="alert alert-danger">${escapeHtml(response.error)}</div>`;
                 return;
             }
+
+            const data = response.data || [];
+
             if (data.length === 0) {
-                $('#newsflash-list').innerHTML = '<p>No newsflash messages.</p>';
+                $('#newsflash-list').innerHTML = '<p>There are no NewsFlash messages.</p>';
                 return;
             }
             let html = '<table class="table table-striped table-bordered">';
@@ -626,13 +631,16 @@ console.log("=== admin.js LOADING ===");
 
 
     function loadMailbox() {
-        callAPI('mailbox-list', ['30']).then(data => {
-            if (data.error) {
-                $('#mailbox-list').innerHTML = `<div class="alert alert-danger">${escapeHtml(data.error)}</div>`;
+        callAPI('mailbox-list', ['30']).then(response => {
+            if (response.error) {
+                $('#mailbox-list').innerHTML = `<div class="alert alert-danger">${escapeHtml(response.error)}</div>`;
                 return;
             }
+
+            const data = response.data || [];
+
             if (data.length === 0) {
-                $('#mailbox-list').innerHTML = '<p>No mailbox messages.</p>';
+                $('#mailbox-list').innerHTML = '<p>There are no mailbox messages.</p>';
                 return;
             }
             let html = '<table class="table table-striped table-bordered">';
@@ -676,11 +684,14 @@ console.log("=== admin.js LOADING ===");
     }
 
     function loadStaff() {
-        callAPI('staff').then(data => {
-            if (data.error) {
-                $('#staff-list').innerHTML = `<div class="alert alert-danger">${escapeHtml(data.error)}</div>`;
+        callAPI('staff').then(response => {
+            if (response.error) {
+                $('#staff-list').innerHTML = `<div class="alert alert-danger">${escapeHtml(response.error)}</div>`;
                 return;
             }
+
+            const data = response.data || [];
+
             if (data.length === 0) {
                 $('#staff-list').innerHTML = '<p>No staff members.</p>';
                 return;
@@ -827,7 +838,7 @@ console.log("=== admin.js LOADING ===");
         nicksCurrentPage = page;
         const offset = (page - 1) * itemsPerPage;
 
-        callAPI('list-nicks-paginated', [itemsPerPage.toString(), offset.toString()]).then(response => {
+        callAPI('list-nicknames-paginated', [itemsPerPage.toString(), offset.toString()]).then(response => {
             if (response.error) {
                 $('#recent-registrations').innerHTML = `<div class="alert alert-danger">${escapeHtml(response.error)}</div>`;
                 return;
@@ -1387,6 +1398,7 @@ console.log("=== admin.js LOADING ===");
         const hostkey = $('#edit-channel-hostkey').value.trim();
         const ownerkey = $('#edit-channel-ownerkey').value.trim();
         const voicekey = $('#edit-channel-voicekey').value.trim();
+        const userLimit = $('#edit-channel-userlimit').value.trim();
 
         // Build modes string from checkboxes
         let modes = '';
@@ -1404,7 +1416,6 @@ console.log("=== admin.js LOADING ===");
             }
 
             // Add +l mode if user limit is specified
-            const userLimit = $('#edit-channel-userlimit').value.trim();
             if (userLimit && parseInt(userLimit) > 0) {
                 modesList.push('l');
             }
@@ -1417,12 +1428,12 @@ console.log("=== admin.js LOADING ===");
 
         // Check if any changes were made
         if (!owner && !description && !topic && !modes && !onjoin && !onpart &&
-            !memberkey && !hostkey && !ownerkey && !voicekey) {
+            !memberkey && !hostkey && !ownerkey && !voicekey && !userLimit) {
             showToast('Error', 'No changes specified', 'error');
             return;
         }
 
-        // Build args array with all parameters
+        // Build args array with all parameters (must match api.py parameter order)
         const args = [
             channelName,
             owner || '',
@@ -1434,7 +1445,8 @@ console.log("=== admin.js LOADING ===");
             memberkey || '',
             hostkey || '',
             ownerkey || '',
-            voicekey || ''
+            voicekey || '',
+            userLimit || ''
         ];
 
         callAPI('edit-channel', args).then(res => {
@@ -1516,13 +1528,16 @@ console.log("=== admin.js LOADING ===");
             $('#search-nicks-results').innerHTML = '';
             return;
         }
-        callAPI('search-nicks', [query]).then(data => {
-            if (data.error) {
-                $('#search-nicks-results').innerHTML = `<div class="alert alert-danger">${escapeHtml(data.error)}</div>`;
+        callAPI('search-nicknames', [query]).then(response => {
+            if (response.error) {
+                $('#search-nicks-results').innerHTML = `<div class="alert alert-danger">${escapeHtml(response.error)}</div>`;
                 return;
             }
+
+            const data = response.data || [];
+
             if (data.length === 0) {
-                $('#search-nicks-results').innerHTML = '<p>No results.</p>';
+                $('#search-nicks-results').innerHTML = '<p>No registered nicknames match your search.</p>';
                 return;
             }
             let html = '<table class="table table-striped table-bordered">';
@@ -1545,13 +1560,16 @@ console.log("=== admin.js LOADING ===");
             $('#search-channels-results').innerHTML = '';
             return;
         }
-        callAPI('search-channels', [query]).then(data => {
-            if (data.error) {
-                $('#search-channels-results').innerHTML = `<div class="alert alert-danger">${escapeHtml(data.error)}</div>`;
+        callAPI('search-channels', [query]).then(response => {
+            if (response.error) {
+                $('#search-channels-results').innerHTML = `<div class="alert alert-danger">${escapeHtml(response.error)}</div>`;
                 return;
             }
+
+            const data = response.data || [];
+
             if (data.length === 0) {
-                $('#search-channels-results').innerHTML = '<p>No results.</p>';
+                $('#search-channels-results').innerHTML = '<p>No registered channels match your search.</p>';
                 return;
             }
             let html = '<table class="table table-striped table-bordered">';
@@ -2039,8 +2057,15 @@ console.log("=== admin.js LOADING ===");
 
     // Configuration form management
     let currentConfig = null;
+    let configFormInitialized = false;
 
     function initConfigForm() {
+        // Prevent duplicate initialization
+        if (configFormInitialized) {
+            return;
+        }
+        configFormInitialized = true;
+
         // Tab switching
         $$('.config-tab').forEach(tab => {
             tab.addEventListener('click', function() {
@@ -2233,8 +2258,10 @@ console.log("=== admin.js LOADING ===");
             // Determine database path: custom if provided, otherwise auto-generate
             const dbPath = customDbPath || `pyircx_${branchName.split('.')[0]}.db`;
 
-            // Generate comprehensive branch config
+            // Generate comprehensive branch config (order matches template)
             const branchConfig = {
+                "_comment": `Branch server configuration for ${branchName} - Generated ${new Date().toISOString()}`,
+
                 "server": {
                     "name": branchName,
                     "network": networkName,
@@ -2247,59 +2274,49 @@ console.log("=== admin.js LOADING ===");
                         "",
                         "Please be respectful of other users.",
                         "Type /help for available commands."
-                    ],
-                    "restrict_to_staff_only": false
+                    ]
                 },
+
                 "network": {
                     "listen_addr": "0.0.0.0",
                     "listen_ports": clientPorts,
                     "enable_ipv6": trunkConfig.network?.enable_ipv6 || false,
                     "resolve_hostnames": trunkConfig.network?.resolve_hostnames !== undefined ? trunkConfig.network.resolve_hostnames : true
                 },
-                "database": {
-                    "path": dbPath,
-                    "pool_size": trunkConfig.database?.pool_size || 10
+
+                "admin": trunkConfig.admin || {
+                    "loc1": "pyIRCX Branch Administration",
+                    "loc2": "Network Operations",
+                    "email": "admin@" + branchName,
+                    "default_username": "admin",
+                    "default_password": "changeme"
                 },
-                "system": trunkConfig.system || {
-                    "nick": "System",
-                    "ident": "System"
-                },
-                "transcript": trunkConfig.transcript || {
-                    "enabled": true,
-                    "directory": "transcripts",
-                    "max_lines": 10000,
-                    "format": "[{timestamp}] {event}"
-                },
+
                 "limits": trunkConfig.limits || {
                     "max_users": 10000,
-                    "msg_length": 512,
-                    "nick_change_cooldown": 60,
+                    "max_channels": 2500,
+                    "max_channels_per_user": 20,
                     "max_nick_length": 30,
                     "max_user_length": 30,
                     "max_channel_length": 50,
-                    "max_channels": 2500,
-                    "max_channels_per_user": 20
+                    "msg_length": 512,
+                    "nick_change_cooldown": 60
                 },
-                "services": {
-                    "enabled": true,
-                    "mode": "centralized",
-                    "is_services_hub": false,
-                    "hub_server": trunkName,
-                    "servicebot_count": 0,
-                    "servicebot_max_channels": 10
-                },
-                "security": trunkConfig.security || {
-                    "flood_messages": 5,
-                    "flood_window": 2.0,
-                    "connection_throttle": 100,
-                    "throttle_window": 60.0,
-                    "enable_flood_protection": true,
-                    "enable_connection_throttle": false,
-                    "cap_timeout": 60,
-                    "auth_max_attempts": 5,
-                    "auth_lockout_duration": 300,
-                    "auth_lockout_window": 600,
-                    "dnsbl": {
+
+                "security": {
+                    "auth_require_ssl": trunkConfig.security?.auth_require_ssl !== undefined ? trunkConfig.security.auth_require_ssl : true,
+                    "pass_require_ssl": trunkConfig.security?.pass_require_ssl !== undefined ? trunkConfig.security.pass_require_ssl : false,
+                    "cap_timeout": trunkConfig.security?.cap_timeout || 60,
+                    "auth_max_attempts": trunkConfig.security?.auth_max_attempts || 5,
+                    "auth_lockout_duration": trunkConfig.security?.auth_lockout_duration || 300,
+                    "auth_lockout_window": trunkConfig.security?.auth_lockout_window || 600,
+                    "enable_flood_protection": trunkConfig.security?.enable_flood_protection !== undefined ? trunkConfig.security.enable_flood_protection : true,
+                    "flood_messages": trunkConfig.security?.flood_messages || 5,
+                    "flood_window": trunkConfig.security?.flood_window || 2.0,
+                    "enable_connection_throttle": trunkConfig.security?.enable_connection_throttle || false,
+                    "connection_throttle": trunkConfig.security?.connection_throttle || 100,
+                    "throttle_window": trunkConfig.security?.throttle_window || 60.0,
+                    "dnsbl": trunkConfig.security?.dnsbl || {
                         "enabled": false,
                         "action": "reject",
                         "timeout": 3.0,
@@ -2312,13 +2329,13 @@ console.log("=== admin.js LOADING ===");
                         "whitelist": [],
                         "reject_message": "Your IP is listed in a DNS blacklist. Please contact network staff."
                     },
-                    "proxy_detection": {
+                    "proxy_detection": trunkConfig.security?.proxy_detection || {
                         "enabled": false,
                         "ports": [8080, 3128, 1080, 9050],
                         "timeout": 2.0,
                         "action": "warn"
                     },
-                    "connection_scoring": {
+                    "connection_scoring": trunkConfig.security?.connection_scoring || {
                         "enabled": false,
                         "threshold": 100,
                         "dnsbl_score": 50,
@@ -2331,10 +2348,21 @@ console.log("=== admin.js LOADING ===");
                         "hosts": {}
                     }
                 },
-                "persistence": trunkConfig.persistence || {
-                    "auto_save": true,
-                    "save_interval": 300
+
+                "services": {
+                    "enabled": true,
+                    "mode": "centralized",
+                    "is_services_hub": false,
+                    "hub_server": trunkName,
+                    "servicebot_count": 0,
+                    "servicebot_max_channels": 10
                 },
+
+                "system": trunkConfig.system || {
+                    "nick": "System",
+                    "ident": "System"
+                },
+
                 "servicebot": trunkConfig.servicebot || {
                     "enabled": true,
                     "profanity_filter": {
@@ -2360,13 +2388,7 @@ console.log("=== admin.js LOADING ===");
                         "repeat_action": "warn"
                     }
                 },
-                "admin": trunkConfig.admin || {
-                    "loc1": "pyIRCX Branch Administration",
-                    "loc2": "Network Operations",
-                    "email": "admin@" + branchName,
-                    "default_username": "admin",
-                    "default_password": "changeme"
-                },
+
                 "ssl": {
                     "enabled": false,
                     "ports": trunkConfig.ssl?.ports || [6697],
@@ -2377,6 +2399,7 @@ console.log("=== admin.js LOADING ===");
                     "reload_interval": trunkConfig.ssl?.reload_interval || 3600,
                     "expiry_warn_days": trunkConfig.ssl?.expiry_warn_days || [14, 7, 3, 1]
                 },
+
                 "linking": {
                     "enabled": true,
                     "server_role": "branch",
@@ -2390,19 +2413,25 @@ console.log("=== admin.js LOADING ===");
                             "password": linkPassword,
                             "autoconnect": true
                         }
-                    ]
+                    ],
+                    "_comment": "Branch server (leaf node) - connects to trunk for services and network coordination"
                 },
-                "webadmin": {
-                    "enabled": false
+
+                "database": {
+                    "path": dbPath,
+                    "pool_size": trunkConfig.database?.pool_size || 10
                 },
-                "comments": {
-                    "info": `Branch server configuration for ${branchName}`,
-                    "generated": new Date().toISOString(),
-                    "trunk_server": trunkName,
-                    "server_role": "Branch server (leaf node) - connects to trunk for services and network coordination",
-                    "ssl_note": "SSL is disabled by default. Update cert_file and key_file paths if needed, then set enabled: true",
-                    "database_note": `Database file: ${dbPath}`,
-                    "services_note": "Services are centralized on trunk server - this branch has servicebot_count: 0"
+
+                "transcript": trunkConfig.transcript || {
+                    "enabled": true,
+                    "directory": "transcripts",
+                    "max_lines": 10000,
+                    "format": "[{timestamp}] {event}"
+                },
+
+                "persistence": trunkConfig.persistence || {
+                    "auto_save": true,
+                    "save_interval": 300
                 }
             };
 

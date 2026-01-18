@@ -3,6 +3,7 @@
 
 # Log files
 *.log
+*.out
 
 # Python cache
 __pycache__/
@@ -26,6 +27,7 @@ transcripts/
 # Temporary files
 *.tmp
 *.bak
+*.backup
 *~
 
 # Exported conversations
@@ -33,6 +35,18 @@ transcripts/
 
 # Test configurations
 pyircx_config_server*.json
+config_trunk.json
+config_branch*.json
+start_servers.sh
+
+# Session/development tracking files
+SESSION_*.md
+*_PROGRESS.md
+*_CHECKLIST.md
+*_IMPLEMENTATION.md
+*_INVESTIGATION.md
+*_IMPROVEMENTS.md
+SESSION_NOTES_*.md
 
 # Runtime status files
 *_status.json
