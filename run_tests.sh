@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# pyIRCX Test Runner v1.1.5
+# pyIRCX Test Runner v2.0.0
 # Automated test execution with server management
 #
 

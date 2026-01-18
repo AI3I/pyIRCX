@@ -2,8 +2,8 @@
 #
 # pyIRCX Upgrade Script
 #
-# Intelligently upgrades an existing installation to the latest version
-# Version 1.1.7 - Documentation, SELinux, WebChat Config
+# Upgrades an existing installation to the latest version
+# Version 2.0.0
 #
 set -e
 
@@ -23,7 +23,7 @@ SERVICE_GROUP="pyircx"
 
 echo ""
 echo "========================================"
-echo "  pyIRCX Upgrade Script v1.1.7"
+echo "  pyIRCX Upgrade Script v2.0.0"
 echo "========================================"
 echo ""
 
@@ -53,11 +53,9 @@ NEEDS_LINKING_PY=0
 NEEDS_API_PY=0
 NEEDS_SYSTEMD_UPDATE=0
 NEEDS_WEB_ADMIN=0
-NEEDS_DB_MIGRATION=0
 NEEDS_SELINUX=0
 NEEDS_POLKIT=0
 NEEDS_APACHE_SETUP=0
-NEEDS_COCKPIT_REMOVAL=0
 NEEDS_WEBCHAT_UPDATE=0
 WEBCHAT_SERVICE_WAS_RUNNING=0
 SERVICE_WAS_RUNNING=0
@@ -67,6 +65,48 @@ if systemctl is-active --quiet pyircx 2>/dev/null; then
     SERVICE_WAS_RUNNING=1
     echo -e "${YELLOW}Service is currently running${NC}"
 fi
+
+# Check version consistency
+echo ""
+echo -e "${BLUE}Checking version consistency...${NC}"
+if [ -f "$INSTALL_DIR/pyircx.py" ]; then
+    INSTALLED_VERSION=$(grep "__version__" "$INSTALL_DIR/pyircx.py" | head -1 | cut -d'"' -f2)
+    echo -e "${GREEN}Currently installed version: $INSTALLED_VERSION${NC}"
+
+    if [ -f "$SCRIPT_DIR/pyircx.py" ]; then
+        NEW_VERSION=$(grep "__version__" "$SCRIPT_DIR/pyircx.py" | head -1 | cut -d'"' -f2)
+        echo -e "${GREEN}Upgrade package version: $NEW_VERSION${NC}"
+
+        # Check if webadmin and webchat versions match in upgrade package
+        VERSION_ISSUES=0
+
+        if [ -f "$SCRIPT_DIR/webadmin/index.php" ]; then
+            WEBADMIN_VER=$(grep -o "pyIRCX v[0-9]\+\.[0-9]\+\.[0-9]\+" "$SCRIPT_DIR/webadmin/index.php" | head -1 | sed 's/pyIRCX v//')
+            if [ "$NEW_VERSION" != "$WEBADMIN_VER" ]; then
+                echo -e "${YELLOW}⚠ Upgrade package webadmin version mismatch: $WEBADMIN_VER${NC}"
+                VERSION_ISSUES=1
+            fi
+        fi
+
+        if [ -f "$SCRIPT_DIR/webchat/index.html" ]; then
+            WEBCHAT_VER=$(grep -o "v[0-9]\+\.[0-9]\+\.[0-9]\+</span>" "$SCRIPT_DIR/webchat/index.html" | head -1 | sed 's/v\(.*\)<\/span>/\1/')
+            if [ "$NEW_VERSION" != "$WEBCHAT_VER" ]; then
+                echo -e "${YELLOW}⚠ Upgrade package webchat version mismatch: $WEBCHAT_VER${NC}"
+                VERSION_ISSUES=1
+            fi
+        fi
+
+        if [ $VERSION_ISSUES -eq 1 ]; then
+            echo -e "${YELLOW}Warning: Version inconsistencies detected in upgrade package${NC}"
+            read -p "Continue with upgrade anyway? (y/n) " -n 1 -r
+            echo
+            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                exit 1
+            fi
+        fi
+    fi
+fi
+echo ""
 
 # Check for linking.py
 if [ ! -f "$INSTALL_DIR/linking.py" ]; then
@@ -84,47 +124,12 @@ else
     echo -e "${GREEN}✓ api.py in correct location${NC}"
 fi
 
-# Check for Cockpit installation (needs removal in v1.1.0)
-if [ -d /usr/share/cockpit/pyircx ] || [ -d ~/.local/share/cockpit/pyircx ]; then
-    echo -e "${YELLOW}✗ Cockpit module detected (will be removed in v1.1.0)${NC}"
-    NEEDS_COCKPIT_REMOVAL=1
-fi
-
 # Check for Web Admin Panel
 if [ ! -d "$WEB_ADMIN_DIR" ]; then
     echo -e "${YELLOW}✗ Web Administration Panel not installed${NC}"
     NEEDS_WEB_ADMIN=1
 else
     echo -e "${GREEN}✓ Web Administration Panel installed${NC}"
-fi
-
-# Check database schema for v1.1.0 columns
-if [ -f "$INSTALL_DIR/pyircx.db" ]; then
-    # Ensure sqlite3 is available
-    if ! command -v sqlite3 &>/dev/null; then
-        echo -e "${YELLOW}✗ sqlite3 not installed (needed for database migration)${NC}"
-        NEEDS_DB_MIGRATION=1
-    else
-        HAS_CREATED_AT=$(sqlite3 "$INSTALL_DIR/pyircx.db" "PRAGMA table_info(users);" 2>/dev/null | grep -c "|created_at|")
-        HAS_LAST_LOGIN=$(sqlite3 "$INSTALL_DIR/pyircx.db" "PRAGMA table_info(users);" 2>/dev/null | grep -c "|last_login|")
-        HAS_REGISTERED_NICK=$(sqlite3 "$INSTALL_DIR/pyircx.db" "PRAGMA table_info(users);" 2>/dev/null | grep -c "|registered_nick|")
-        HAS_EMAIL_COL=$(sqlite3 "$INSTALL_DIR/pyircx.db" "PRAGMA table_info(users);" 2>/dev/null | grep -c "|email|")
-        HAS_TIMEOUT_COL=$(sqlite3 "$INSTALL_DIR/pyircx.db" "PRAGMA table_info(server_access);" 2>/dev/null | grep -c "|timeout|")
-
-        # Ensure we got valid integers (grep -c should never fail, but handle empty/error cases)
-        HAS_CREATED_AT=${HAS_CREATED_AT:-0}
-        HAS_LAST_LOGIN=${HAS_LAST_LOGIN:-0}
-        HAS_REGISTERED_NICK=${HAS_REGISTERED_NICK:-0}
-        HAS_EMAIL_COL=${HAS_EMAIL_COL:-0}
-        HAS_TIMEOUT_COL=${HAS_TIMEOUT_COL:-0}
-
-        if [ "$HAS_CREATED_AT" -eq 0 ] || [ "$HAS_LAST_LOGIN" -eq 0 ] || [ "$HAS_REGISTERED_NICK" -eq 0 ] || [ "$HAS_EMAIL_COL" -eq 0 ] || [ "$HAS_TIMEOUT_COL" -eq 0 ]; then
-            echo -e "${YELLOW}✗ Database needs migration to v1.1.0 schema${NC}"
-            NEEDS_DB_MIGRATION=1
-        else
-            echo -e "${GREEN}✓ Database schema up to date${NC}"
-        fi
-    fi
 fi
 
 # Check for SELinux policies
@@ -187,7 +192,7 @@ if [ -d "$INSTALL_DIR/webchat" ]; then
 fi
 
 # Calculate total updates needed
-TOTAL_UPDATES=$((NEEDS_LINKING_PY + NEEDS_API_PY + NEEDS_SYSTEMD_UPDATE + NEEDS_WEB_ADMIN + NEEDS_DB_MIGRATION + NEEDS_SELINUX + NEEDS_POLKIT + NEEDS_APACHE_SETUP + NEEDS_COCKPIT_REMOVAL + NEEDS_WEBCHAT_UPDATE))
+TOTAL_UPDATES=$((NEEDS_LINKING_PY + NEEDS_API_PY + NEEDS_SYSTEMD_UPDATE + NEEDS_WEB_ADMIN + NEEDS_SELINUX + NEEDS_POLKIT + NEEDS_APACHE_SETUP + NEEDS_WEBCHAT_UPDATE))
 
 echo ""
 if [ $TOTAL_UPDATES -eq 0 ]; then
@@ -254,7 +259,7 @@ if [ $NEEDS_API_PY -eq 1 ]; then
         echo -e "${GREEN}✓ Installed api.py to /opt/pyircx${NC}"
     elif [ -f /usr/share/cockpit/pyircx/api.py ]; then
         cp /usr/share/cockpit/pyircx/api.py "$INSTALL_DIR/"
-        echo -e "${GREEN}✓ Moved api.py from Cockpit to /opt/pyircx${NC}"
+        echo -e "${GREEN}✓ Moved api.py to /opt/pyircx${NC}"
     fi
 fi
 
@@ -282,36 +287,6 @@ if [ $NEEDS_SYSTEMD_UPDATE -eq 1 ] || [ -f "$SCRIPT_DIR/pyircx.service" ]; then
     cp "$SCRIPT_DIR/pyircx.service" /etc/systemd/system/
     systemctl daemon-reload
     echo -e "${GREEN}✓ Systemd service updated${NC}"
-fi
-
-# Database Migration
-if [ $NEEDS_DB_MIGRATION -eq 1 ]; then
-    echo ""
-    echo -e "${BLUE}Running database migration...${NC}"
-
-    # Install sqlite if not present
-    if ! command -v sqlite3 &>/dev/null; then
-        echo -e "${YELLOW}Installing sqlite for database migration...${NC}"
-        if command -v dnf &> /dev/null; then
-            dnf install -y sqlite >/dev/null 2>&1
-        elif command -v apt-get &> /dev/null; then
-            apt-get install -y sqlite3 >/dev/null 2>&1
-        elif command -v yum &> /dev/null; then
-            yum install -y sqlite >/dev/null 2>&1
-        elif command -v pacman &> /dev/null; then
-            pacman -S --noconfirm sqlite >/dev/null 2>&1
-        fi
-
-        if command -v sqlite3 &>/dev/null; then
-            echo -e "${GREEN}✓ sqlite installed${NC}"
-        else
-            echo -e "${RED}✗ Failed to install sqlite${NC}"
-            echo -e "${YELLOW}⚠ Please install sqlite manually and re-run upgrade${NC}"
-        fi
-    fi
-
-    echo -e "${BLUE}Database migrations are handled automatically by pyircx.py on startup${NC}"
-    echo -e "${GREEN}✓ Database schema will be migrated automatically on next restart${NC}"
 fi
 
 # Install or Update Web Admin Panel
@@ -480,32 +455,6 @@ if [ $NEEDS_APACHE_SETUP -eq 1 ]; then
     fi
 fi
 
-# Remove Cockpit Module
-if [ $NEEDS_COCKPIT_REMOVAL -eq 1 ]; then
-    echo ""
-    echo -e "${BLUE}Removing Cockpit module...${NC}"
-
-    # Remove system-wide installation
-    if [ -d /usr/share/cockpit/pyircx ]; then
-        rm -rf /usr/share/cockpit/pyircx
-        echo -e "${GREEN}✓ Removed system-wide Cockpit module${NC}"
-    fi
-
-    # Remove user installation
-    if [ -d ~/.local/share/cockpit/pyircx ]; then
-        rm -rf ~/.local/share/cockpit/pyircx
-        echo -e "${GREEN}✓ Removed user Cockpit module${NC}"
-    fi
-
-    # Remove Cockpit admin token (no longer needed)
-    if [ -f /etc/pyircx/cockpit_admin_token ]; then
-        rm -f /etc/pyircx/cockpit_admin_token
-        echo -e "${GREEN}✓ Removed obsolete Cockpit token${NC}"
-    fi
-
-    echo -e "${YELLOW}  Note: Cockpit has been replaced with Web Admin Panel${NC}"
-fi
-
 # Update WebChat installation
 if [ $NEEDS_WEBCHAT_UPDATE -eq 1 ] && [ -d "$SCRIPT_DIR/webchat" ]; then
     echo ""
@@ -630,19 +579,12 @@ echo "Configuration: $CONFIG_DIR"
 echo ""
 
 if [ $NEEDS_WEB_ADMIN -eq 1 ]; then
-    echo "🎉 NEW in v1.1.0: Web Administration Panel"
+    echo "Web Administration Panel"
     echo "  Access at: http://your-server/webadmin/"
     echo "  Login with: ADMIN level staff account"
     echo ""
     echo "  Set staff password:"
     echo "    python3 $INSTALL_DIR/api.py change-staff-password <username> <password>"
-    echo ""
-fi
-
-if [ $NEEDS_COCKPIT_REMOVAL -eq 1 ]; then
-    echo "📋 Cockpit module has been replaced"
-    echo "  Old: Cockpit at :9090"
-    echo "  New: Web Admin at /webadmin/"
     echo ""
 fi
 
@@ -652,4 +594,4 @@ echo "  systemctl start pyircx    - Start server"
 echo "  systemctl restart pyircx  - Restart server"
 echo "  journalctl -u pyircx -f   - View logs"
 echo ""
-echo -e "${GREEN}pyIRCX v1.1.7 - All done!${NC}"
+echo -e "${GREEN}pyIRCX v2.0.0 - Upgrade complete!${NC}"

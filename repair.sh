@@ -47,6 +47,46 @@ FIXES_APPLIED=0
 echo -e "${BLUE}Running validation checks...${NC}"
 echo ""
 
+# Check 0: Version consistency
+echo "=== Checking Version Consistency ==="
+if [ -f "$INSTALL_DIR/pyircx.py" ]; then
+    PYIRCX_VERSION=$(grep "__version__" "$INSTALL_DIR/pyircx.py" | head -1 | cut -d'"' -f2)
+    echo -e "${GREEN}pyircx.py version: $PYIRCX_VERSION${NC}"
+
+    # Check webadmin/index.php
+    if [ -f "/var/www/html/webadmin/index.php" ]; then
+        WEBADMIN_VER=$(grep -o "pyIRCX v[0-9]\+\.[0-9]\+\.[0-9]\+" /var/www/html/webadmin/index.php | head -1 | sed 's/pyIRCX v//')
+        if [ "$PYIRCX_VERSION" != "$WEBADMIN_VER" ]; then
+            echo -e "${YELLOW}⚠${NC} webadmin/index.php version mismatch: $WEBADMIN_VER (expected $PYIRCX_VERSION)"
+            ((ISSUES_FOUND++))
+        else
+            echo -e "${GREEN}✓${NC} webadmin/index.php version matches"
+        fi
+    fi
+
+    # Check webchat/index.html
+    WEBCHAT_LOCATIONS=(
+        "/var/www/html/webchat/index.html"
+        "/usr/share/nginx/html/webchat/index.html"
+    )
+    for location in "${WEBCHAT_LOCATIONS[@]}"; do
+        if [ -f "$location" ]; then
+            WEBCHAT_VER=$(grep -o "v[0-9]\+\.[0-9]\+\.[0-9]\+</span>" "$location" | head -1 | sed 's/v\(.*\)<\/span>/\1/')
+            if [ "$PYIRCX_VERSION" != "$WEBCHAT_VER" ]; then
+                echo -e "${YELLOW}⚠${NC} webchat/index.html version mismatch: $WEBCHAT_VER (expected $PYIRCX_VERSION)"
+                ((ISSUES_FOUND++))
+            else
+                echo -e "${GREEN}✓${NC} webchat/index.html version matches"
+            fi
+            break
+        fi
+    done
+else
+    echo -e "${RED}✗${NC} pyircx.py not found, cannot check version"
+    ((ISSUES_FOUND++))
+fi
+echo ""
+
 # Check 1: Required files exist
 echo "=== Checking Required Files ==="
 REQUIRED_FILES=(

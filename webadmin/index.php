@@ -94,7 +94,7 @@ $csrf_token = $_SESSION['csrf_token'];
                     <span class="nav-label">Logout</span>
                 </a>
                 <div style="padding: 15px; text-align: center; font-size: 11px; opacity: 0.6; margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.1);">
-                    pyIRCX v1.2.0
+                    pyIRCX v2.0.0
                 </div>
             </nav>
         </aside>

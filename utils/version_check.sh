@@ -22,6 +22,10 @@ fi
 VERSION=$(grep "__version__" pyircx.py | head -1 | cut -d'"' -f2)
 echo -e "${GREEN}Current version in pyircx.py: ${VERSION}${NC}"
 
+# Check __created__ timestamp
+CREATED=$(grep "__created__" pyircx.py | head -1 | cut -d'"' -f2)
+echo -e "${GREEN}Created timestamp: ${CREATED}${NC}"
+
 # If expected version provided, compare
 if [ ! -z "$1" ]; then
     if [ "$VERSION" != "$1" ]; then
@@ -58,6 +62,45 @@ if [ -f "README.md" ]; then
     fi
 else
     echo -e "${YELLOW}⚠ README.md not found${NC}"
+fi
+
+# Check install.sh for version
+echo -e "\n${BLUE}=== Checking install.sh ===${NC}"
+if [ -f "install.sh" ]; then
+    INSTALL_VER=$(grep "INSTALL_VERSION=" install.sh | head -1 | cut -d'"' -f2)
+    if [ "$INSTALL_VER" = "$VERSION" ]; then
+        echo -e "${GREEN}✓ install.sh version matches: $INSTALL_VER${NC}"
+    else
+        echo -e "${RED}✗ install.sh version mismatch: $INSTALL_VER (expected $VERSION)${NC}"
+    fi
+else
+    echo -e "${YELLOW}⚠ install.sh not found${NC}"
+fi
+
+# Check webadmin/index.php for version
+echo -e "\n${BLUE}=== Checking webadmin/index.php ===${NC}"
+if [ -f "webadmin/index.php" ]; then
+    WEBADMIN_VER=$(grep -o "pyIRCX v[0-9]\+\.[0-9]\+\.[0-9]\+" webadmin/index.php | head -1 | sed 's/pyIRCX v//')
+    if [ "$WEBADMIN_VER" = "$VERSION" ]; then
+        echo -e "${GREEN}✓ webadmin/index.php version matches: $WEBADMIN_VER${NC}"
+    else
+        echo -e "${RED}✗ webadmin/index.php version mismatch: $WEBADMIN_VER (expected $VERSION)${NC}"
+    fi
+else
+    echo -e "${YELLOW}⚠ webadmin/index.php not found${NC}"
+fi
+
+# Check webchat/index.html for version
+echo -e "\n${BLUE}=== Checking webchat/index.html ===${NC}"
+if [ -f "webchat/index.html" ]; then
+    WEBCHAT_VER=$(grep -o "v[0-9]\+\.[0-9]\+\.[0-9]\+</span>" webchat/index.html | head -1 | sed 's/v\(.*\)<\/span>/\1/')
+    if [ "$WEBCHAT_VER" = "$VERSION" ]; then
+        echo -e "${GREEN}✓ webchat/index.html version matches: $WEBCHAT_VER${NC}"
+    else
+        echo -e "${RED}✗ webchat/index.html version mismatch: $WEBCHAT_VER (expected $VERSION)${NC}"
+    fi
+else
+    echo -e "${YELLOW}⚠ webchat/index.html not found${NC}"
 fi
 
 # Check for inconsistent version numbers
@@ -141,6 +184,9 @@ echo -e "Ready for release: "
 ISSUES=0
 [ ! -f "$RELEASE_FILE" ] && ((ISSUES++))
 [ "$BARE_EXCEPTS" -gt 0 ] && ((ISSUES++))
+[ "$INSTALL_VER" != "$VERSION" ] && ((ISSUES++))
+[ "$WEBADMIN_VER" != "$VERSION" ] && ((ISSUES++))
+[ "$WEBCHAT_VER" != "$VERSION" ] && ((ISSUES++))
 
 if [ $ISSUES -eq 0 ]; then
     echo -e "${GREEN}✓ All checks passed!${NC}"

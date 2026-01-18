@@ -10,9 +10,12 @@ This document ensures nothing is missed during version releases.
 
 Update version in ALL of these locations:
 
-- [ ] `pyircx.py` - Lines 25-27 (`__version__`, `__version_label__`, `__created__`)
+- [ ] `pyircx.py` - Lines 10-12 (`__version__`, `__version_label__`, `__created__`)
 - [ ] `README.md` - Version badges and latest version mentions
 - [ ] `CHANGELOG.md` - Add new version section (if exists)
+- [ ] `install.sh` - Line 64 (`INSTALL_VERSION`)
+- [ ] `webadmin/index.php` - Line 97 (version display in sidebar)
+- [ ] `webchat/index.html` - Line 216 (version display in header)
 - [ ] Create new `RELEASE_v{VERSION}.md` file
 
 **Search commands to find version references:**

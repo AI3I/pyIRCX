@@ -61,7 +61,7 @@ save_install_config() {
 
 # Installation metadata
 INSTALL_DATE="$(date +%Y-%m-%d)"
-INSTALL_VERSION="1.3.0-dev"
+INSTALL_VERSION="2.0.0"
 INSTALL_USER="$USER"
 
 # Core installation paths
@@ -192,6 +192,62 @@ prompt_webchat_path() {
             echo -e "${GREEN}WebChat will be installed to: $WEBCHAT_WEB_DIR (default)${NC}"
             ;;
     esac
+}
+
+# Check version consistency across project files
+check_version_consistency() {
+    echo -e "${YELLOW}Checking version consistency...${NC}"
+
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    VERSION_ISSUES=0
+
+    # Get version from pyircx.py
+    if [ -f "$SCRIPT_DIR/pyircx.py" ]; then
+        PYIRCX_VERSION=$(grep "__version__" "$SCRIPT_DIR/pyircx.py" | head -1 | cut -d'"' -f2)
+        echo -e "${GREEN}  pyircx.py version: $PYIRCX_VERSION${NC}"
+
+        # Check against INSTALL_VERSION
+        if [ "$PYIRCX_VERSION" != "$INSTALL_VERSION" ]; then
+            echo -e "${RED}  ✗ Version mismatch: install.sh has $INSTALL_VERSION${NC}"
+            VERSION_ISSUES=$((VERSION_ISSUES + 1))
+        else
+            echo -e "${GREEN}  ✓ install.sh version matches${NC}"
+        fi
+
+        # Check webadmin/index.php
+        if [ -f "$SCRIPT_DIR/webadmin/index.php" ]; then
+            WEBADMIN_VER=$(grep -o "pyIRCX v[0-9]\+\.[0-9]\+\.[0-9]\+" "$SCRIPT_DIR/webadmin/index.php" | head -1 | sed 's/pyIRCX v//')
+            if [ "$PYIRCX_VERSION" != "$WEBADMIN_VER" ]; then
+                echo -e "${RED}  ✗ Version mismatch: webadmin/index.php has $WEBADMIN_VER${NC}"
+                VERSION_ISSUES=$((VERSION_ISSUES + 1))
+            else
+                echo -e "${GREEN}  ✓ webadmin/index.php version matches${NC}"
+            fi
+        fi
+
+        # Check webchat/index.html
+        if [ -f "$SCRIPT_DIR/webchat/index.html" ]; then
+            WEBCHAT_VER=$(grep -o "v[0-9]\+\.[0-9]\+\.[0-9]\+</span>" "$SCRIPT_DIR/webchat/index.html" | head -1 | sed 's/v\(.*\)<\/span>/\1/')
+            if [ "$PYIRCX_VERSION" != "$WEBCHAT_VER" ]; then
+                echo -e "${RED}  ✗ Version mismatch: webchat/index.html has $WEBCHAT_VER${NC}"
+                VERSION_ISSUES=$((VERSION_ISSUES + 1))
+            else
+                echo -e "${GREEN}  ✓ webchat/index.html version matches${NC}"
+            fi
+        fi
+
+        if [ $VERSION_ISSUES -gt 0 ]; then
+            echo -e "${YELLOW}  ⚠ Found $VERSION_ISSUES version inconsistency issue(s)${NC}"
+            echo -e "${YELLOW}  This may indicate the installation files need to be updated${NC}"
+            read -p "Continue anyway? (y/n) " -n 1 -r
+            echo
+            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                exit 1
+            fi
+        fi
+    else
+        echo -e "${YELLOW}  ⚠ pyircx.py not found, skipping version check${NC}"
+    fi
 }
 
 # Check Python version
@@ -743,6 +799,7 @@ main() {
 
     check_root
     check_python
+    check_version_consistency
 
     echo ""
     read -p "Install to $INSTALL_DIR? [Y/n] " -n 1 -r
