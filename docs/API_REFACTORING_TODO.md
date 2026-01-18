@@ -35,8 +35,8 @@
 - [x] get_channel_access() - Channel access lists
 
 ### Phase 2: Write Functions (4/17+ completed)
-- [x] add_server_access() - Add ban/gline (with validation)
-- [x] remove_server_access() - Remove ban/gline (with validation)
+- [x] add_server_access() - Add server ban (with validation)
+- [x] remove_server_access() - Remove server ban (with validation)
 - [x] add_newsflash() - Add newsflash (with validation)
 - [x] delete_newsflash() - Delete newsflash (with validation)
 
@@ -79,10 +79,10 @@ def get_something():
 These functions write to the database. Need error handler AND input validation.
 
 **Completed:** ✅
-- [x] add_server_access() - Add ban/gline
-- [x] remove_server_access() - Remove ban/gline
-- [x] add_newsflash() - Add newsflash
-- [x] delete_newsflash() - Delete newsflash
+- [x] add_server_access() - Add server ban
+- [x] remove_server_access() - Remove server ban
+- [x] add_newsflash() - Add NewsFlash
+- [x] delete_newsflash() - Delete NewsFlash
 
 **Remaining:** (estimated ~13+ functions)
 - [ ] add_staff() - Add staff account

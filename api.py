@@ -470,7 +470,7 @@ def get_server_stats():
         cursor.execute("SELECT COUNT(*) as count FROM registered_channels")
         stats['registered_channels'] = cursor.fetchone()['count']
 
-        # Count server access entries (bans/glines) - exclude expired
+        # Count server access entries (bans) - exclude expired
         now = int(time.time())
         cursor.execute("""
             SELECT COUNT(*) as count, type
@@ -536,12 +536,12 @@ def get_server_stats():
     return stats
 
 # ============================================================================
-# BAN/GLINE MANAGEMENT
+# SERVER ACCESS MANAGEMENT
 # ============================================================================
 
 @api_error_handler
 def get_server_access_list():
-    """Get all server access rules (bans/glines)"""
+    """Get all server access rules (bans)"""
     with db_pool.get_connection() as conn:
         cursor = conn.cursor()
 
@@ -571,7 +571,7 @@ def get_server_access_list():
 
 @api_error_handler
 def add_server_access(access_type, pattern, set_by, reason, timeout=0):
-    """Add a server access rule (ban/gline)
+    """Add a server access rule (ban)
 
     Args:
         timeout: Duration in minutes (0 = permanent), will be converted to absolute timestamp
@@ -628,7 +628,7 @@ def remove_server_access(access_type, pattern):
 
 @api_error_handler
 def get_newsflash_list():
-    """Get all newsflash messages"""
+    """Get all NewsFlash messages"""
     with db_pool.get_connection() as conn:
         cursor = conn.cursor()
 
@@ -652,7 +652,7 @@ def get_newsflash_list():
 
 @api_error_handler
 def add_newsflash(message, created_by, priority=0):
-    """Add a newsflash message"""
+    """Add a NewsFlash message"""
     # Validate inputs
     if not message or len(message) > 500:
         raise ValueError("Message must be between 1 and 500 characters")
@@ -673,10 +673,10 @@ def add_newsflash(message, created_by, priority=0):
 
 @api_error_handler
 def delete_newsflash(msg_id):
-    """Delete a newsflash message"""
+    """Delete a NewsFlash message"""
     # Validate input
     if not msg_id or int(msg_id) < 1:
-        raise ValueError("Invalid newsflash ID")
+        raise ValueError("Invalid NewsFlash ID")
 
     with db_pool.get_connection() as conn:
         cursor = conn.cursor()
@@ -1163,7 +1163,7 @@ def get_logs(lines=100, level_filter=None, search=None):
 # ============================================================================
 
 def get_newsflash_settings():
-    """Get newsflash broadcast settings"""
+    """Get NewsFlash broadcast settings"""
     config = load_config()
     newsflash = config.get('newsflash', {})
     return {
@@ -1173,7 +1173,7 @@ def get_newsflash_settings():
     }
 
 def set_newsflash_settings(on_connect, periodic_enabled, periodic_interval):
-    """Set newsflash broadcast settings"""
+    """Set NewsFlash broadcast settings"""
     try:
         config = load_config()
         if 'newsflash' not in config:
@@ -1935,7 +1935,7 @@ def main():
     elif command == "stats":
         result = get_server_stats()
 
-    # Ban/Gline management
+    # Server access management
     elif command == "server-access-list":
         result = get_server_access_list()
     elif command == "add-server-access":
@@ -1983,9 +1983,9 @@ def main():
             result = send_mailbox_message(sys.argv[2], sys.argv[3], sys.argv[4])
 
     # Search
-    elif command == "search-nicks":
+    elif command == "search-nicknames":
         if len(sys.argv) < 3:
-            result = {"error": "Usage: search-nicks <query>"}
+            result = {"error": "Usage: search-nicknames <query>"}
         else:
             result = search_registered_nicks(sys.argv[2])
     elif command == "search-channels":
@@ -2127,7 +2127,7 @@ def main():
             new_userlimit = sys.argv[13] if len(sys.argv) > 13 and sys.argv[13] else None
             result = edit_channel(sys.argv[2], new_owner, new_description, new_topic, new_modes,
                                 new_onjoin, new_onpart, new_memberkey, new_hostkey, new_ownerkey, new_voicekey, new_userlimit)
-    elif command == "list-nicks-paginated":
+    elif command == "list-nicknames-paginated":
         limit = int(sys.argv[2]) if len(sys.argv) > 2 else 50
         offset = int(sys.argv[3]) if len(sys.argv) > 3 else 0
         result = get_registered_nicks_paginated(limit, offset)

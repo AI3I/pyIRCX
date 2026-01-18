@@ -10,15 +10,19 @@
 
 ## ⚠️ Copyright Notice
 
-**All Rights Reserved.** This software is proprietary and confidential. It is **NOT** open source or free software.
+**All Rights Reserved.** This software and all associated files (source code, documentation, configuration files, scripts, and assets) are proprietary. This is **NOT** open source or free software.
+
+**Unauthorized access is prohibited.** Reading, viewing, downloading, or accessing this repository or any of its contents without explicit written permission is strictly forbidden.
 
 You may not:
+- Access, view, read, or download any files without explicit written permission
+- Use, copy, or execute the software
 - Modify, adapt, or create derivative works
 - Redistribute, sell, lease, or sublicense
 - Reverse engineer or decompile
-- Use for commercial purposes
+- Use for commercial or non-commercial purposes
 
-All use, modification, and redistribution require explicit written permission from the copyright holder.
+All access, use, modification, and redistribution require explicit written permission from the copyright holder.
 
 Copyright © 2026 John D. Lewis. All rights reserved.
 
