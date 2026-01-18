@@ -1141,34 +1141,23 @@ def set_newsflash_settings(on_connect, periodic_enabled, periodic_interval):
 # NICKNAME AND CHANNEL REGISTRATION
 # ============================================================================
 
+@api_error_handler
 def register_nickname(nickname, password, email=None):
     """Register a new nickname"""
-    db_path = get_db_path()
-
-    if not os.path.exists(db_path):
-        return {"error": f"Database not found at {db_path}"}
-
-    # Validate nickname
-    if not re.match(r'^[a-zA-Z][a-zA-Z0-9_\-\[\]\\`\^\{\}]{0,29}$', nickname):
-        return {"error": "Invalid nickname format. Must start with a letter and be 1-30 characters."}
-
-    # Validate password strength
+    # Validate inputs
+    validate_nickname(nickname)
     if len(password) < 8:
-        return {"error": "Password must be at least 8 characters"}
-
-    # Validate email if provided
+        raise ValueError("Password must be at least 8 characters")
     if email and email != '*':
         if not re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email):
-            return {"error": "Invalid email address"}
+            raise ValueError("Invalid email address")
 
-    try:
-        conn = sqlite3.connect(db_path)
+    with db_pool.get_connection() as conn:
         cursor = conn.cursor()
 
         # Check if nickname already exists
         cursor.execute("SELECT nickname FROM registered_nicks WHERE nickname = ?", (nickname,))
         if cursor.fetchone():
-            conn.close()
             return {"error": f"Nickname '{nickname}' is already registered"}
 
         # Generate UUID and hash password
@@ -1186,13 +1175,7 @@ def register_nickname(nickname, password, email=None):
             VALUES (?, ?, ?, ?, ?, ?, ?)
         """, (nick_uuid, nickname, password_hash, email_val, now, now, "API Admin"))
 
-        conn.commit()
-        conn.close()
-
         return {"success": True, "message": f"Nickname '{nickname}' registered successfully"}
-
-    except Exception as e:
-        return {"error": str(e)}
 
 # Reserved service names (from pyircx.py)
 RESERVED_SERVICES = {
@@ -1201,27 +1184,20 @@ RESERVED_SERVICES = {
     'system', 'registrar', 'messenger', 'newsflash'
 }
 
+@api_error_handler
 def register_channel(channel_name, owner_nickname, topic=None, modes=None, onjoin=None, onpart=None,
                      memberkey=None, hostkey=None, ownerkey=None, description=None):
     """Register a new channel (simplified to match actual database schema)"""
-    db_path = get_db_path()
-
-    if not os.path.exists(db_path):
-        return {"error": f"Database not found at {db_path}"}
-
     # Validate channel name
-    if not re.match(r'^[#&][a-zA-Z0-9_\-]+$', channel_name):
-        return {"error": "Invalid channel name. Must start with # or & and contain only letters, numbers, _, -"}
+    validate_channel_name(channel_name)
 
-    try:
+    with db_pool.get_connection() as conn:
         import uuid as uuid_mod
-        conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
 
         # Check if channel already exists
         cursor.execute("SELECT channel_name FROM registered_channels WHERE LOWER(channel_name) = LOWER(?)", (channel_name,))
         if cursor.fetchone():
-            conn.close()
             return {"error": f"Channel '{channel_name}' is already registered"}
 
         # Get owner's UUID from registered_nicks
@@ -1248,7 +1224,6 @@ def register_channel(channel_name, owner_nickname, topic=None, modes=None, onjoi
 
                 owner_uuid = service_uuid
             else:
-                conn.close()
                 return {"error": f"Owner '{owner_nickname}' not found. Valid options: registered nickname, staff username (ADMIN/SYSOP/GUIDE), or service name (System, Registrar, Messenger, NickServ, ChanServ, etc.)"}
         else:
             owner_uuid = owner_row[0]
@@ -1256,31 +1231,23 @@ def register_channel(channel_name, owner_nickname, topic=None, modes=None, onjoi
         # Insert new channel using correct schema
         chan_uuid = str(uuid_mod.uuid4())
         now = int(time.time())
-        
+
         cursor.execute("""
             INSERT INTO registered_channels
             (uuid, channel_name, owner_uuid, registered_at, last_used, description)
             VALUES (?, ?, ?, ?, ?, ?)
         """, (chan_uuid, channel_name, owner_uuid, now, now, description or ""))
 
-        conn.commit()
-        conn.close()
-
         return {"success": True, "message": f"Channel '{channel_name}' registered successfully to {owner_nickname}"}
 
-    except Exception as e:
-        return {"error": str(e)}
 
-
+@api_error_handler
 def unregister_nickname(nickname):
     """Unregister a nickname"""
-    db_path = get_db_path()
+    # Validate input
+    validate_nickname(nickname)
 
-    if not os.path.exists(db_path):
-        return {"error": f"Database not found at {db_path}"}
-
-    try:
-        conn = sqlite3.connect(db_path)
+    with db_pool.get_connection() as conn:
         cursor = conn.cursor()
 
         # Check if nickname exists
@@ -1288,7 +1255,6 @@ def unregister_nickname(nickname):
         nick_row = cursor.fetchone()
 
         if not nick_row:
-            conn.close()
             return {"error": f"Nickname '{nickname}' is not registered"}
 
         nick_uuid = nick_row[0]
@@ -1298,18 +1264,12 @@ def unregister_nickname(nickname):
         channel_count = cursor.fetchone()[0]
 
         if channel_count > 0:
-            conn.close()
             return {"error": f"Cannot unregister '{nickname}': owns {channel_count} registered channel(s). Unregister channels first."}
 
         # Delete the nickname
         cursor.execute("DELETE FROM registered_nicks WHERE uuid = ?", (nick_uuid,))
-        conn.commit()
-        conn.close()
 
         return {"success": True, "message": f"Nickname '{nickname}' has been unregistered"}
-
-    except Exception as e:
-        return {"error": str(e)}
 
 def edit_nickname(nickname, new_password=None, new_email=None):
     """Edit a registered nickname's password and/or email"""
