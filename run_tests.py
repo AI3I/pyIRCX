@@ -2,9 +2,6 @@
 """
 pyIRCX v2.0.0 Master Test Runner
 Runs all test suites with comprehensive reporting
-
-Copyright (C) 2026 John D. Lewis
-Licensed under AGPL v3
 """
 
 import subprocess

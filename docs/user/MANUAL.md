@@ -2,7 +2,6 @@
 
 **Version:** 1.2.0
 **Last Updated:** 2026-01-16
-**License:** GNU General Public License v3.0
 
 ---
 

@@ -542,7 +542,3 @@ response = session.post(API_URL, json={'action': 'reload-server'})
 For API issues or questions:
 - GitHub Issues: https://github.com/yourusername/pyIRCX/issues
 - Documentation: docs/admin/MANUAL.md
-
-## License
-
-Same license as pyIRCX (GPL-3.0)

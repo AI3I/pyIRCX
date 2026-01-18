@@ -163,10 +163,6 @@
    - ❌ No tests for comprehensive tooltips
    - ❌ No tests for reserved nicknames reference
 
-10. **AGPL v3 Compliance**
-    - ❌ No tests verify license headers present
-    - ❌ No validation of source availability notices
-
 ---
 
 ## Test Organization Issues

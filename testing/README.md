@@ -401,14 +401,6 @@ When adding new features to pyIRCX:
 
 ---
 
-## License
-
-All test code is licensed under AGPL v3.
-
-Copyright (C) 2026 John D. Lewis
-
----
-
 ## Stress Testing & Load Testing
 
 ### `stress_test.py` - Load Testing Tool

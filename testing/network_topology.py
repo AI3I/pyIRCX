@@ -11,9 +11,6 @@ Critical scenarios tested:
 - Duplicate user handling
 - Channel merging
 - Services during divergence/convergence
-
-Copyright (C) 2026 John D. Lewis
-Licensed under AGPL v3
 """
 
 import asyncio

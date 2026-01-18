@@ -277,9 +277,3 @@ The standalone version has these improvements:
 
 - GitHub: https://github.com/jdlewis/pyIRCX
 - Issues: Report bugs via GitHub Issues
-
-## License
-
-GNU General Public License v3.0
-
-Copyright (C) 2026 John D. Lewis

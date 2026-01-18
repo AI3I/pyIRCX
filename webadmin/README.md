@@ -202,6 +202,5 @@ All your existing API functions work exactly as before, just accessed via PHP no
 
 - pyIRCX Project
 - Converted from Cockpit to standalone by Claude
-- Licensed under GNU GPL v3.0
 
 Enjoy your new admin panel! 🚀

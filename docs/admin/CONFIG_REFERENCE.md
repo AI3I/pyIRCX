@@ -977,7 +977,3 @@ Click "Reload Server" button
 For configuration help:
 - GitHub Issues: https://github.com/yourusername/pyIRCX/issues
 - IRC: #pyircx on irc.example.com
-
-## License
-
-Same license as pyIRCX (GPL-3.0)

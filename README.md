@@ -3,9 +3,24 @@
 **A production-ready Python implementation of the IRCX protocol — the modern IRCX server for distributed chat networks**
 
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![License: AGPL v3](https://img.shields.io/badge/License-AGPLv3-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-2.0.0-brightgreen.svg)](#)
 [![Tests](https://img.shields.io/badge/tests-243%20passing-brightgreen.svg)](#testing)
+
+---
+
+## ⚠️ Copyright Notice
+
+**All Rights Reserved.** This software is proprietary and confidential. It is **NOT** open source or free software.
+
+You may not:
+- Modify, adapt, or create derivative works
+- Redistribute, sell, lease, or sublicense
+- Reverse engineer or decompile
+- Use for commercial purposes
+
+All use, modification, and redistribution require explicit written permission from the copyright holder.
+
+Copyright © 2026 John D. Lewis. All rights reserved.
 
 ---
 
@@ -30,7 +45,6 @@ If you remember the days of **Microsoft Comic Chat**, chat rooms with real nicks
 - 📚 **Enhanced Help System** - 100% command coverage with examples and fuzzy matching
 - ⚡ **Command Aliases** - 12 shortcuts for faster typing (/J, /P, /W, etc.)
 - 🌐 **Distributed Networks** - Trunk-and-branch topology with seamless cross-server operations
-- 🔒 **AGPL v3 Licensed** - Strong copyleft protection for network server software
 
 For complete version history, see [CHANGELOG.md](CHANGELOG.md)
 
@@ -743,12 +757,6 @@ python3 pyIRCX_test_linking.py
 # Check code
 python3 -m py_compile pyircx.py linking.py
 ```
-
----
-
-## License
-
-GNU General Public License v3.0 — See [LICENSE](LICENSE) for details.
 
 ---
 

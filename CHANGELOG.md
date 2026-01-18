@@ -94,14 +94,6 @@ pyIRCX v2.0.0 is a production-ready IRC/IRCX server that brings the nostalgia of
 - **Multi-distro support** - Apache/httpd setup scripts for all major distributions
 - **Comprehensive testing** - 243 passing tests
 
-### 🔒 Licensing
-
-#### AGPL v3
-- Changed from GPL v3 to **AGPL v3** (GNU Affero General Public License)
-- **Network copyleft** - Anyone running modified versions as a service must share source code
-- Prevents proprietary forks of this IRC server software
-- Ensures community improvements benefit everyone
-
 ### 📝 Technical Details
 
 #### Code Changes
@@ -109,7 +101,6 @@ pyIRCX v2.0.0 is a production-ready IRC/IRCX server that brings the nostalgia of
 - **linking.py** - Cross-server operation propagation
 - **api.py** - WebAdmin backend updates
 - **webadmin/** - Tooltip system, reserved nicknames reference
-- **All source files** - Updated to AGPL v3 headers
 
 #### Configuration
 - **Backward compatible** - Existing configurations work without changes
@@ -126,7 +117,6 @@ pyIRCX v2.0.0 is a production-ready IRC/IRCX server that brings the nostalgia of
 
 - **README.md** - Updated for v2.0.0 with new tagline and feature highlights
 - **MANUAL.md** - All numeric replies updated with friendly messages
-- **LICENSE** - Full AGPL v3 text
 - **Removed** - 11 v1.x release notes, 2 historical bugfix docs (fresh start)
 
 ---

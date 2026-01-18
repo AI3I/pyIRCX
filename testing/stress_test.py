@@ -8,9 +8,6 @@ Scenarios:
 - Staff users: Mode changes, kicks, kills, stats
 - Service users: Register nicks, send offline messages
 - Network load: Cross-server operations
-
-Copyright (C) 2026 John D. Lewis
-Licensed under AGPL v3
 """
 
 import asyncio
