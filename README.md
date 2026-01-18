@@ -677,7 +677,6 @@ Comprehensive comparison of pyIRCX with major IRC server implementations:
 | **Transcript Logging** | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | **Single-File Deploy** | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ |
 | **Web Admin** | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ |
-| **License** | Proprietary | Proprietary | GPL/BSD/MIT | GPL/BSD/MIT | GPL/BSD/MIT | GPL/BSD/MIT | GPL/BSD/MIT | GPL/BSD/MIT | GPL/BSD/MIT | GPL/BSD/MIT | GPL/BSD/MIT |
 
 *\* Requires external services package (Anope or Atheme)*
 
