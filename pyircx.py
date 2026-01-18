@@ -8887,10 +8887,38 @@ class pyIRCXServer:
                 issuer = CONFIG.get('server', 'name', default='irc.local')
                 provisioning_uri = totp.provisioning_uri(name=user.nickname, issuer_name=issuer)
 
-                await user.send(f":{self.servername} NOTICE {user.nickname} :MFA Setup - Add to your authenticator app:")
-                await user.send(f":{self.servername} NOTICE {user.nickname} :  Secret: {secret}")
-                await user.send(f":{self.servername} NOTICE {user.nickname} :  URI: {provisioning_uri}")
-                await user.send(f":{self.servername} NOTICE {user.nickname} :Complete setup with: MFA VERIFY <6-digit code>")
+                # Generate ASCII QR code
+                try:
+                    import qrcode
+                    import io
+                    qr = qrcode.QRCode(border=1)
+                    qr.add_data(provisioning_uri)
+                    qr.make()
+
+                    f = io.StringIO()
+                    qr.print_ascii(out=f, invert=True)
+                    ascii_qr = f.getvalue()
+
+                    # Have System service send the QR code (bypasses flood protection)
+                    system_user = self.users.get('System')
+                    if system_user:
+                        await user.send(f":System!System@{self.servername} PRIVMSG {user.nickname} :=== MFA Setup - Scan with your authenticator app ===")
+                        for line in ascii_qr.split('\n'):
+                            if line.strip():
+                                await user.send(f":System!System@{self.servername} PRIVMSG {user.nickname} :{line}")
+                        await user.send(f":System!System@{self.servername} PRIVMSG {user.nickname} :=== End QR Code ===")
+                        await user.send(f":System!System@{self.servername} PRIVMSG {user.nickname} :Manual entry secret: {secret}")
+                        await user.send(f":System!System@{self.servername} PRIVMSG {user.nickname} :Complete setup with: /MFA VERIFY <6-digit code>")
+                    else:
+                        # Fallback if System not available
+                        await user.send(f":{self.servername} NOTICE {user.nickname} :MFA Secret: {secret}")
+                        await user.send(f":{self.servername} NOTICE {user.nickname} :Complete setup with: MFA VERIFY <6-digit code>")
+                except ImportError:
+                    # qrcode not available, fall back to text
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :MFA Secret: {secret}")
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :URI: {provisioning_uri}")
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :Complete setup with: MFA VERIFY <6-digit code>")
+
                 logger.info(f"MFA: {user.nickname} initiated setup")
 
         except Exception as e:
@@ -11092,12 +11120,41 @@ class pyIRCXServer:
                 issuer = CONFIG.get('server', 'name', default='irc.local')
                 provisioning_uri = totp.provisioning_uri(name=user.nickname, issuer_name=issuer)
 
-                # Send setup instructions
-                await self._service_reply("Registrar", user, "MFA Setup - Add this to your authenticator app:")
-                await self._service_reply("Registrar", user, f"  Secret: {secret}")
-                await self._service_reply("Registrar", user, f"  URI: {provisioning_uri}")
-                await self._service_reply("Registrar", user, "To complete setup, verify with: MFA VERIFY <6-digit code>")
-                await self._service_reply("Registrar", user, "MFA will NOT be active until you verify the code")
+                # Generate ASCII QR code and send via System
+                try:
+                    import qrcode
+                    import io
+                    qr = qrcode.QRCode(border=1)
+                    qr.add_data(provisioning_uri)
+                    qr.make()
+
+                    f = io.StringIO()
+                    qr.print_ascii(out=f, invert=True)
+                    ascii_qr = f.getvalue()
+
+                    # Have System service send the QR code (bypasses flood protection)
+                    system_user = self.users.get('System')
+                    if system_user:
+                        await user.send(f":System!System@{self.servername} PRIVMSG {user.nickname} :=== MFA Setup - Scan with your authenticator app ===")
+                        for line in ascii_qr.split('\n'):
+                            if line.strip():
+                                await user.send(f":System!System@{self.servername} PRIVMSG {user.nickname} :{line}")
+                        await user.send(f":System!System@{self.servername} PRIVMSG {user.nickname} :=== End QR Code ===")
+                        await user.send(f":System!System@{self.servername} PRIVMSG {user.nickname} :Manual entry secret: {secret}")
+                        await user.send(f":System!System@{self.servername} PRIVMSG {user.nickname} :To complete setup: /MFA VERIFY <6-digit code>")
+                        await user.send(f":System!System@{self.servername} PRIVMSG {user.nickname} :MFA will NOT be active until you verify the code")
+                    else:
+                        # Fallback if System not available
+                        await self._service_reply("Registrar", user, f"MFA Secret: {secret}")
+                        await self._service_reply("Registrar", user, "To complete setup, verify with: MFA VERIFY <6-digit code>")
+                except ImportError:
+                    # qrcode not available, fall back to text
+                    await self._service_reply("Registrar", user, "MFA Setup - Add this to your authenticator app:")
+                    await self._service_reply("Registrar", user, f"  Secret: {secret}")
+                    await self._service_reply("Registrar", user, f"  URI: {provisioning_uri}")
+                    await self._service_reply("Registrar", user, "To complete setup, verify with: MFA VERIFY <6-digit code>")
+                    await self._service_reply("Registrar", user, "MFA will NOT be active until you verify the code")
+
                 logger.info(f"Registrar: {user.nickname} initiated MFA setup")
 
         except Exception as e:
