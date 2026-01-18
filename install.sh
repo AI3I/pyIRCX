@@ -405,6 +405,8 @@ copy_files() {
     # Copy main script and modules
     cp "$SCRIPT_DIR/pyircx.py" "$INSTALL_DIR/"
     cp "$SCRIPT_DIR/api.py" "$INSTALL_DIR/" 2>/dev/null || true
+    cp "$SCRIPT_DIR/api_helpers.py" "$INSTALL_DIR/" 2>/dev/null || true
+    cp "$SCRIPT_DIR/db_pool.py" "$INSTALL_DIR/" 2>/dev/null || true
     cp "$SCRIPT_DIR/linking.py" "$INSTALL_DIR/"
 
     # Copy or create config

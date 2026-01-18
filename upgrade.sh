@@ -252,6 +252,17 @@ if [ -f "$SCRIPT_DIR/linking.py" ]; then
     echo -e "${GREEN}✓ Updated linking.py${NC}"
 fi
 
+# Copy API helper modules
+if [ -f "$SCRIPT_DIR/db_pool.py" ]; then
+    cp "$SCRIPT_DIR/db_pool.py" "$INSTALL_DIR/"
+    echo -e "${GREEN}✓ Updated db_pool.py${NC}"
+fi
+
+if [ -f "$SCRIPT_DIR/api_helpers.py" ]; then
+    cp "$SCRIPT_DIR/api_helpers.py" "$INSTALL_DIR/"
+    echo -e "${GREEN}✓ Updated api_helpers.py${NC}"
+fi
+
 # Copy or move api.py to /opt/pyircx
 if [ $NEEDS_API_PY -eq 1 ]; then
     if [ -f "$SCRIPT_DIR/api.py" ]; then
