@@ -1,8 +1,10 @@
 # API Refactoring TODO List
 
-**Status:** Infrastructure Complete ✅
+**Status:** In Progress 🚧
 **Started:** 2026-01-17
-**Progress:** 0/33 functions refactored (0%)
+**Last Updated:** 2026-01-17
+**Progress:** 18/33+ functions refactored (55%)
+**Commit:** 483a62d - Refactor API functions to use connection pool
 
 ---
 
@@ -16,32 +18,34 @@
 - [x] Pool initialized on module import
 - [x] Logging infrastructure added
 
+### Phase 1: Read-Only Functions (14/14 completed) ✅
+- [x] get_server_stats() - Server statistics
+- [x] get_server_access_list() - Server access rules
+- [x] get_newsflash_list() - Newsflash messages
+- [x] get_mailbox_messages() - Mailbox messages
+- [x] search_registered_nicks() - Nickname search
+- [x] search_channels() - Channel search
+- [x] get_recent_registrations() - Recent registrations
+- [x] get_registered_channels() - Registered channels
+- [x] get_staff_list() - Staff list
+- [x] get_staff_details() - Staff details
+- [x] get_registered_nicks_paginated() - Paginated nicknames
+- [x] get_registered_channels_paginated() - Paginated channels
+- [x] get_channel_details() - Channel details
+- [x] get_channel_access() - Channel access lists
+
+### Phase 2: Write Functions (4/17+ completed)
+- [x] add_server_access() - Add ban/gline (with validation)
+- [x] remove_server_access() - Remove ban/gline (with validation)
+- [x] add_newsflash() - Add newsflash (with validation)
+- [x] delete_newsflash() - Delete newsflash (with validation)
+
 ---
 
 ## 📋 Remaining Work
 
-### Phase 1: Read-Only Functions (16 functions) - Priority: P1
-
-These functions only read from the database and are straightforward to refactor.
-
-| # | Function | Line | Current Pattern | Status |
-|---|----------|------|-----------------|--------|
-| 1 | `get_server_access_list()` | ~566 | `sqlite3.connect()` | ⏳ TODO |
-| 2 | `get_newsflash_list()` | ~639 | `sqlite3.connect()` | ⏳ TODO |
-| 3 | `get_registered_nicks()` | ~699 | `sqlite3.connect()` | ⏳ TODO |
-| 4 | `get_channels()` | ~770 | `sqlite3.connect()` | ⏳ TODO |
-| 5 | `get_channel_modes()` | ~849 | `sqlite3.connect()` | ⏳ TODO |
-| 6 | `get_channel_access()` | ~918 | `sqlite3.connect()` | ⏳ TODO |
-| 7 | `get_staff_accounts()` | ~990 | `sqlite3.connect()` | ⏳ TODO |
-| 8 | `get_banned_users()` | ~1060 | `sqlite3.connect()` | ⏳ TODO |
-| 9 | `get_user_registrations()` | ~1127 | `sqlite3.connect()` | ⏳ TODO |
-| 10 | `get_user_audit_log()` | TBD | `sqlite3.connect()` | ⏳ TODO |
-| 11 | `get_servicebot_tracking()` | TBD | `sqlite3.connect()` | ⏳ TODO |
-| 12 | `get_profanity_list()` | TBD | `sqlite3.connect()` | ⏳ TODO |
-| 13 | `get_channel_props()` | TBD | `sqlite3.connect()` | ⏳ TODO |
-| 14 | `get_server_links()` | TBD | `sqlite3.connect()` | ⏳ TODO |
-| 15 | `get_nickname_info()` | TBD | `sqlite3.connect()` | ⏳ TODO |
-| 16 | `search_audit_log()` | TBD | `sqlite3.connect()` | ⏳ TODO |
+### Phase 1: Read-Only Functions ✅ COMPLETE
+All read-only functions have been refactored!
 
 **Refactoring Pattern (Read-Only):**
 ```python
@@ -70,29 +74,31 @@ def get_something():
 
 ---
 
-### Phase 2: Write Functions (17 functions) - Priority: P2
+### Phase 2: Write Functions (13+ remaining) - Priority: P2
 
 These functions write to the database. Need error handler AND input validation.
 
-| # | Function | Line | Needs Validation | Status |
-|---|----------|------|------------------|--------|
-| 1 | `add_server_access()` | ~574 | access_type, pattern, timeout | ⏳ TODO |
-| 2 | `remove_server_access()` | ~608 | access_type, pattern | ⏳ TODO |
-| 3 | `add_newsflash()` | ~673 | title, content | ⏳ TODO |
-| 4 | `delete_newsflash()` | ~728 | newsflash_id | ⏳ TODO |
-| 5 | `edit_newsflash()` | ~806 | newsflash_id, title, content | ⏳ TODO |
-| 6 | `create_channel()` | TBD | channel_name | ⏳ TODO |
-| 7 | `delete_channel()` | TBD | channel_name | ⏳ TODO |
-| 8 | `add_channel_access()` | ~883 | channel, access_type, pattern | ⏳ TODO |
-| 9 | `delete_channel_access()` | TBD | channel, pattern | ⏳ TODO |
-| 10 | `create_staff_account()` | ~1024 | username, level | ⏳ TODO |
-| 11 | `delete_staff_account()` | TBD | username | ⏳ TODO |
-| 12 | `update_staff_password()` | TBD | username, password | ⏳ TODO |
-| 13 | `create_nickname_registration()` | ~1301 | nickname | ⏳ TODO |
-| 14 | `delete_nickname_registration()` | ~1354 | nickname | ⏳ TODO |
-| 15 | `add_profanity_word()` | TBD | word | ⏳ TODO |
-| 16 | `delete_profanity_word()` | TBD | word | ⏳ TODO |
-| 17 | `update_channel_props()` | TBD | channel, props | ⏳ TODO |
+**Completed:** ✅
+- [x] add_server_access() - Add ban/gline
+- [x] remove_server_access() - Remove ban/gline
+- [x] add_newsflash() - Add newsflash
+- [x] delete_newsflash() - Delete newsflash
+
+**Remaining:** (estimated ~13+ functions)
+- [ ] add_staff() - Add staff account
+- [ ] remove_staff() - Remove staff account
+- [ ] update_staff_password() - Update staff password
+- [ ] test_staff_login() - Test staff login (read-only, may not need refactoring)
+- [ ] register_nickname() - Register nickname
+- [ ] unregister_nickname() - Unregister nickname
+- [ ] update_nickname_password() - Update nickname password
+- [ ] update_nickname_email() - Update nickname email
+- [ ] register_channel() - Register channel
+- [ ] unregister_channel() - Unregister channel
+- [ ] edit_channel() - Edit channel properties
+- [ ] set_channel_access() - Set channel access lists
+- [ ] send_server_message() - Send server message (write)
+- [ ] Additional functions discovered during grep scan
 
 **Refactoring Pattern (Write):**
 ```python
