@@ -1,0 +1,305 @@
+#!/usr/bin/env python3
+"""
+Database Initialization Script for pyIRCX
+
+Creates a new database with all required tables and a default admin account.
+Can be used for:
+- Fresh installation
+- Database repair/regeneration
+- Testing environments
+
+Usage:
+    python3 init_database.py [database_path] [--admin-username USERNAME] [--admin-password PASSWORD]
+
+Examples:
+    python3 init_database.py pyircx.db
+    python3 init_database.py /opt/pyircx/pyircx.db
+    python3 init_database.py pyircx.db --admin-username admin --admin-password secretpass
+"""
+
+import sys
+import os
+import sqlite3
+import bcrypt
+import argparse
+from datetime import datetime
+
+# Default admin credentials (should be changed after first login)
+DEFAULT_ADMIN_USER = "admin"
+DEFAULT_ADMIN_PASS = "changeme"
+
+def create_database(db_path, admin_username=None, admin_password=None):
+    """Create pyIRCX database with all required tables"""
+
+    print(f"Creating database: {db_path}")
+
+    # Remove existing database if present
+    if os.path.exists(db_path):
+        backup_path = f"{db_path}.backup.{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        print(f"Existing database found, backing up to: {backup_path}")
+        os.rename(db_path, backup_path)
+
+    # Connect and create database
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+    print("Creating tables...")
+
+    # Users table (online users)
+    cursor.execute("""CREATE TABLE IF NOT EXISTS users (
+        nickname TEXT PRIMARY KEY,
+        username TEXT,
+        realname TEXT,
+        hostname TEXT,
+        modes TEXT DEFAULT '',
+        registered INTEGER DEFAULT 0,
+        identified INTEGER DEFAULT 0,
+        connection_time INTEGER,
+        last_activity INTEGER,
+        channels TEXT DEFAULT '',
+        away_message TEXT DEFAULT NULL
+    )""")
+    print("✓ users table")
+
+    # Registered nicknames
+    cursor.execute("""CREATE TABLE IF NOT EXISTS registered_nicks (
+        nickname TEXT PRIMARY KEY COLLATE NOCASE,
+        password TEXT NOT NULL,
+        email TEXT,
+        registered_at INTEGER NOT NULL,
+        last_seen INTEGER,
+        user_uuid TEXT UNIQUE NOT NULL,
+        totp_secret TEXT DEFAULT NULL,
+        verified INTEGER DEFAULT 0
+    )""")
+    print("✓ registered_nicks table")
+
+    # Registered channels
+    cursor.execute("""CREATE TABLE IF NOT EXISTS registered_channels (
+        channel TEXT PRIMARY KEY COLLATE NOCASE,
+        owner_nickname TEXT NOT NULL,
+        registered_at INTEGER NOT NULL,
+        topic TEXT DEFAULT '',
+        modes TEXT DEFAULT '',
+        description TEXT DEFAULT '',
+        channel_uuid TEXT UNIQUE NOT NULL,
+        FOREIGN KEY (owner_nickname) REFERENCES registered_nicks(nickname) ON DELETE CASCADE
+    )""")
+    print("✓ registered_channels table")
+
+    # Server access (ban/allow lists)
+    cursor.execute("""CREATE TABLE IF NOT EXISTS server_access (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        access_type TEXT NOT NULL,
+        pattern TEXT NOT NULL,
+        set_by TEXT NOT NULL,
+        set_at INTEGER NOT NULL,
+        reason TEXT,
+        timeout INTEGER DEFAULT 0,
+        UNIQUE(access_type, pattern)
+    )""")
+    print("✓ server_access table")
+
+    # Mailbox (offline messages)
+    cursor.execute("""CREATE TABLE IF NOT EXISTS mailbox (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        recipient TEXT NOT NULL COLLATE NOCASE,
+        sender TEXT NOT NULL,
+        message TEXT NOT NULL,
+        timestamp INTEGER NOT NULL,
+        read INTEGER DEFAULT 0,
+        FOREIGN KEY (recipient) REFERENCES registered_nicks(nickname) ON DELETE CASCADE
+    )""")
+    print("✓ mailbox table")
+
+    # NewsFlash announcements
+    cursor.execute("""CREATE TABLE IF NOT EXISTS newsflash (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        author TEXT NOT NULL,
+        message TEXT NOT NULL,
+        timestamp INTEGER NOT NULL,
+        active INTEGER DEFAULT 1
+    )""")
+    print("✓ newsflash table")
+
+    # Memos
+    cursor.execute("""CREATE TABLE IF NOT EXISTS memos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        recipient TEXT NOT NULL COLLATE NOCASE,
+        sender TEXT NOT NULL,
+        subject TEXT,
+        message TEXT NOT NULL,
+        timestamp INTEGER NOT NULL,
+        read INTEGER DEFAULT 0,
+        priority INTEGER DEFAULT 0,
+        FOREIGN KEY (recipient) REFERENCES registered_nicks(nickname) ON DELETE CASCADE
+    )""")
+    print("✓ memos table")
+
+    # Staff accounts (local server administration)
+    cursor.execute("""CREATE TABLE IF NOT EXISTS staff (
+        username TEXT PRIMARY KEY COLLATE NOCASE,
+        password TEXT NOT NULL,
+        level TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        created_by TEXT,
+        last_login INTEGER,
+        totp_secret TEXT DEFAULT NULL,
+        uuid TEXT UNIQUE NOT NULL
+    )""")
+    print("✓ staff table")
+
+    # Channel access lists
+    cursor.execute("""CREATE TABLE IF NOT EXISTS channel_access (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        channel TEXT NOT NULL COLLATE NOCASE,
+        nickname TEXT NOT NULL COLLATE NOCASE,
+        level TEXT NOT NULL,
+        set_by TEXT NOT NULL,
+        set_at INTEGER NOT NULL,
+        timeout INTEGER DEFAULT 0,
+        UNIQUE(channel, nickname, level)
+    )""")
+    print("✓ channel_access table")
+
+    # User audit log
+    cursor.execute("""CREATE TABLE IF NOT EXISTS user_audit_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp INTEGER NOT NULL,
+        nickname TEXT NOT NULL,
+        action TEXT NOT NULL,
+        details TEXT,
+        ip_address TEXT
+    )""")
+    print("✓ user_audit_log table")
+
+    # ServiceBot tracking
+    cursor.execute("""CREATE TABLE IF NOT EXISTS servicebot_tracking (
+        bot_nickname TEXT PRIMARY KEY,
+        assigned_channels TEXT DEFAULT '',
+        last_activity INTEGER,
+        message_count INTEGER DEFAULT 0
+    )""")
+    print("✓ servicebot_tracking table")
+
+    # Create indexes for performance
+    print("Creating indexes...")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_mailbox_recipient ON mailbox(recipient)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_memos_recipient ON memos(recipient)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_channel_access_channel ON channel_access(channel)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_user_audit_nickname ON user_audit_log(nickname)")
+    print("✓ Indexes created")
+
+    # Create default admin account
+    admin_user = admin_username or DEFAULT_ADMIN_USER
+    admin_pass = admin_password or DEFAULT_ADMIN_PASS
+
+    print(f"\nCreating default admin account: {admin_user}")
+    hashed = bcrypt.hashpw(admin_pass.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+    import uuid
+    admin_uuid = str(uuid.uuid4())
+    timestamp = int(datetime.now().timestamp())
+
+    cursor.execute("""INSERT INTO staff (username, password, level, created_at, created_by, uuid)
+                      VALUES (?, ?, 'ADMIN', ?, 'install_script', ?)""",
+                   (admin_user, hashed, timestamp, admin_uuid))
+
+    print(f"✓ Admin account created")
+    print(f"  Username: {admin_user}")
+    print(f"  Password: {admin_pass}")
+    if admin_pass == DEFAULT_ADMIN_PASS:
+        print(f"  ⚠ WARNING: Using default password! Change immediately!")
+
+    conn.commit()
+    conn.close()
+
+    # Set proper permissions (660 for group access)
+    os.chmod(db_path, 0o660)
+    print(f"\n✓ Database created successfully: {db_path}")
+    print(f"  Size: {os.path.getsize(db_path)} bytes")
+    print(f"  Permissions: {oct(os.stat(db_path).st_mode)[-3:]}")
+
+    return True
+
+def main():
+    parser = argparse.ArgumentParser(
+        description='Initialize pyIRCX database',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  %(prog)s pyircx.db
+  %(prog)s /opt/pyircx/pyircx.db
+  %(prog)s pyircx.db --admin-username sysadmin --admin-password MySecretPass123
+
+Post-installation:
+  1. Change the admin password immediately:
+       python3 api.py change-staff-password admin YourNewPassword
+
+  2. Or login to IRC and use:
+       /QUOTE PASS admin:changeme
+       /STAFF PASS admin YourNewPassword
+
+  3. Set ownership (if running as root):
+       chown pyircx:pyircx /opt/pyircx/pyircx.db
+       chmod 660 /opt/pyircx/pyircx.db
+        """
+    )
+
+    parser.add_argument('database',
+                        help='Path to database file (e.g., pyircx.db or /opt/pyircx/pyircx.db)')
+    parser.add_argument('--admin-username',
+                        default=DEFAULT_ADMIN_USER,
+                        help=f'Admin username (default: {DEFAULT_ADMIN_USER})')
+    parser.add_argument('--admin-password',
+                        default=DEFAULT_ADMIN_PASS,
+                        help=f'Admin password (default: {DEFAULT_ADMIN_PASS})')
+    parser.add_argument('--force', '-f',
+                        action='store_true',
+                        help='Force overwrite existing database without backup')
+
+    args = parser.parse_args()
+
+    # Validate database path
+    db_path = os.path.abspath(args.database)
+    db_dir = os.path.dirname(db_path)
+
+    if not os.path.exists(db_dir):
+        print(f"Error: Directory does not exist: {db_dir}")
+        print(f"Create it first: mkdir -p {db_dir}")
+        return 1
+
+    if not os.access(db_dir, os.W_OK):
+        print(f"Error: No write permission for directory: {db_dir}")
+        print(f"Try running as root: sudo {' '.join(sys.argv)}")
+        return 1
+
+    # Check if database exists
+    if os.path.exists(db_path) and not args.force:
+        print(f"Database already exists: {db_path}")
+        print(f"Size: {os.path.getsize(db_path)} bytes")
+        print(f"\nOptions:")
+        print(f"  1. Use --force to overwrite (creates backup)")
+        print(f"  2. Delete manually and re-run")
+        print(f"  3. Use repair.sh to fix existing database")
+        return 1
+
+    try:
+        create_database(db_path, args.admin_username, args.admin_password)
+        print("\n" + "=" * 60)
+        print("DATABASE INITIALIZATION COMPLETE")
+        print("=" * 60)
+        print(f"\nNext steps:")
+        print(f"  1. Set ownership: chown pyircx:pyircx {db_path}")
+        print(f"  2. Set permissions: chmod 660 {db_path}")
+        print(f"  3. Start pyIRCX: systemctl start pyircx")
+        print(f"  4. Change admin password!")
+        return 0
+    except Exception as e:
+        print(f"\nError creating database: {e}")
+        import traceback
+        traceback.print_exc()
+        return 1
+
+if __name__ == '__main__':
+    sys.exit(main())

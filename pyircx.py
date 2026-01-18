@@ -12437,7 +12437,8 @@ class ServerManager:
     async def _status_dump_loop(self):
         """Background task to dump server status for admin interface."""
         dump_interval = 10  # Update every 10 seconds
-        status_file = Path('pyircx_status.json')
+        # Use absolute path in WorkingDirectory (/opt/pyircx typically)
+        status_file = Path(os.getcwd()) / 'pyircx_status.json'
 
         while not self.shutdown_event.is_set():
             try:

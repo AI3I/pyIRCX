@@ -584,23 +584,30 @@ install_selinux() {
         echo -e "${YELLOW}Configuring SELinux file contexts...${NC}"
 
         # /opt/pyircx - Main installation (read-write for web admin API)
+        semanage fcontext -d -t httpd_sys_rw_content_t "/opt/pyircx(/.*)?" 2>/dev/null || true
         semanage fcontext -a -t httpd_sys_rw_content_t "/opt/pyircx(/.*)?" 2>/dev/null || true
 
         # /etc/pyircx - Configuration directory (read-write for web admin config editor)
+        #               EXCEPT webchat.conf which needs etc_t for systemd EnvironmentFile
+        semanage fcontext -d -t httpd_sys_rw_content_t "/etc/pyircx(/.*)?" 2>/dev/null || true
         semanage fcontext -a -t httpd_sys_rw_content_t "/etc/pyircx(/.*)?" 2>/dev/null || true
 
-        # /etc/pyircx/webchat.conf - SystemD environment file (needs etc_t for systemd)
+        # /etc/pyircx/webchat.conf - SystemD EnvironmentFile (MUST be etc_t, NOT httpd_sys_rw_content_t)
+        # This overrides the previous rule specifically for webchat.conf
+        semanage fcontext -d -t etc_t "/etc/pyircx/webchat\.conf" 2>/dev/null || true
         semanage fcontext -a -t etc_t "/etc/pyircx/webchat\.conf" 2>/dev/null || true
 
         # WebAdmin - only if directory exists or will be created
         if [ -n "$WEB_ADMIN_DIR" ] || [ -d "/var/www/html/webadmin" ]; then
             ADMIN_PATH="${WEB_ADMIN_DIR:-/var/www/html/webadmin}"
+            semanage fcontext -d -t httpd_sys_rw_content_t "$ADMIN_PATH(/.*)?" 2>/dev/null || true
             semanage fcontext -a -t httpd_sys_rw_content_t "$ADMIN_PATH(/.*)?" 2>/dev/null || true
         fi
 
         # WebChat - only if directory exists or will be created
         if [ -n "$WEBCHAT_WEB_DIR" ] || [ -d "/var/www/html/webchat" ]; then
             CHAT_PATH="${WEBCHAT_WEB_DIR:-/var/www/html/webchat}"
+            semanage fcontext -d -t httpd_sys_content_t "$CHAT_PATH(/.*)?" 2>/dev/null || true
             semanage fcontext -a -t httpd_sys_content_t "$CHAT_PATH(/.*)?" 2>/dev/null || true
         fi
 
@@ -609,6 +616,12 @@ install_selinux() {
         restorecon -Rv /etc/pyircx 2>/dev/null || true
         [ -n "$WEB_ADMIN_DIR" ] && [ -d "$WEB_ADMIN_DIR" ] && restorecon -Rv "$WEB_ADMIN_DIR" 2>/dev/null || true
         [ -n "$WEBCHAT_WEB_DIR" ] && [ -d "$WEBCHAT_WEB_DIR" ] && restorecon -Rv "$WEBCHAT_WEB_DIR" 2>/dev/null || true
+
+        # CRITICAL: Explicitly fix webchat.conf after global restorecon
+        if [ -f "/etc/pyircx/webchat.conf" ]; then
+            chcon -t etc_t "/etc/pyircx/webchat.conf" 2>/dev/null || true
+            echo -e "${GREEN}✓ SELinux context fixed for webchat.conf (etc_t)${NC}"
+        fi
 
         echo -e "${GREEN}✓ SELinux file contexts configured${NC}"
     fi
@@ -641,6 +654,35 @@ install_polkit() {
 }
 
 
+# Initialize database
+initialize_database() {
+    echo -e "${YELLOW}Initializing database...${NC}"
+
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    DB_PATH="$INSTALL_DIR/pyircx.db"
+
+    # Check if database already exists
+    if [ -f "$DB_PATH" ]; then
+        echo -e "${YELLOW}Database already exists, skipping initialization${NC}"
+        return 0
+    fi
+
+    # Use init_database.py if available
+    if [ -f "$SCRIPT_DIR/init_database.py" ]; then
+        echo -e "${YELLOW}Creating database with init_database.py...${NC}"
+        python3 "$SCRIPT_DIR/init_database.py" "$DB_PATH" --admin-username admin --admin-password changeme
+
+        # Set ownership and permissions
+        chown "$SERVICE_USER:$SERVICE_GROUP" "$DB_PATH"
+        chmod 660 "$DB_PATH"
+
+        echo -e "${GREEN}✓ Database initialized${NC}"
+    else
+        echo -e "${YELLOW}⚠ init_database.py not found${NC}"
+        echo -e "${YELLOW}Database will be created on first service start${NC}"
+    fi
+}
+
 # Install systemd service
 install_systemd() {
     echo -e "${YELLOW}Installing systemd service...${NC}"
@@ -659,18 +701,30 @@ install_systemd() {
     # Reload systemd
     systemctl daemon-reload
 
-    # Enable and start pyircx service
+    # Enable service (but don't start yet - will start after database is ready)
     systemctl enable pyircx
+
+    echo -e "${GREEN}Systemd service installed${NC}"
+}
+
+# Start pyIRCX service
+start_service() {
+    echo -e "${YELLOW}Starting pyIRCX service...${NC}"
+
     systemctl start pyircx
     sleep 2
 
-    # Fix database permissions after service creates it
     if systemctl is-active --quiet pyircx; then
+        echo -e "${GREEN}✓ Service started successfully${NC}"
+        # Fix database permissions after service access
         chmod 660 "$INSTALL_DIR/pyircx.db" 2>/dev/null || true
         chmod 775 "$INSTALL_DIR" 2>/dev/null || true
+    else
+        echo -e "${RED}✗ Service failed to start${NC}"
+        echo -e "${YELLOW}Check logs: journalctl -u pyircx -n 50${NC}"
+        return 1
     fi
 
-    echo -e "${GREEN}Systemd service installed and started${NC}"
     echo ""
     echo "Service commands:"
     echo "  systemctl status pyircx   - Check status"
@@ -814,43 +868,45 @@ main() {
     create_directories
     copy_files
     set_permissions
+    initialize_database
     install_systemd
+    start_service
 
     echo ""
     echo "========================================"
-    echo -e "${GREEN}  Installation Complete!${NC}"
+    echo -e "${GREEN}  Core Installation Complete!${NC}"
     echo "========================================"
     echo ""
     echo "Configuration: $CONFIG_DIR/pyircx_config.json"
     echo "Installation:  $INSTALL_DIR"
-    echo "Logs:          journalctl -u pyircx"
+    echo "Database:      $INSTALL_DIR/pyircx.db"
+    echo "Logs:          journalctl -u pyircx -f"
     echo ""
     echo -e "${YELLOW}Default Admin Account:${NC}"
     echo "  Username: admin"
     echo "  Password: changeme"
     echo ""
     echo -e "${RED}*** CHANGE THE DEFAULT PASSWORD IMMEDIATELY ***${NC}"
-    echo "  Connect to IRC and run: STAFF PASS admin yournewpassword"
     echo ""
-    echo "To login as admin (in your IRC client):"
-    echo "  /QUOTE PASS admin:changeme"
-    echo "  Then connect normally - you'll have ADMIN privileges"
+    echo "How to change password:"
+    echo "  Option 1 - Via command line:"
+    echo "    python3 $INSTALL_DIR/api.py change-staff-password admin YourNewPassword"
     echo ""
-    echo "Commands:"
-    echo "  systemctl start pyircx    - Start server"
-    echo "  systemctl stop pyircx     - Stop server"
+    echo "  Option 2 - Via IRC client:"
+    echo "    /QUOTE PASS admin:changeme"
+    echo "    /STAFF PASS admin YourNewPassword"
+    echo ""
+    echo -e "${GREEN}Essential Commands:${NC}"
+    echo "  systemctl status pyircx   - Check server status"
     echo "  systemctl restart pyircx  - Restart server"
-    echo "  systemctl status pyircx   - Check status"
-    echo "  systemctl enable pyircx   - Enable at boot"
-    echo "  systemctl reload pyircx   - Reload config/SSL certs"
+    echo "  systemctl stop pyircx     - Stop server"
+    echo "  journalctl -u pyircx -f   - View live logs"
     echo ""
-    echo "SSL/TLS Setup (optional):"
-    echo "  1. Install certbot:  apt install certbot"
-    echo "  2. Get certificate:  certbot certonly --standalone -d irc.example.com"
-    echo "  3. Edit config and set ssl.enabled=true, ssl.cert_file, ssl.key_file"
-    echo "  4. Restart pyircx:   systemctl restart pyircx"
+    echo -e "${GREEN}Database Management:${NC}"
+    echo "  Regenerate database: python3 init_database.py $INSTALL_DIR/pyircx.db --force"
+    echo "  Backup database: cp $INSTALL_DIR/pyircx.db backup_$(date +%Y%m%d).db"
     echo ""
-    echo "Default ports: 6667 (plain), 6697 (SSL)"
+    echo "Default IRC ports: 6667 (plain), 6697 (SSL if configured)"
     echo ""
     echo "========================================"
     echo -e "${YELLOW}Optional: Web Server Setup (Apache/httpd)${NC}"

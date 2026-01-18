@@ -20,9 +20,9 @@ SyslogIdentifier=pyircx
 
 # Security hardening
 NoNewPrivileges=true
-ProtectSystem=full
+ProtectSystem=false
 ProtectHome=true
-PrivateTmp=true
+PrivateTmp=false
 PrivateDevices=false
 ProtectKernelTunables=true
 ProtectKernelModules=true
@@ -36,12 +36,9 @@ LockPersonality=true
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 
-# Read-write paths for data
-ReadWritePaths=/opt/pyircx/transcripts
+# Read-write paths for data and configuration
 ReadWritePaths=/opt/pyircx
-
-# Read-only paths for configuration
-ReadOnlyPaths=/etc/pyircx
+ReadWritePaths=/etc/pyircx
 
 # Restart policy
 Restart=on-failure

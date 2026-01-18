@@ -16,8 +16,8 @@ RestartSec=5
 
 # Security
 NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
+PrivateTmp=false
+ProtectSystem=false
 ProtectHome=true
 ReadWritePaths=/opt/pyircx/webchat
 
