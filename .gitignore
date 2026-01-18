@@ -50,3 +50,4 @@ SESSION_NOTES_*.md
 
 # Runtime status files
 *_status.json
+motd
