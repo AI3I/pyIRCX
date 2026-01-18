@@ -55,63 +55,55 @@ else:
     DEFAULT_LOG = os.path.join(USER_INSTALL, "pyircx.log")
     DEFAULT_STATUS = os.path.join(USER_INSTALL, "pyircx_status.json")
 
+@api_error_handler
 def load_config():
     """Load pyIRCX configuration"""
-    try:
-        with open(DEFAULT_CONFIG, 'r') as f:
-            return json.load(f)
-    except Exception as e:
-        return {}
+    with open(DEFAULT_CONFIG, 'r') as f:
+        return json.load(f)
 
+@api_error_handler
 def save_config(config):
     """Save pyIRCX configuration"""
-    try:
-        with open(DEFAULT_CONFIG, 'w') as f:
-            json.dump(config, f, indent=2)
-        return {"success": True}
-    except Exception as e:
-        return {"error": str(e)}
+    with open(DEFAULT_CONFIG, 'w') as f:
+        json.dump(config, f, indent=2)
+    return {"success": True}
 
+@api_error_handler
 def get_motd():
     """Get MOTD (Message of the Day) from configuration"""
-    try:
-        config = load_config()
-        if 'server' in config and 'motd' in config['server']:
-            motd = config['server']['motd']
-            # Return as array of lines
-            if isinstance(motd, str):
-                return {"motd": [motd]}
-            return {"motd": motd}
-        # Return empty MOTD if not configured (default should be in config file)
-        return {"motd": []}
-    except Exception as e:
-        return {"error": str(e)}
+    config = load_config()
+    if 'server' in config and 'motd' in config['server']:
+        motd = config['server']['motd']
+        # Return as array of lines
+        if isinstance(motd, str):
+            return {"motd": [motd]}
+        return {"motd": motd}
+    # Return empty MOTD if not configured (default should be in config file)
+    return {"motd": []}
 
+@api_error_handler
 def set_motd(motd_lines):
     """Set MOTD (Message of the Day) in configuration"""
-    try:
-        config = load_config()
-        if 'server' not in config:
-            config['server'] = {}
+    config = load_config()
+    if 'server' not in config:
+        config['server'] = {}
 
-        # Parse motd_lines - can be JSON array or newline-separated string
-        if isinstance(motd_lines, str):
-            try:
-                # Try to parse as JSON first
-                parsed = json.loads(motd_lines)
-                if isinstance(parsed, list):
-                    motd_lines = parsed
-                else:
-                    # Split on newlines (preserve empty lines for spacing)
-                    motd_lines = [line.rstrip() for line in motd_lines.split('\n')]
-            except json.JSONDecodeError:
-                # Not JSON, split on newlines (preserve empty lines for spacing)
+    # Parse motd_lines - can be JSON array or newline-separated string
+    if isinstance(motd_lines, str):
+        try:
+            # Try to parse as JSON first
+            parsed = json.loads(motd_lines)
+            if isinstance(parsed, list):
+                motd_lines = parsed
+            else:
+                # Split on newlines (preserve empty lines for spacing)
                 motd_lines = [line.rstrip() for line in motd_lines.split('\n')]
+        except json.JSONDecodeError:
+            # Not JSON, split on newlines (preserve empty lines for spacing)
+            motd_lines = [line.rstrip() for line in motd_lines.split('\n')]
 
-        config['server']['motd'] = motd_lines
-        return save_config(config)
-    except Exception as e:
-        return {"error": str(e)}
+    config['server']['motd'] = motd_lines
+    return save_config(config)
 
 def get_db_path():
     """Get database path from config or use default"""
@@ -185,118 +177,112 @@ except Exception as e:
 # REAL-TIME STATUS
 # ============================================================================
 
+@api_error_handler
 def get_realtime_status():
     """Get real-time connected users and active channels from status dump"""
-    try:
-        if not os.path.exists(DEFAULT_STATUS):
-            return {"error": "Status file not found. Server may not be running."}
+    if not os.path.exists(DEFAULT_STATUS):
+        return {"error": "Status file not found - server may not be running"}
 
-        with open(DEFAULT_STATUS, 'r') as f:
-            status = json.load(f)
+    with open(DEFAULT_STATUS, 'r') as f:
+        status = json.load(f)
 
-        # Calculate age of status
-        age = time.time() - status.get('timestamp', 0)
-        status['status_age'] = age
+    # Calculate age of status
+    age = time.time() - status.get('timestamp', 0)
+    status['status_age'] = age
 
-        return status
+    return status
 
-    except Exception as e:
-        return {"error": str(e)}
-
+@api_error_handler
 def get_services_list():
     """Get list of network services and ServiceBots with their status"""
-    try:
-        config = load_config()
+    config = load_config()
 
-        # Define core services (always present when server is running)
-        core_services = [
-            {
-                "nickname": "System",
-                "type": "Core Service",
-                "description": "Network Services",
-                "is_servicebot": False,
-                "channels": ["#System"]
-            },
-            {
-                "nickname": "Registrar",
-                "type": "Core Service",
-                "description": "Registration Services (nickname and channel registration)",
-                "is_servicebot": False,
-                "channels": ["#System"]
-            },
-            {
-                "nickname": "Messenger",
-                "type": "Core Service",
-                "description": "Message Services (mailbox and private messaging)",
-                "is_servicebot": False,
-                "channels": ["#System"]
-            },
-            {
-                "nickname": "NewsFlash",
-                "type": "Core Service",
-                "description": "News Broadcast Services (rotating and push messages)",
-                "is_servicebot": False,
-                "channels": ["#System"]
-            }
-        ]
-
-        # Get ServiceBot configuration
-        servicebot_count = config.get('services', {}).get('servicebot_count', 10)
-        servicebot_max_channels = config.get('services', {}).get('servicebot_max_channels', 10)
-
-        # Create ServiceBot entries
-        servicebots = []
-        for i in range(1, servicebot_count + 1):
-            bot_name = f"ServiceBot{i:02d}"
-            servicebots.append({
-                "nickname": bot_name,
-                "type": "ServiceBot",
-                "description": f"Service Bot #{i} (channel monitoring and moderation)",
-                "is_servicebot": True,
-                "max_channels": servicebot_max_channels,
-                "channels": []  # Will be populated from status if available
-            })
-
-        # Try to get real-time channel information from status file
-        if os.path.exists(DEFAULT_STATUS):
-            try:
-                with open(DEFAULT_STATUS, 'r') as f:
-                    status = json.load(f)
-
-                # Update service channel lists based on active channels
-                all_services = core_services + servicebots
-                for channel_data in status.get('active_channels', []):
-                    channel_name = channel_data.get('name')
-                    members = channel_data.get('members', [])
-
-                    # Check if any services are in this channel
-                    for service in all_services:
-                        # Note: status file only shows real users, not virtual ones
-                        # So we can't get actual service presence, only maintain the default lists
-                        pass
-
-                # Add timestamp for freshness
-                return {
-                    "services": all_services,
-                    "servicebot_count": servicebot_count,
-                    "servicebot_enabled": config.get('servicebot', {}).get('enabled', True),
-                    "timestamp": status.get('timestamp', 0),
-                    "server_running": True
-                }
-            except Exception:
-                # If status file can't be read, still return service list
-                pass
-
-        # Return services list even if status file not available
-        return {
-            "services": core_services + servicebots,
-            "servicebot_count": servicebot_count,
-            "servicebot_enabled": config.get('servicebot', {}).get('enabled', True),
-            "server_running": False
+    # Define core services (always present when server is running)
+    core_services = [
+        {
+            "nickname": "System",
+            "type": "Core Service",
+            "description": "Network Services",
+            "is_servicebot": False,
+            "channels": ["#System"]
+        },
+        {
+            "nickname": "Registrar",
+            "type": "Core Service",
+            "description": "Registration Services (nickname and channel registration)",
+            "is_servicebot": False,
+            "channels": ["#System"]
+        },
+        {
+            "nickname": "Messenger",
+            "type": "Core Service",
+            "description": "Message Services (mailbox and private messaging)",
+            "is_servicebot": False,
+            "channels": ["#System"]
+        },
+        {
+            "nickname": "NewsFlash",
+            "type": "Core Service",
+            "description": "News Broadcast Services (rotating and push messages)",
+            "is_servicebot": False,
+            "channels": ["#System"]
         }
+    ]
 
-    except Exception as e:
-        return {"error": str(e)}
+    # Get ServiceBot configuration
+    servicebot_count = config.get('services', {}).get('servicebot_count', 10)
+    servicebot_max_channels = config.get('services', {}).get('servicebot_max_channels', 10)
+
+    # Create ServiceBot entries
+    servicebots = []
+    for i in range(1, servicebot_count + 1):
+        bot_name = f"ServiceBot{i:02d}"
+        servicebots.append({
+            "nickname": bot_name,
+            "type": "ServiceBot",
+            "description": f"Service Bot #{i} (channel monitoring and moderation)",
+            "is_servicebot": True,
+            "max_channels": servicebot_max_channels,
+            "channels": []  # Will be populated from status if available
+        })
+
+    # Try to get real-time channel information from status file
+    if os.path.exists(DEFAULT_STATUS):
+        try:
+            with open(DEFAULT_STATUS, 'r') as f:
+                status = json.load(f)
+
+            # Update service channel lists based on active channels
+            all_services = core_services + servicebots
+            for channel_data in status.get('active_channels', []):
+                channel_name = channel_data.get('name')
+                members = channel_data.get('members', [])
+
+                # Check if any services are in this channel
+                for service in all_services:
+                    # Note: status file only shows real users, not virtual ones
+                    # So we can't get actual service presence, only maintain the default lists
+                    pass
+
+            # Add timestamp for freshness
+            return {
+                "services": all_services,
+                "servicebot_count": servicebot_count,
+                "servicebot_enabled": config.get('servicebot', {}).get('enabled', True),
+                "timestamp": status.get('timestamp', 0),
+                "server_running": True
+            }
+        except Exception:
+            # If status file can't be read, still return service list
+            pass
+
+    # Return services list even if status file not available
+    return {
+        "services": core_services + servicebots,
+        "servicebot_count": servicebot_count,
+        "servicebot_enabled": config.get('servicebot', {}).get('enabled', True),
+        "server_running": False
+    }
 
 # ============================================================================
 # IRC SERVER COMMUNICATION
@@ -418,6 +404,7 @@ def set_channel_topic(channel_name, topic):
         f"Topic will be set on {channel_name}"
     )
 
+@api_error_handler
 def apply_channel_modes_live(channel_name, modes):
     """Apply channel modes by killing channel to force reload from database
 
@@ -431,6 +418,7 @@ def apply_channel_modes_live(channel_name, modes):
     # Kill channel to force reload from database with new modes
     return send_irc_kill_channel(channel_name)
 
+@api_error_handler
 def apply_channel_props_live(channel_name, topic=None, onjoin=None, onpart=None,
                              memberkey=None, hostkey=None, ownerkey=None):
     """Apply channel PROP settings by killing channel to force reload from database
@@ -1067,6 +1055,7 @@ def update_staff_profile(username, realname=None, email=None, force_realname=Non
         return {"success": True, "message": f"Profile updated for '{username}'"}
 
 
+@api_error_handler
 def get_server_config():
     """Get server configuration"""
     config = load_config()
@@ -1090,80 +1079,77 @@ def get_server_config():
 
     return safe_config
 
+@api_error_handler
 def get_full_config():
     """Get full configuration for editing"""
     return load_config()
 
+@api_error_handler
 def set_config(config_json):
     """Set configuration from JSON string"""
-    try:
-        config = json.loads(config_json)
-        return save_config(config)
-    except json.JSONDecodeError as e:
-        return {"error": f"Invalid JSON: {str(e)}"}
+    config = json.loads(config_json)
+    return save_config(config)
 
 # ============================================================================
 # LOG FUNCTIONS
 # ============================================================================
 
+@api_error_handler
 def get_logs(lines=100, level_filter=None, search=None):
     """Get server logs from journalctl (systemd) or log file"""
+    # Try to get logs from journalctl (systemd journal) first
+    import subprocess
+
+    cmd = ['journalctl', '-u', 'pyircx.service', '-n', str(lines), '--no-pager', '--output=short-iso']
+
     try:
-        # Try to get logs from journalctl (systemd journal) first
-        import subprocess
-        
-        cmd = ['journalctl', '-u', 'pyircx.service', '-n', str(lines), '--no-pager', '--output=short-iso']
-        
-        try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
-            if result.returncode == 0 and result.stdout:
-                log_lines = result.stdout.strip().split('\n')
-                
-                # Apply filters
-                if level_filter:
-                    log_lines = [line for line in log_lines if f"[{level_filter}]" in line]
-                
-                if search:
-                    log_lines = [line for line in log_lines if search.lower() in line.lower()]
-                
-                return {
-                    'logs': '\n'.join(log_lines),
-                    'line_count': len(log_lines),
-                    'source': 'journalctl'
-                }
-        except (subprocess.TimeoutExpired, FileNotFoundError):
-            pass  # Fall back to file
-        
-        # Fallback to log file if journalctl not available
-        if not os.path.exists(DEFAULT_LOG):
-            return {"error": "No logs available (journalctl failed and log file not found)"}
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        if result.returncode == 0 and result.stdout:
+            log_lines = result.stdout.strip().split('\n')
 
-        with open(DEFAULT_LOG, 'r') as f:
-            log_lines = f.readlines()
+            # Apply filters
+            if level_filter:
+                log_lines = [line for line in log_lines if f"[{level_filter}]" in line]
 
-        # Get last N lines
-        log_lines = log_lines[-lines:]
+            if search:
+                log_lines = [line for line in log_lines if search.lower() in line.lower()]
 
-        # Apply filters
-        if level_filter:
-            log_lines = [line for line in log_lines if f"[{level_filter}]" in line]
+            return {
+                'logs': '\n'.join(log_lines),
+                'line_count': len(log_lines),
+                'source': 'journalctl'
+            }
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        pass  # Fall back to file
 
-        if search:
-            log_lines = [line for line in log_lines if search.lower() in line.lower()]
+    # Fallback to log file if journalctl not available
+    if not os.path.exists(DEFAULT_LOG):
+        return {"error": "No logs available - journalctl failed and log file not found"}
 
-        return {
-            'logs': ''.join(log_lines),
-            'line_count': len(log_lines),
-            'source': 'file'
-        }
+    with open(DEFAULT_LOG, 'r') as f:
+        log_lines = f.readlines()
 
-    except Exception as e:
-        return {"error": str(e)}
+    # Get last N lines
+    log_lines = log_lines[-lines:]
+
+    # Apply filters
+    if level_filter:
+        log_lines = [line for line in log_lines if f"[{level_filter}]" in line]
+
+    if search:
+        log_lines = [line for line in log_lines if search.lower() in line.lower()]
+
+    return {
+        'logs': ''.join(log_lines),
+        'line_count': len(log_lines),
+        'source': 'file'
+    }
 
 # ============================================================================
 # NEWSFLASH SETTINGS
 # ============================================================================
 
+@api_error_handler
 def get_newsflash_settings():
     """Get NewsFlash broadcast settings"""
     config = load_config()
@@ -1174,23 +1160,21 @@ def get_newsflash_settings():
         'periodic_interval': newsflash.get('periodic_interval', 30)
     }
 
+@api_error_handler
 def set_newsflash_settings(on_connect, periodic_enabled, periodic_interval):
     """Set NewsFlash broadcast settings"""
-    try:
-        config = load_config()
-        if 'newsflash' not in config:
-            config['newsflash'] = {}
-        
-        config['newsflash']['on_connect'] = on_connect == 'true' or on_connect == True
-        config['newsflash']['periodic_enabled'] = periodic_enabled == 'true' or periodic_enabled == True
-        config['newsflash']['periodic_interval'] = int(periodic_interval)
-        
-        result = save_config(config)
-        if 'error' in result:
-            return result
-        return {"success": True, "message": "NewsFlash settings updated"}
-    except Exception as e:
-        return {"error": str(e)}
+    config = load_config()
+    if 'newsflash' not in config:
+        config['newsflash'] = {}
+
+    config['newsflash']['on_connect'] = on_connect == 'true' or on_connect == True
+    config['newsflash']['periodic_enabled'] = periodic_enabled == 'true' or periodic_enabled == True
+    config['newsflash']['periodic_interval'] = int(periodic_interval)
+
+    result = save_config(config)
+    if 'error' in result:
+        return result
+    return {"success": True, "message": "NewsFlash settings updated successfully"}
 
 # ============================================================================
 # NICKNAME AND CHANNEL REGISTRATION
@@ -1464,6 +1448,7 @@ def test_staff_login(username, password):
         else:
             return {"success": False, "message": "Password incorrect"}
 
+@api_error_handler
 def test_staff_login_stdin(username):
     """Test if a staff username/password combination is valid (password from stdin)"""
     # Read password from stdin (more secure for web interface)
