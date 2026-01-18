@@ -7650,7 +7650,7 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :  STAFF DEL user - Remove staff account")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  STAFF SET user level - Change staff level")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  STAFF PASS user password - Change staff password")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  STAFF MFA user ENABLE/DISABLE/STATUS - Manage MFA (ADMIN only)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  STAFF MFA user ENABLE/DISABLE/RESET/STATUS - Manage MFA (ADMIN only)")
             if user.is_admin():
                 await user.send(f":{self.servername} NOTICE {user.nickname} :")
                 await user.send(f":{self.servername} NOTICE {user.nickname} :ADMIN-only Commands:")
