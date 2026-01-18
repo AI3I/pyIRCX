@@ -2120,6 +2120,35 @@ console.log("=== admin.js LOADING ===");
                     <input type="password" class="form-control branch-password" value="${escapeHtml(password)}" placeholder="secure-pass">
                 </div>
             </div>
+            <div style="margin-top: 10px;">
+                <button type="button" class="btn btn-sm btn-secondary branch-toggle-advanced" style="font-size: 11px; padding: 2px 8px;">⚙️ Show Advanced Options</button>
+            </div>
+            <div class="branch-advanced" style="display: none; margin-top: 10px; padding: 10px; background: #fff; border: 1px solid #ddd; border-radius: 4px;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+                    <div>
+                        <label style="font-size: 12px; font-weight: bold;">SSL Certificate Path</label>
+                        <input type="text" class="form-control branch-ssl-cert" placeholder="/etc/letsencrypt/live/${escapeHtml(name || 'branch')}/fullchain.pem">
+                        <small style="font-size: 10px; color: #666;">Leave blank to use default path</small>
+                    </div>
+                    <div>
+                        <label style="font-size: 12px; font-weight: bold;">SSL Key Path</label>
+                        <input type="text" class="form-control branch-ssl-key" placeholder="/etc/letsencrypt/live/${escapeHtml(name || 'branch')}/privkey.pem">
+                        <small style="font-size: 10px; color: #666;">Leave blank to use default path</small>
+                    </div>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+                    <div>
+                        <label style="font-size: 12px; font-weight: bold;">Database Path</label>
+                        <input type="text" class="form-control branch-db-path" placeholder="pyircx_branch.db">
+                        <small style="font-size: 10px; color: #666;">Leave blank to auto-generate from branch name</small>
+                    </div>
+                    <div>
+                        <label style="font-size: 12px; font-weight: bold;">Client Listen Ports (comma-separated)</label>
+                        <input type="text" class="form-control branch-listen-ports" placeholder="6667, 6697">
+                        <small style="font-size: 10px; color: #666;">Leave blank to inherit from trunk</small>
+                    </div>
+                </div>
+            </div>
             <div style="margin-top: 10px; display: flex; gap: 10px; align-items: center;">
                 <label style="font-size: 12px;"><input type="checkbox" class="branch-autoconnect" ${autoconnect ? 'checked' : ''}> Allow automatic connection and reconnection</label>
                 <div style="margin-left: auto; display: flex; gap: 10px;">
@@ -2130,6 +2159,19 @@ console.log("=== admin.js LOADING ===");
             </div>
         `;
         list.appendChild(div);
+
+        // Add advanced options toggle handler
+        const toggleBtn = div.querySelector('.branch-toggle-advanced');
+        const advancedDiv = div.querySelector('.branch-advanced');
+        toggleBtn?.addEventListener('click', () => {
+            if (advancedDiv.style.display === 'none') {
+                advancedDiv.style.display = 'block';
+                toggleBtn.textContent = '⚙️ Hide Advanced Options';
+            } else {
+                advancedDiv.style.display = 'none';
+                toggleBtn.textContent = '⚙️ Show Advanced Options';
+            }
+        });
 
         // Add password generator handler
         const genPassBtn = div.querySelector('.branch-gen-password-btn');
@@ -2160,6 +2202,12 @@ console.log("=== admin.js LOADING ===");
         const linkPort = parseInt(branchEntryDiv.querySelector('.branch-port').value) || 7001;
         const linkPassword = branchEntryDiv.querySelector('.branch-password').value;
 
+        // Get advanced options (if specified)
+        const customSslCert = branchEntryDiv.querySelector('.branch-ssl-cert')?.value.trim();
+        const customSslKey = branchEntryDiv.querySelector('.branch-ssl-key')?.value.trim();
+        const customDbPath = branchEntryDiv.querySelector('.branch-db-path')?.value.trim();
+        const customListenPorts = branchEntryDiv.querySelector('.branch-listen-ports')?.value.trim();
+
         if (!branchName || !branchHost || !linkPassword) {
             showToast('Error', 'Please fill in all branch fields', 'error');
             return;
@@ -2175,29 +2223,68 @@ console.log("=== admin.js LOADING ===");
 
             const networkName = trunkConfig.server?.network || 'IRC Network';
             const trunkName = trunkConfig.server?.name || 'trunk.network.local';
-            const clientPorts = trunkConfig.network?.listen_ports || [6667];
             const trunkBindHost = trunkConfig.linking?.bind_host || '127.0.0.1';
             const trunkBindPort = trunkConfig.linking?.bind_port || 7001;
 
-            // Generate branch config
+            // Determine client ports: custom if provided, otherwise inherit from trunk
+            let clientPorts = trunkConfig.network?.listen_ports || [6667];
+            if (customListenPorts) {
+                clientPorts = customListenPorts.split(',').map(p => parseInt(p.trim())).filter(p => !isNaN(p));
+            }
+
+            // Determine SSL paths: custom if provided, otherwise use branch name
+            const sslCertPath = customSslCert || `/etc/letsencrypt/live/${branchName}/fullchain.pem`;
+            const sslKeyPath = customSslKey || `/etc/letsencrypt/live/${branchName}/privkey.pem`;
+
+            // Determine database path: custom if provided, otherwise auto-generate
+            const dbPath = customDbPath || `pyircx_${branchName.split('.')[0]}.db`;
+
+            // Generate comprehensive branch config
             const branchConfig = {
                 "server": {
                     "name": branchName,
                     "network": networkName,
-                    "motd": [
+                    "staff_login_message": trunkConfig.server?.staff_login_message || "Welcome to the staff team.",
+                    "motd": trunkConfig.server?.motd || [
                         `Welcome to ${networkName}`,
-                        `Services provided by ${trunkName}`
+                        "",
+                        `This is a branch server connected to ${trunkName}`,
+                        `Services provided by ${trunkName}`,
+                        "",
+                        "Please be respectful of other users.",
+                        "Type /help for available commands."
                     ],
                     "restrict_to_staff_only": false
                 },
                 "network": {
                     "listen_addr": "0.0.0.0",
                     "listen_ports": clientPorts,
-                    "enable_ipv6": trunkConfig.network?.enable_ipv6 || false
+                    "enable_ipv6": trunkConfig.network?.enable_ipv6 || false,
+                    "resolve_hostnames": trunkConfig.network?.resolve_hostnames !== undefined ? trunkConfig.network.resolve_hostnames : true
+                },
+                "database": {
+                    "path": dbPath,
+                    "pool_size": trunkConfig.database?.pool_size || 10
+                },
+                "system": trunkConfig.system || {
+                    "nick": "System",
+                    "ident": "System"
+                },
+                "transcript": trunkConfig.transcript || {
+                    "enabled": true,
+                    "directory": "transcripts",
+                    "max_lines": 10000,
+                    "format": "[{timestamp}] {event}"
                 },
                 "limits": trunkConfig.limits || {
                     "max_users": 10000,
-                    "max_channels": 2500
+                    "msg_length": 512,
+                    "nick_change_cooldown": 60,
+                    "max_nick_length": 30,
+                    "max_user_length": 30,
+                    "max_channel_length": 50,
+                    "max_channels": 2500,
+                    "max_channels_per_user": 20
                 },
                 "services": {
                     "enabled": true,
@@ -2206,6 +2293,95 @@ console.log("=== admin.js LOADING ===");
                     "hub_server": trunkName,
                     "servicebot_count": 0,
                     "servicebot_max_channels": 10
+                },
+                "security": trunkConfig.security || {
+                    "flood_messages": 5,
+                    "flood_window": 2.0,
+                    "connection_throttle": 100,
+                    "throttle_window": 60.0,
+                    "enable_flood_protection": true,
+                    "enable_connection_throttle": false,
+                    "cap_timeout": 60,
+                    "auth_max_attempts": 5,
+                    "auth_lockout_duration": 300,
+                    "auth_lockout_window": 600,
+                    "dnsbl": {
+                        "enabled": false,
+                        "action": "reject",
+                        "timeout": 3.0,
+                        "cache_ttl": 3600,
+                        "lists": [
+                            "dnsbl.dronebl.org",
+                            "rbl.efnetrbl.org",
+                            "bl.spamcop.net"
+                        ],
+                        "whitelist": [],
+                        "reject_message": "Your IP is listed in a DNS blacklist. Please contact network staff."
+                    },
+                    "proxy_detection": {
+                        "enabled": false,
+                        "ports": [8080, 3128, 1080, 9050],
+                        "timeout": 2.0,
+                        "action": "warn"
+                    },
+                    "connection_scoring": {
+                        "enabled": false,
+                        "threshold": 100,
+                        "dnsbl_score": 50,
+                        "proxy_score": 30,
+                        "no_ident_score": 10,
+                        "generic_hostname_score": 5
+                    },
+                    "webirc": {
+                        "enabled": false,
+                        "hosts": {}
+                    }
+                },
+                "persistence": trunkConfig.persistence || {
+                    "auto_save": true,
+                    "save_interval": 300
+                },
+                "servicebot": trunkConfig.servicebot || {
+                    "enabled": true,
+                    "profanity_filter": {
+                        "enabled": false,
+                        "action": "warn",
+                        "words": [],
+                        "warn_message": "Please watch your language.",
+                        "case_sensitive": false
+                    },
+                    "malicious_detection": {
+                        "enabled": true,
+                        "flood_threshold": 5,
+                        "flood_window": 3,
+                        "flood_action": "gag",
+                        "caps_threshold": 0.7,
+                        "caps_min_length": 10,
+                        "caps_action": "warn",
+                        "url_spam_threshold": 3,
+                        "url_spam_window": 10,
+                        "url_spam_action": "warn",
+                        "repeat_threshold": 3,
+                        "repeat_window": 30,
+                        "repeat_action": "warn"
+                    }
+                },
+                "admin": trunkConfig.admin || {
+                    "loc1": "pyIRCX Branch Administration",
+                    "loc2": "Network Operations",
+                    "email": "admin@" + branchName,
+                    "default_username": "admin",
+                    "default_password": "changeme"
+                },
+                "ssl": {
+                    "enabled": false,
+                    "ports": trunkConfig.ssl?.ports || [6697],
+                    "cert_file": sslCertPath,
+                    "key_file": sslKeyPath,
+                    "min_version": trunkConfig.ssl?.min_version || "TLSv1.2",
+                    "auto_reload": trunkConfig.ssl?.auto_reload !== undefined ? trunkConfig.ssl.auto_reload : true,
+                    "reload_interval": trunkConfig.ssl?.reload_interval || 3600,
+                    "expiry_warn_days": trunkConfig.ssl?.expiry_warn_days || [14, 7, 3, 1]
                 },
                 "linking": {
                     "enabled": true,
@@ -2222,11 +2398,17 @@ console.log("=== admin.js LOADING ===");
                         }
                     ]
                 },
-                "ssl": {
-                    "enabled": false
-                },
                 "webadmin": {
                     "enabled": false
+                },
+                "comments": {
+                    "info": `Branch server configuration for ${branchName}`,
+                    "generated": new Date().toISOString(),
+                    "trunk_server": trunkName,
+                    "server_role": "Branch server (leaf node) - connects to trunk for services and network coordination",
+                    "ssl_note": "SSL is disabled by default. Update cert_file and key_file paths if needed, then set enabled: true",
+                    "database_note": `Database file: ${dbPath}`,
+                    "services_note": "Services are centralized on trunk server - this branch has servicebot_count: 0"
                 }
             };
 
