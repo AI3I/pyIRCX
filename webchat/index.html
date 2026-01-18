@@ -711,8 +711,6 @@ function renderUserList(ch) {
 function addMsg(target, html, cls = '') {
     const ch = getChannel(target);
     if (!ch) return;
-    // Skip messages with no content (prevents empty timestamp-only lines)
-    if (!html || html.trim() === '') return;
     // For system messages in Status, use spans instead of divs for tighter spacing
     const elem = (cls === 'system' && target === 'Status') ? document.createElement('span') : document.createElement('div');
     elem.className = 'message' + (cls ? ' ' + cls : '');
