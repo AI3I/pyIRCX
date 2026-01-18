@@ -3547,6 +3547,10 @@ class pyIRCXServer:
 
         await self.check_reg(user)
 
+        # Check for mailbox messages after nickname change (for staff with +r)
+        if user.registered and user.has_mode('r'):
+            await self._check_mailbox_notify(user)
+
     async def handle_webirc(self, user, params):
         """Handle WEBIRC command for IP spoofing from trusted gateways.
 
@@ -3873,6 +3877,9 @@ class pyIRCXServer:
 
         # Send newsflash on connect
         await self.send_newsflash_on_connect(user)
+
+        # Check for waiting mailbox messages
+        await self._check_mailbox_notify(user)
 
         # Notify watchers that this user has come online
         await self.notify_watchers_online(user)
@@ -11391,6 +11398,30 @@ class pyIRCXServer:
 
         except Exception as e:
             logger.error(f"Messenger count error: {e}")
+
+    async def _check_mailbox_notify(self, user):
+        """Check for unread mailbox messages and notify user"""
+        if not user.has_mode('r'):
+            return
+
+        try:
+            async with aiosqlite.connect(CONFIG.get('database', 'path')) as db:
+                async with db.execute("SELECT uuid FROM registered_nicks WHERE LOWER(nickname) = LOWER(?)",
+                                     (user.nickname,)) as cursor:
+                    row = await cursor.fetchone()
+                    if not row:
+                        return
+                    user_uuid = row[0]
+
+                async with db.execute("SELECT COUNT(*) FROM mailbox WHERE recipient_uuid = ? AND read = 0",
+                                     (user_uuid,)) as cursor:
+                    count = (await cursor.fetchone())[0]
+
+                if count > 0:
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :You have {count} unread mailbox message(s). Use /MEMO READ or /MSG Messenger READ to view them.")
+
+        except Exception as e:
+            logger.error(f"Mailbox notify error: {e}")
 
     async def _messenger_push(self, user, message):
         """Push a global message to all online users (ADMIN only)"""
