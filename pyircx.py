@@ -7429,6 +7429,7 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :  STAFF DEL user - Remove staff account")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  STAFF SET user level - Change staff level")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  STAFF PASS user password - Change staff password")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  STAFF MFA user ENABLE/DISABLE/STATUS - Manage MFA (ADMIN only)")
             if user.is_admin():
                 await user.send(f":{self.servername} NOTICE {user.nickname} :")
                 await user.send(f":{self.servername} NOTICE {user.nickname} :ADMIN-only Commands:")
@@ -7623,6 +7624,48 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :  Example: /MFA VERIFY 123456")
             await user.send(f":{self.servername} NOTICE {user.nickname} :MFA DISABLE - Turn off MFA")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  Usage: /MFA DISABLE <6-digit-code>")
+
+        elif topic in ["AUTH", "AUTHENTICATE"]:
+            if is_staff:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :=== AUTH Command (Staff) ===")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Securely authenticate as IRC staff after connecting.")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :AUTH <username> <password> - Authenticate as staff")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  Your credentials are never sent until after connection")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  If MFA is enabled, you'll be prompted for a code")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :AUTH VERIFY <code> - Complete MFA verification")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  Use after AUTH if MFA is enabled")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  Example: /AUTH VERIFY 123456")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :AUTH ENABLE <password> - Enable MFA for your staff account")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  Self-service MFA setup")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  You'll receive a QR code to scan")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :AUTH DISABLE <password> <code> - Disable MFA")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  Requires both password and current MFA code")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Security features:")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  - Progressive delays on failed attempts (2s, 5s, 10s)")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  - Account lockout after 5 failures")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  - Optional SSL/TLS requirement")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  - All attempts logged to #System channel")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :See also: /HELP DROP, /HELP STAFF")
+            else:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :AUTH - Staff authentication command")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :This command is for IRC staff only")
+
+        elif topic in ["DROP", "DEAUTH"]:
+            if is_staff:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :=== DROP Command (Staff) ===")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Voluntarily drop staff privileges and return to regular user.")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /DROP")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  Removes your +a, +o, or +g mode")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  Reverts to regular user status")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  You can re-authenticate with /AUTH")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Why use DROP?")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  - Testing features as a regular user")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  - Participating in events without staff status")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  - Security: temporarily reduce privileges")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :See also: /HELP AUTH")
+            else:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :DROP - Staff de-authentication command")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :This command is for IRC staff only")
 
         elif topic in ["LIST", "LISTX"]:
             await user.send(f":{self.servername} NOTICE {user.nickname} :=== LIST / LISTX Commands ===")
