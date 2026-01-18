@@ -1871,7 +1871,7 @@ RESPONSES = {
     "809": "{cls} {mask}",
     "810": ":End of events",
     "811": "Channel :Users Topic",
-    "812": "{channel} {users} :{topic}",
+    "812": "{channel} {users} {modes} :{topic}",
     "813": "End of /LISTX",
     "817": "{target} {prop} :{value}",
     "818": "{target} :End of properties",
@@ -4454,8 +4454,18 @@ class pyIRCXServer:
                 # Apply pattern filter if provided
                 if pattern and not fnmatch.fnmatch(name.lower(), pattern.lower()):
                     continue
+
+                # Build channel mode string for LISTX (no arguments, just flags)
+                mode_str = "+"
+                for mode_char in "tnsmihpklud":  # Common channel modes
+                    if channel.modes.get(mode_char, False):
+                        mode_str += mode_char
+                # If no modes set, show just "+"
+                if mode_str == "+":
+                    mode_str = "+"
+
                 await user.send(self.get_reply("812", user, channel=name, users=len(channel.members),
-                                         topic=channel.topic or ""))
+                                         modes=mode_str, topic=channel.topic or ""))
             await user.send(self.get_reply("813", user))
         else:
             await user.send(self.get_reply("321", user))
