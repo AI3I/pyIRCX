@@ -248,7 +248,7 @@ Three-tier staff hierarchy matching the original MECS design:
 
 ### Async Architecture
 
-pyIRCX is built from the ground up on Python's `asyncio` framework, enabling efficient handling of thousands of concurrent connections without threading overhead:
+pyIRCX is built from the ground up on Python's `asyncio` framework, enabling efficient handling of 10,000+ concurrent connections without threading overhead:
 
 ```python
 # Non-blocking I/O for all client operations
@@ -697,9 +697,11 @@ Comprehensive comparison of pyIRCX with major IRC server implementations:
 
 pyIRCX is production-ready and suitable for:
 
-✅ **Small Communities** (10-100 users) — Single server deployment
+✅ **Small Communities** (10-500 users) — Single server deployment
 
-✅ **Medium Networks** (100-1,000 users) — 2-3 linked servers
+✅ **Medium Networks** (500-5,000 users) — 2-3 linked servers
+
+✅ **Large Networks** (5,000-10,000+ users) — Multi-server distributed topology
 
 ✅ **Large Networks** (1,000+ users) — Multi-server distributed network
 
