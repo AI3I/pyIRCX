@@ -374,18 +374,25 @@ if command -v semanage &> /dev/null && command -v restorecon &> /dev/null; then
     echo -e "${BLUE}Configuring SELinux file contexts...${NC}"
 
     # /opt/pyircx - Main installation (read-write for web admin API)
+    semanage fcontext -d -t httpd_sys_rw_content_t "/opt/pyircx(/.*)?" 2>/dev/null || true
     semanage fcontext -a -t httpd_sys_rw_content_t "/opt/pyircx(/.*)?" 2>/dev/null || true
 
     # /etc/pyircx - Configuration directory (read-write for web admin config editor)
+    #               EXCEPT webchat.conf which needs etc_t for systemd EnvironmentFile
+    semanage fcontext -d -t httpd_sys_rw_content_t "/etc/pyircx(/.*)?" 2>/dev/null || true
     semanage fcontext -a -t httpd_sys_rw_content_t "/etc/pyircx(/.*)?" 2>/dev/null || true
 
-    # /etc/pyircx/webchat.conf - SystemD environment file (needs etc_t for systemd)
+    # /etc/pyircx/webchat.conf - SystemD EnvironmentFile (MUST be etc_t, NOT httpd_sys_rw_content_t)
+    # This overrides the previous rule specifically for webchat.conf
+    semanage fcontext -d -t etc_t "/etc/pyircx/webchat\.conf" 2>/dev/null || true
     semanage fcontext -a -t etc_t "/etc/pyircx/webchat\.conf" 2>/dev/null || true
 
     # /var/www/html/webadmin - Web admin panel (read-write for API operations)
+    semanage fcontext -d -t httpd_sys_rw_content_t "/var/www/html/webadmin(/.*)?" 2>/dev/null || true
     semanage fcontext -a -t httpd_sys_rw_content_t "/var/www/html/webadmin(/.*)?" 2>/dev/null || true
 
     # /var/www/html/webchat - WebChat frontend (read-only static content)
+    semanage fcontext -d -t httpd_sys_content_t "/var/www/html/webchat(/.*)?" 2>/dev/null || true
     semanage fcontext -a -t httpd_sys_content_t "/var/www/html/webchat(/.*)?" 2>/dev/null || true
 
     # Apply all contexts
@@ -393,6 +400,12 @@ if command -v semanage &> /dev/null && command -v restorecon &> /dev/null; then
     restorecon -Rv /etc/pyircx 2>/dev/null || true
     [ -d "/var/www/html/webadmin" ] && restorecon -Rv /var/www/html/webadmin 2>/dev/null || true
     [ -d "/var/www/html/webchat" ] && restorecon -Rv /var/www/html/webchat 2>/dev/null || true
+
+    # CRITICAL: Explicitly fix webchat.conf after global restorecon
+    if [ -f "/etc/pyircx/webchat.conf" ]; then
+        chcon -t etc_t "/etc/pyircx/webchat.conf" 2>/dev/null || true
+        echo -e "${GREEN}✓ SELinux context fixed for webchat.conf (etc_t)${NC}"
+    fi
 
     echo -e "${GREEN}✓ SELinux file contexts configured${NC}"
 fi
@@ -460,9 +473,19 @@ if [ $NEEDS_WEBCHAT_UPDATE -eq 1 ] && [ -d "$SCRIPT_DIR/webchat" ]; then
     echo ""
     echo -e "${BLUE}Updating WebChat...${NC}"
 
+    # Ensure webchat backend directory exists
+    if [ ! -d "$INSTALL_DIR/webchat" ]; then
+        echo -e "${YELLOW}Creating webchat backend directory...${NC}"
+        mkdir -p "$INSTALL_DIR/webchat"
+        chown "$SERVICE_USER:$SERVICE_GROUP" "$INSTALL_DIR/webchat"
+        echo -e "${GREEN}✓ WebChat backend directory created${NC}"
+    fi
+
     # Update backend (gateway)
     if [ -d "$INSTALL_DIR/webchat" ]; then
         cp "$SCRIPT_DIR/webchat/gateway.py" "$INSTALL_DIR/webchat/"
+        chmod 755 "$INSTALL_DIR/webchat/gateway.py"
+        chown "$SERVICE_USER:$SERVICE_GROUP" "$INSTALL_DIR/webchat/gateway.py"
         echo -e "${GREEN}✓ WebChat gateway updated${NC}"
     fi
 
