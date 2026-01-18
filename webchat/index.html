@@ -127,7 +127,8 @@
         .message .nick { font-weight: 700; margin-right: 6px; cursor: pointer; }
         .message .nick:hover { text-decoration: underline; }
         .message.action { font-style: italic; color: var(--text-secondary); background: var(--bg-secondary); padding: 6px 12px; border-radius: 6px; display: inline-block; }
-        .message.system { color: var(--text-muted); font-family: 'SF Mono', 'Consolas', monospace; font-size: 14px; white-space: pre-line; line-height: 1.1; margin-bottom: 0; padding: 0; }
+        .message.system { color: var(--text-muted); font-family: 'SF Mono', 'Consolas', monospace; font-size: 13px; line-height: 1.2; margin: 0; padding: 0; display: block; }
+        .message.system br { display: none; }
         .message.error { color: var(--danger); font-family: 'SF Mono', 'Consolas', monospace; font-size: 14px; background: #fef2f2; padding: 6px 12px; border-radius: 6px; border-left: 3px solid var(--danger); }
         .message.notice { color: #7c3aed; background: #f5f3ff; padding: 6px 12px; border-radius: 6px; }
         .message.whisper { color: #0d9488; background: #f0fdfa; padding: 6px 12px; border-radius: 6px; border-left: 3px solid #14b8a6; }
@@ -710,15 +711,20 @@ function renderUserList(ch) {
 function addMsg(target, html, cls = '') {
     const ch = getChannel(target);
     if (!ch) return;
-    const div = document.createElement('div');
-    div.className = 'message' + (cls ? ' ' + cls : '');
+    // For system messages in Status, use spans instead of divs for tighter spacing
+    const elem = (cls === 'system' && target === 'Status') ? document.createElement('span') : document.createElement('div');
+    elem.className = 'message' + (cls ? ' ' + cls : '');
     // Don't show timestamp for system messages to save space
     const timestamp = (cls === 'system') ? '' : `<span class="ts">${ts()}</span>`;
-    div.innerHTML = `${timestamp}${html}`;
-    ch.messages.push(div);
+    elem.innerHTML = `${timestamp}${html}`;
+    // Add line break after system message spans
+    if (cls === 'system' && target === 'Status') {
+        elem.innerHTML += '<br>';
+    }
+    ch.messages.push(elem);
     if (ch.messages.length > 500) ch.messages.shift();
     if (target.toLowerCase() === currentChannel.toLowerCase()) {
-        $('messages').appendChild(div.cloneNode(true));
+        $('messages').appendChild(elem.cloneNode(true));
         $('messages').scrollTop = $('messages').scrollHeight;
     } else {
         ch.unread++;
