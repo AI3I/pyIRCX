@@ -1403,16 +1403,20 @@ function handleMessage(data) {
             break;
 
         default:
-            // Show ALL unhandled numerics in status window
+            // Show ALL unhandled numerics in status window (except WHOIS-related)
             if (/^\d{3}$/.test(command)) {
-                // Numeric reply - show in status with full params
-                // Skip first param if it's our nickname, show the rest
-                let displayParams = p.slice();
-                if (displayParams.length > 0 && displayParams[0] === currentNick) {
-                    displayParams = displayParams.slice(1);
+                // Skip WHOIS numerics (handled in WHOIS panel, not Status)
+                const whoisNumerics = ['311', '307', '312', '313', '317', '318', '319', '320'];
+                if (!whoisNumerics.includes(command)) {
+                    // Numeric reply - show in status with full params
+                    // Skip first param if it's our nickname, show the rest
+                    let displayParams = p.slice();
+                    if (displayParams.length > 0 && displayParams[0] === currentNick) {
+                        displayParams = displayParams.slice(1);
+                    }
+                    const msg = displayParams.join(' ');
+                    sysMsg(`[${command}] ${msg || '(no data)'}`, 'system');
                 }
-                const msg = displayParams.join(' ');
-                sysMsg(`[${command}] ${msg || '(no data)'}`, 'system');
             } else {
                 console.log('Unhandled:', command, p);
             }
