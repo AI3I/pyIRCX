@@ -9189,7 +9189,7 @@ class pyIRCXServer:
 
                 # Code is valid! If MFA was in setup mode, enable it now
                 if not mfa_enabled:
-                    await self.db_pool.execute(
+                    await self.db_pool.execute_write(
                         "UPDATE users SET mfa_enabled = 1 WHERE username = ?",
                         (username,)
                     )
@@ -9237,7 +9237,7 @@ class pyIRCXServer:
                 totp = pyotp.TOTP(mfa_secret)
 
                 if totp.verify(code, valid_window=1):
-                    await self.db_pool.execute(
+                    await self.db_pool.execute_write(
                         "UPDATE users SET mfa_enabled = 1 WHERE username = ?",
                         (username,)
                     )
@@ -9246,7 +9246,7 @@ class pyIRCXServer:
                     logger.info(f"AUTH VERIFY: {username} enabled MFA via setup completion")
                 else:
                     await user.send(f":{self.servername} NOTICE {user.nickname} :Invalid MFA code. Setup cancelled.")
-                    await self.db_pool.execute(
+                    await self.db_pool.execute_write(
                         "UPDATE users SET mfa_secret = NULL WHERE username = ?",
                         (username,)
                     )
@@ -9305,7 +9305,7 @@ class pyIRCXServer:
             totp = pyotp.TOTP(secret)
 
             # Store secret but don't enable yet
-            await self.db_pool.execute(
+            await self.db_pool.execute_write(
                 "UPDATE users SET mfa_secret = ? WHERE username = ?",
                 (secret, username)
             )
@@ -9404,7 +9404,7 @@ class pyIRCXServer:
                 return
 
             # Disable MFA
-            await self.db_pool.execute(
+            await self.db_pool.execute_write(
                 "UPDATE users SET mfa_enabled = 0, mfa_secret = NULL WHERE username = ?",
                 (username,)
             )
