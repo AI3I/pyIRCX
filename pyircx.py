@@ -3064,8 +3064,9 @@ class pyIRCXServer:
             await writer.wait_closed()
             return
 
-        # Resolve hostname from IP address
-        user.host = await self.resolve_hostname(user.ip)
+        # Resolve hostname from IP address (unless WEBIRC already set it)
+        if not hasattr(user, 'webirc_applied') or not user.webirc_applied:
+            user.host = await self.resolve_hostname(user.ip)
 
         # DNSBL check - reject known bad IPs
         if DNSBL_CHECKER:
@@ -3603,9 +3604,10 @@ class pyIRCXServer:
             # Update user's IP and hostname to the real client values
             old_ip = user.ip
             user.ip = str(ip_obj)
-            user.hostname = hostname if hostname != client_ip else str(ip_obj)
+            user.host = str(ip_obj)  # Use IP as hostname for banning
             user.webirc_gateway = gateway
-            logger.info(f"WEBIRC: {gateway} spoofed {old_ip} -> {user.ip} ({user.hostname})")
+            user.webirc_applied = True  # Mark that WEBIRC was successfully applied
+            logger.info(f"WEBIRC: {gateway} spoofed {old_ip} -> {user.ip} ({user.host})")
         except ValueError:
             logger.warning(f"WEBIRC: Invalid client IP '{client_ip}' from gateway '{gateway}'")
             return
