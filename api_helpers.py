@@ -132,13 +132,13 @@ def validate_pattern(pattern, min_length=1, max_length=255):
         ValueError: If pattern is invalid
     """
     if not pattern:
-        raise ValueError("Pattern cannot be empty")
+        raise ValueError("Please provide a pattern (e.g., nick!*@*.com)")
 
     if not isinstance(pattern, str):
-        raise ValueError("Pattern must be a string")
+        raise ValueError("Pattern must be a text string")
 
     if len(pattern) < min_length:
-        raise ValueError(f"Pattern must be at least {min_length} characters")
+        raise ValueError(f"Pattern must be at least {min_length} character(s) long")
 
     if len(pattern) > max_length:
         raise ValueError(f"Pattern must not exceed {max_length} characters")
@@ -170,10 +170,10 @@ def validate_nickname(nickname):
         ValueError: If nickname is invalid
     """
     if not nickname:
-        raise ValueError("Nickname cannot be empty")
+        raise ValueError("Please provide a nickname")
 
     if not isinstance(nickname, str):
-        raise ValueError("Nickname must be a string")
+        raise ValueError("Nickname must be a text string")
 
     if len(nickname) > 30:
         raise ValueError("Nickname must not exceed 30 characters")
@@ -181,8 +181,7 @@ def validate_nickname(nickname):
     # IRC nickname rules: must start with letter, can contain letters, numbers, -, [, ], \, `, ^, {, }, |
     if not re.match(r'^[a-zA-Z][a-zA-Z0-9\-\[\]\\`^{}|]*$', nickname):
         raise ValueError(
-            "Invalid nickname format. Must start with a letter and "
-            "contain only letters, numbers, and: - [ ] \\ ` ^ { } |"
+            "Nickname must start with a letter and contain only letters, numbers, and special characters: - [ ] \\ ` ^ { } |"
         )
 
 
@@ -199,10 +198,10 @@ def validate_channel_name(channel):
         ValueError: If channel name is invalid
     """
     if not channel:
-        raise ValueError("Channel name cannot be empty")
+        raise ValueError("Please provide a channel name")
 
     if not isinstance(channel, str):
-        raise ValueError("Channel name must be a string")
+        raise ValueError("Channel name must be a text string")
 
     # Add # if not present
     if not channel.startswith('#'):
@@ -213,7 +212,7 @@ def validate_channel_name(channel):
 
     # Channel names can't contain spaces, commas, or control characters
     if re.search(r'[\s,\x00-\x1F]', channel):
-        raise ValueError("Channel name contains invalid characters")
+        raise ValueError("Channel name cannot contain spaces, commas, or control characters")
 
     return channel
 

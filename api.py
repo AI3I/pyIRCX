@@ -317,7 +317,7 @@ def send_irc_kill_user(nickname, reason="Killed by administrator"):
     """
     validate_nickname(nickname)
     if not reason or len(reason) > 500:
-        raise ValueError("Reason must be between 1 and 500 characters")
+        raise ValueError("Please provide a reason (1-500 characters)")
     return write_admin_command(
         f"KILL_USER:{nickname}:{reason}",
         f"User {nickname} will be disconnected"
@@ -337,9 +337,9 @@ def send_irc_ban_user(nickname, reason="Banned by administrator", duration=3600)
     """
     validate_nickname(nickname)
     if not isinstance(duration, int) or duration < 0:
-        raise ValueError("Duration must be a non-negative integer")
+        raise ValueError("Ban duration must be a non-negative number (in seconds)")
     if not reason or len(reason) > 500:
-        raise ValueError("Reason must be between 1 and 500 characters")
+        raise ValueError("Please provide a reason (1-500 characters)")
     return write_admin_command(
         f"BAN_USER:{nickname}:{duration}:{reason}",
         f"User {nickname} will be banned for {duration} seconds"
@@ -358,7 +358,7 @@ def send_irc_lock_channel(channel_name, owner="System"):
     """
     validate_channel_name(channel_name)
     if not owner or len(owner) > 30:
-        raise ValueError("Owner must be between 1 and 30 characters")
+        raise ValueError("Owner name must be provided (1-30 characters)")
     return write_admin_command(
         f"LOCK_CHANNEL:{channel_name}:{owner}",
         f"Channel {channel_name} will be locked and registered to {owner}"
@@ -377,9 +377,9 @@ def set_channel_mode(channel_name, mode_string):
     """
     validate_channel_name(channel_name)
     if not mode_string or len(mode_string) > 50:
-        raise ValueError("Mode string must be between 1 and 50 characters")
+        raise ValueError("Please provide a mode string (1-50 characters)")
     if not re.match(r'^[+-][a-zA-Z]+$', mode_string):
-        raise ValueError("Mode string must start with + or - followed by mode letters")
+        raise ValueError("Mode string must start with + or - followed by mode letters (e.g., '+nt' or '-s')")
     return write_admin_command(
         f"SET_CHANNEL_MODE:{channel_name}:{mode_string}",
         f"Mode {mode_string} will be set on {channel_name}"
@@ -623,7 +623,7 @@ def remove_server_access(access_type, pattern):
         if rows_affected > 0:
             return {"success": True, "message": f"Removed {access_type} for {pattern}"}
         else:
-            return {"error": "Rule not found"}
+            return {"error": f"Server access rule not found for pattern '{pattern}'"}
 
 # ============================================================================
 # NEWSFLASH MANAGEMENT
@@ -658,9 +658,9 @@ def add_newsflash(message, created_by, priority=0):
     """Add a NewsFlash message"""
     # Validate inputs
     if not message or len(message) > 500:
-        raise ValueError("Message must be between 1 and 500 characters")
+        raise ValueError("Please provide a message (1-500 characters)")
     if priority < 0 or priority > 10:
-        raise ValueError("Priority must be between 0 and 10")
+        raise ValueError("Priority must be between 0 (normal) and 10 (highest)")
 
     with db_pool.get_connection() as conn:
         cursor = conn.cursor()
@@ -679,7 +679,7 @@ def delete_newsflash(msg_id):
     """Delete a NewsFlash message"""
     # Validate input
     if not msg_id or int(msg_id) < 1:
-        raise ValueError("Invalid NewsFlash ID")
+        raise ValueError("Please provide a valid NewsFlash message ID (must be a positive number)")
 
     with db_pool.get_connection() as conn:
         cursor = conn.cursor()
@@ -689,9 +689,9 @@ def delete_newsflash(msg_id):
         rows_affected = cursor.rowcount
 
         if rows_affected > 0:
-            return {"success": True, "message": "NewsFlash deleted"}
+            return {"success": True, "message": "NewsFlash message deleted successfully"}
         else:
-            return {"error": "NewsFlash not found"}
+            return {"error": f"NewsFlash message with ID {msg_id} not found"}
 
 # ============================================================================
 # MAILBOX VIEWING
@@ -739,9 +739,9 @@ def send_mailbox_message(sender_nick, recipient_nick, message):
     """
     # Validate inputs
     if not sender_nick or len(sender_nick) > 30:
-        raise ValueError("Invalid sender nickname")
+        raise ValueError("Sender nickname must be provided (1-30 characters)")
     if not message or len(message) > 500:
-        raise ValueError("Message must be between 1 and 500 characters")
+        raise ValueError("Please provide a message (1-500 characters)")
     validate_nickname(recipient_nick)
 
     with db_pool.get_connection() as conn:
@@ -933,9 +933,9 @@ def add_staff(username, password, level, realname=None, email=None, force_realna
     # Validate inputs
     validate_staff_level(level)
     if not re.match(r'^[a-zA-Z0-9_-]{3,20}$', username):
-        raise ValueError("Username must be 3-20 characters (letters, numbers, _, -)")
+        raise ValueError("Username must be 3-20 characters long and contain only letters, numbers, underscores, or hyphens")
     if len(password) < 8:
-        raise ValueError("Password must be at least 8 characters")
+        raise ValueError("Password must be at least 8 characters long")
 
     with db_pool.get_connection() as conn:
         cursor = conn.cursor()
@@ -961,7 +961,7 @@ def delete_staff(username):
     """Delete a staff member"""
     # Validate input
     if not username or len(username) < 3:
-        raise ValueError("Invalid username")
+        raise ValueError("Please provide a valid username (at least 3 characters)")
 
     with db_pool.get_connection() as conn:
         cursor = conn.cursor()
@@ -974,21 +974,16 @@ def delete_staff(username):
         # Delete staff member
         cursor.execute("DELETE FROM users WHERE username = ?", (username,))
 
-        rows_affected = cursor.rowcount
-
-        if rows_affected > 0:
-            return {"success": True, "message": f"Staff member '{username}' deleted"}
-        else:
-            return {"error": "Failed to delete staff member"}
+        return {"success": True, "message": f"Staff member '{username}' deleted successfully"}
 
 @api_error_handler
 def change_staff_password(username, new_password):
     """Change a staff member's password"""
     # Validate inputs
     if not username or len(username) < 3:
-        raise ValueError("Invalid username")
+        raise ValueError("Please provide a valid username (at least 3 characters)")
     if len(new_password) < 8:
-        raise ValueError("Password must be at least 8 characters")
+        raise ValueError("Password must be at least 8 characters long")
 
     with db_pool.get_connection() as conn:
         cursor = conn.cursor()
@@ -1013,7 +1008,7 @@ def change_staff_level(username, new_level):
     """Change a staff member's privilege level"""
     # Validate inputs
     if not username or len(username) < 3:
-        raise ValueError("Invalid username")
+        raise ValueError("Please provide a valid username (at least 3 characters)")
     validate_staff_level(new_level)
 
     with db_pool.get_connection() as conn:
@@ -1036,7 +1031,7 @@ def update_staff_profile(username, realname=None, email=None, force_realname=Non
     """Update staff member's profile information (realname and email)"""
     # Validate input
     if not username or len(username) < 3:
-        raise ValueError("Invalid username")
+        raise ValueError("Please provide a valid username (at least 3 characters)")
 
     with db_pool.get_connection() as conn:
         cursor = conn.cursor()
@@ -1186,7 +1181,7 @@ def register_nickname(nickname, password, email=None):
     # Validate inputs
     validate_nickname(nickname)
     if len(password) < 8:
-        raise ValueError("Password must be at least 8 characters")
+        raise ValueError("Password must be at least 8 characters long")
     if email and email != '*':
         if not re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email):
             raise ValueError("Invalid email address")
@@ -1263,7 +1258,7 @@ def register_channel(channel_name, owner_nickname, topic=None, modes=None, onjoi
 
                 owner_uuid = service_uuid
             else:
-                return {"error": f"Owner '{owner_nickname}' not found. Valid options: registered nickname, staff username (ADMIN/SYSOP/GUIDE), or service name (System, Registrar, Messenger, NickServ, ChanServ, etc.)"}
+                return {"error": f"Owner '{owner_nickname}' not found. Please use a registered nickname or service name (System, Registrar, Messenger, NewsFlash)"}
         else:
             owner_uuid = owner_row[0]
 
@@ -1316,7 +1311,7 @@ def edit_nickname(nickname, new_password=None, new_email=None):
     # Validate inputs
     validate_nickname(nickname)
     if not new_password and new_email is None:
-        raise ValueError("No changes specified. Provide new_password and/or new_email.")
+        raise ValueError("No changes specified - please provide a new password and/or email address")
 
     with db_pool.get_connection() as conn:
         cursor = conn.cursor()
@@ -1335,7 +1330,7 @@ def edit_nickname(nickname, new_password=None, new_email=None):
         # Update password if provided
         if new_password:
             if len(new_password) < 8:
-                raise ValueError("Password must be at least 8 characters")
+                raise ValueError("Password must be at least 8 characters long")
             password_hash = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
             updates.append("password_hash = ?")
             params.append(password_hash)
@@ -1625,7 +1620,7 @@ def edit_channel(channel_name, new_owner=None, new_description=None, new_topic=N
             changes.append("userlimit")
 
         if not changes:
-            return {"error": "No changes were made"}
+            return {"error": "No changes were made - please specify at least one property to update"}
 
         # Save back to registered_channels
         cursor.execute("""UPDATE registered_channels
