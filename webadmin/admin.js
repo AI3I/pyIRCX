@@ -645,7 +645,7 @@ console.log("=== admin.js LOADING ===");
                 return;
             }
             let html = '<table class="table table-striped table-bordered">';
-            html += '<thead><tr><th>From</th><th>To</th><th>Message</th><th>Sent</th><th>Status</th></tr></thead><tbody>';
+            html += '<thead><tr><th>From</th><th>To</th><th>Message</th><th>Sent</th><th>Status</th><th>Actions</th></tr></thead><tbody>';
             data.forEach(m => {
                 html += '<tr>';
                 html += `<td>${escapeHtml(m.sender)}</td>`;
@@ -653,10 +653,21 @@ console.log("=== admin.js LOADING ===");
                 html += `<td>${escapeHtml(m.message)}</td>`;
                 html += `<td>${formatTimestamp(m.sent_at)}</td>`;
                 html += `<td>${m.read ? '<span class="label label-default">Read</span>' : '<span class="label label-success">Unread</span>'}</td>`;
+                html += `<td><button class="btn btn-sm btn-danger btn-delete-mailbox" data-id="${m.id}">🗑️ Delete</button></td>`;
                 html += '</tr>';
             });
             html += '</tbody></table>';
             $('#mailbox-list').innerHTML = html;
+
+            // Add delete button handlers
+            $$('.btn-delete-mailbox').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const msgId = this.getAttribute('data-id');
+                    if (confirm('Delete this mailbox message?')) {
+                        deleteMailboxMessage(msgId);
+                    }
+                });
+            });
         });
     }
 
@@ -679,6 +690,17 @@ console.log("=== admin.js LOADING ===");
                 $('#mailbox-from').value = '';
                 $('#mailbox-to').value = '';
                 $('#mailbox-message').value = '';
+                loadMailbox();
+            }
+        });
+    }
+
+    function deleteMailboxMessage(messageId) {
+        callAPI('delete-mailbox-message', [messageId]).then(res => {
+            if (res.error) {
+                showToast('Error', res.error, 'error');
+            } else {
+                showToast('Success', 'Message deleted', 'success');
                 loadMailbox();
             }
         });

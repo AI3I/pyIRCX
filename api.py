@@ -777,6 +777,22 @@ def send_mailbox_message(sender_nick, recipient_nick, message):
 
         return {"success": True, "message": f"Message sent to {recipient_nick}"}
 
+@api_error_handler
+def delete_mailbox_message(message_id):
+    """Delete a mailbox message by ID"""
+    with db_pool.get_connection() as conn:
+        cursor = conn.cursor()
+
+        # Check if message exists
+        cursor.execute("SELECT id FROM mailbox WHERE id = ?", (message_id,))
+        if not cursor.fetchone():
+            return {"error": f"Message ID {message_id} not found"}
+
+        # Delete the message
+        cursor.execute("DELETE FROM mailbox WHERE id = ?", (message_id,))
+
+        return {"success": True, "message": f"Message {message_id} deleted"}
+
 # ============================================================================
 # SEARCH FUNCTIONS
 # ============================================================================
@@ -1886,6 +1902,11 @@ def main():
             result = {"error": "Usage: send-mailbox-message <sender> <recipient> <message>"}
         else:
             result = send_mailbox_message(sys.argv[2], sys.argv[3], sys.argv[4])
+    elif command == "delete-mailbox-message":
+        if len(sys.argv) < 3:
+            result = {"error": "Usage: delete-mailbox-message <message_id>"}
+        else:
+            result = delete_mailbox_message(sys.argv[2])
 
     # Search
     elif command == "search-nicknames":
