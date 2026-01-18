@@ -1,0 +1,72 @@
+# pyIRCX WebChat Gateway Configuration
+# Copy this file to /etc/pyircx/webchat.conf and customize for your installation
+
+[websocket]
+# WebSocket server settings
+host = 0.0.0.0
+port = 8765
+
+# SSL/TLS for WebSocket connections (optional)
+# If enabled, clients must connect via wss:// instead of ws://
+ssl_cert =
+ssl_key =
+
+[irc]
+# IRC server connection settings
+host = localhost
+port = 6667
+
+# Use SSL/TLS for IRC server connection
+ssl = false
+
+# Verify SSL certificates (recommended: true)
+# Only set to false for testing with self-signed certificates
+verify_ssl = true
+
+[webirc]
+# WEBIRC password for IP forwarding
+# REQUIRED - Gateway will refuse to start without this
+# Change this to match the WEBIRC password in your IRC server config
+password =
+
+# WEBIRC gateway identifier (appears in user hostmasks)
+gateway = pyircx-webchat
+
+[limits]
+# Connection and rate limits
+
+# Maximum total concurrent connections
+max_connections = 1000
+
+# Maximum connections per IP address
+max_connections_per_ip = 5
+
+# Maximum messages per second per connection
+max_messages_per_second = 5
+
+# Maximum buffer size in bytes (prevents memory exhaustion)
+max_buffer_size = 65536
+
+[timeouts]
+# Timeout settings in seconds
+
+# Ping interval (send PING to check if connection is alive)
+ping_interval = 30
+
+# Pong timeout (wait this long for PONG response)
+pong_timeout = 10
+
+# Authentication timeout (how long to wait for initial connection setup)
+auth_timeout = 5
+
+[logging]
+# Logging configuration
+
+# Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+level = INFO
+
+# Log format
+format = [%(asctime)s] %(levelname)s: %(message)s
+
+# Date format
+date_format = %%Y-%%m-%%d %%H:%%M:%%S
