@@ -190,26 +190,35 @@ def create_database(db_path, admin_username=None, admin_password=None):
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_user_audit_nickname ON user_audit_log(nickname)")
     print("✓ Indexes created")
 
-    # Create default admin account
+    # Create default staff accounts (ADMIN, SYSOP, GUIDE)
     admin_user = admin_username or DEFAULT_ADMIN_USER
     admin_pass = admin_password or DEFAULT_ADMIN_PASS
 
-    print(f"\nCreating default admin account: {admin_user}")
-    hashed = bcrypt.hashpw(admin_pass.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    print(f"\nCreating default staff accounts...")
 
     import uuid
-    admin_uuid = str(uuid.uuid4())
     timestamp = int(datetime.now().timestamp())
 
-    cursor.execute("""INSERT INTO staff (username, password, level, created_at, created_by, uuid)
-                      VALUES (?, ?, 'ADMIN', ?, 'install_script', ?)""",
-                   (admin_user, hashed, timestamp, admin_uuid))
+    # Define default staff accounts
+    staff_accounts = [
+        {'username': 'admin', 'level': 'ADMIN', 'password': admin_pass},
+        {'username': 'sysop', 'level': 'SYSOP', 'password': admin_pass},
+        {'username': 'guide', 'level': 'GUIDE', 'password': admin_pass},
+    ]
 
-    print(f"✓ Admin account created")
-    print(f"  Username: {admin_user}")
-    print(f"  Password: {admin_pass}")
+    for account in staff_accounts:
+        hashed = bcrypt.hashpw(account['password'].encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        account_uuid = str(uuid.uuid4())
+
+        cursor.execute("""INSERT INTO staff (username, password, level, created_at, created_by, uuid)
+                          VALUES (?, ?, ?, ?, 'install_script', ?)""",
+                       (account['username'], hashed, account['level'], timestamp, account_uuid))
+
+        print(f"✓ {account['level']:<6} account: {account['username']}")
+
+    print(f"\nDefault password for all accounts: {admin_pass}")
     if admin_pass == DEFAULT_ADMIN_PASS:
-        print(f"  ⚠ WARNING: Using default password! Change immediately!")
+        print(f"⚠ WARNING: Using default password! Change immediately!")
 
     conn.commit()
     conn.close()
