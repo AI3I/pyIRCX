@@ -1862,7 +1862,7 @@ RESPONSES = {
     "713": "{target} :Channel is open",
     "714": "{target} :You are already on that channel",
     "716": "{target} :You cannot knock on this channel (+u mode)",
-    "800": "1 0 * 512 *",
+    "800": "1 0 {auth_status} 512 *",
     "804": "Authentication successful",
     "805": "{target} :Access list",
     "806": "{cls} {mask}",
@@ -3231,7 +3231,14 @@ class pyIRCXServer:
         elif cmd in ["IRCX", "ISIRCX"]:
             user.is_ircx = True
             user.set_mode('x', True)
-            await user.send(self.get_reply("800", user))
+            # Return SYST for staff, AUTH if authenticated, ANON if anonymous
+            if user.is_staff():
+                auth_status = "SYST"
+            elif user.authenticated:
+                auth_status = "AUTH"
+            else:
+                auth_status = "ANON"
+            await user.send(self.get_reply("800", user, auth_status=auth_status))
             return
         elif cmd == "PING":
             await user.send(
@@ -7055,7 +7062,7 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :ACCESS #chan DEL level mask - Remove access entry")
             await user.send(f":{self.servername} NOTICE {user.nickname} :ACCESS #chan CLEAR level - Clear access list")
             await user.send(f":{self.servername} NOTICE {user.nickname} :PROP #chan [prop [value]] - View/set channel properties")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :EVENT #chan message - Send event message to channel")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :LISTX [pattern] - Extended channel list with modes")
             await user.send(f":{self.servername} NOTICE {user.nickname} :WHISPER #chan nick :message - Private message in channel")
             await user.send(f":{self.servername} NOTICE {user.nickname} :DATA #chan id :data - Send structured data to channel")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Access levels: OWNER, HOST, VOICE, GRANT, DENY")
@@ -7309,14 +7316,16 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :  Usage: /MFA DISABLE <6-digit-code>")
 
         elif topic in ["LIST", "LISTX"]:
-            await user.send(f":{self.servername} NOTICE {user.nickname} :=== LIST Command ===")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /LIST [pattern]")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :List all channels on the network.")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  /LIST - Show all channels")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  /LIST *help* - Find channels with 'help' in name")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  /LIST #lobby - Show specific channel")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Note: Secret (+s) channels are hidden unless you're in them")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== LIST / LISTX Commands ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :LIST - Basic channel listing")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Usage: /LIST [pattern]")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Examples: /LIST, /LIST *help*, /LIST #lobby")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :LISTX - Extended channel listing (IRCX mode required)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Usage: /LISTX [pattern]")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Shows channel modes in addition to name, users, and topic")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Format: <channel> <users> <modes> :<topic>")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Example output: #lobby 15 +tn :Welcome to the lobby")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Note: Secret (+s) and hidden (+h) channels are hidden unless you're in them")
 
         elif topic in ["PRIVMSG", "MSG", "MESSAGE"]:
             await user.send(f":{self.servername} NOTICE {user.nickname} :=== PRIVMSG Command ===")
@@ -7630,6 +7639,77 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :  /SQUIT <server> [reason] - Disconnect server from network")
             await user.send(f":{self.servername} NOTICE {user.nickname} :")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Note: Requires IRC administrator privileges and proper server configuration")
+
+        elif topic == "EVENT" and is_staff:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== EVENT Command (IRCX - Staff Only) ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Real-time server monitoring for IRC operators and administrators.")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Requires: IRCX mode (+x) and operator/admin privileges (+o or +a)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :EVENT ADD <class> [<mask>] - Subscribe to events")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :EVENT DELETE <class> [<mask>] - Unsubscribe from events")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :EVENT LIST [<class>] - List active subscriptions")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Event Classes:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  CONNECT - User logon events")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  MEMBER - Channel join/part/kick/quit events")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  CHANNEL - Channel create/delete/topic events")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  USER - User logoff/nick/mode events")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  SERVER - Server link/split events")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  SOCKET - Accepted but never fires")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /EVENT ADD MEMBER *!*@* - Monitor all channel membership changes")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /EVENT ADD CONNECT *!*@192.168.* - Monitor local network connections")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /EVENT DELETE MEMBER *!*@* - Stop monitoring membership")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /EVENT LIST - Show all active subscriptions")
+
+        elif topic in ["PROP", "PROPERTY"]:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== PROP Command (IRCX) ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :View and set channel properties. Requires IRCX mode (+x).")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /PROP <#channel> - List all properties")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /PROP <#channel> <property> - View specific property")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /PROP <#channel> <property> <value> - Set property (owner only)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Common Properties:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  OWNERKEY - Password for instant +q (owner) on join")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  HOSTKEY - Password for instant +o (host) on join")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  VOICEKEY - Password for instant +v (voice) on join")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  MEMBERKEY - Password required to join")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  TOPIC - Channel topic")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  SUBJECT - Channel subject/description")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  ONJOIN - Message shown when users join")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  ONPART - Message shown when users leave")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  LAG - Lag value (ms)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /PROP #lobby - List all properties")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /PROP #lobby TOPIC - View topic")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /PROP #lobby OWNERKEY secret123 - Set owner password")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Note: Only channel owners can set properties")
+
+        elif topic == "ACCESS":
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== ACCESS Command (IRCX) ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Manage access control lists for channels. Requires IRCX mode (+x).")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /ACCESS <#channel> LIST [level] - List access entries")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /ACCESS <#channel> ADD <level> <mask> [reason] - Add entry")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /ACCESS <#channel> DELETE <level> <mask> - Remove entry")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /ACCESS <#channel> CLEAR [level] - Clear list")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Access Levels:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  OWNER - Grants +q (owner) status on join")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  HOST - Grants +o (host/operator) status on join")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  VOICE - Grants +v (voice) status on join")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  GRANT - Allows access (bypasses +i invite-only)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  DENY - Denies access (acts as ban)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /ACCESS #lobby LIST - Show all access entries")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /ACCESS #lobby ADD GRANT *!*@trusted.com Access granted")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /ACCESS #lobby ADD DENY *!*@spam.net Spammer")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /ACCESS #lobby DELETE DENY *!*@spam.net")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Note: Channel owners/hosts can manage their channel access lists")
 
         else:
             # Try fuzzy matching for suggestions
