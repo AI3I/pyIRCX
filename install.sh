@@ -12,6 +12,9 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
+# Version
+INSTALL_VERSION="2.0.0"
+
 # Default installation paths
 INSTALL_DIR="/opt/pyircx"
 CONFIG_DIR="/etc/pyircx"
