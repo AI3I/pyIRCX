@@ -703,8 +703,6 @@ pyIRCX is production-ready and suitable for:
 
 ✅ **Large Networks** (5,000-10,000+ users) — Multi-server distributed topology
 
-✅ **Large Networks** (1,000+ users) — Multi-server distributed network
-
 ✅ **Enterprise Deployments** — Secure internal chat with staff hierarchy
 
 ✅ **Retro Projects** — Authentic IRCX for vintage client compatibility
