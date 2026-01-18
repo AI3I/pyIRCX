@@ -158,21 +158,22 @@ Network-wide command propagation makes linked servers behave as a unified system
 - `MAP` — Visual tree display of network
 
 **Example Trunk/Branch Topology:**
-```
-        ┌──────────────────────┐
-        │   Trunk Server       │
-        │  (Services Hub)      │
-        │  - Registrar         │
-        │  - Messenger         │
-        │  - Staff Auth        │
-        └──────────┬───────────┘
-                   │
-       ┌───────────┼───────────┐
-       │           │           │
-   ┌───▼────┐  ┌──▼─────┐  ┌──▼─────┐
-   │Branch1 │  │Branch2 │  │Branch3 │
-   │US-East │  │US-West │  │Europe  │
-   └────────┘  └────────┘  └────────┘
+
+```mermaid
+graph TB
+    Trunk["🏛️ Trunk Server<br/>(Services Hub)<br/>- Registrar<br/>- Messenger<br/>- Staff Auth"]
+    Branch1["💻 Branch 1<br/>US-East<br/>10K users"]
+    Branch2["💻 Branch 2<br/>US-West<br/>10K users"]
+    Branch3["💻 Branch 3<br/>Europe<br/>10K users"]
+
+    Trunk --> Branch1
+    Trunk --> Branch2
+    Trunk --> Branch3
+
+    style Trunk fill:#e1f5ff,stroke:#0288d1,stroke-width:3px
+    style Branch1 fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    style Branch2 fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    style Branch3 fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
 ```
 
 **🎉 All automated tests passing!** See [TRUNK_BRANCH_PROGRESS.md](TRUNK_BRANCH_PROGRESS.md) for implementation details.
