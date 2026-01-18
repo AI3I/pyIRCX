@@ -439,16 +439,12 @@ def apply_channel_props_live(channel_name, topic=None, onjoin=None, onpart=None,
 # DATABASE STATISTICS
 # ============================================================================
 
+@api_error_handler
 def get_server_stats():
     """Get server statistics from database and runtime status"""
     db_path = get_db_path()
 
-    if not os.path.exists(db_path):
-        return {"error": f"Database not found at {db_path}. The database is created when pyIRCX starts for the first time. Please start the service: systemctl start pyircx"}
-
-    try:
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
+    with db_pool.get_connection() as conn:
         cursor = conn.cursor()
 
         stats = {}
@@ -477,8 +473,8 @@ def get_server_stats():
         # Count server access entries (bans/glines) - exclude expired
         now = int(time.time())
         cursor.execute("""
-            SELECT COUNT(*) as count, type 
-            FROM server_access 
+            SELECT COUNT(*) as count, type
+            FROM server_access
             WHERE timeout = 0 OR timeout > ?
             GROUP BY type
         """, (now,))
@@ -499,65 +495,54 @@ def get_server_stats():
         cursor.execute("SELECT COUNT(*) as count FROM memos WHERE read = 0")
         stats['unread_memos'] = cursor.fetchone()['count']
 
-        conn.close()
+    # Read runtime status from JSON file (after db context)
+    status_file = os.path.join(os.path.dirname(db_path), 'pyircx_status.json')
+    if os.path.exists(status_file):
+        try:
+            with open(status_file, 'r') as f:
+                runtime_status = json.load(f)
 
-        # Read runtime status from JSON file
-        status_file = os.path.join(os.path.dirname(db_path), 'pyircx_status.json')
-        if os.path.exists(status_file):
-            try:
-                with open(status_file, 'r') as f:
-                    runtime_status = json.load(f)
+            stats['connected_users'] = len(runtime_status.get('connected_users', []))
+            stats['active_channels'] = len(runtime_status.get('active_channels', []))
+            stats['linked_servers'] = len(runtime_status.get('linked_servers', []))
 
-                stats['connected_users'] = len(runtime_status.get('connected_users', []))
-                stats['active_channels'] = len(runtime_status.get('active_channels', []))
-                stats['linked_servers'] = len(runtime_status.get('linked_servers', []))
+            # Calculate uptime if timestamp is available
+            if 'timestamp' in runtime_status:
+                stats['status_timestamp'] = runtime_status['timestamp']
 
-                # Calculate uptime if timestamp is available
-                if 'timestamp' in runtime_status:
-                    stats['status_timestamp'] = runtime_status['timestamp']
+            # Get boot time from config or status
+            if 'boot_time' in runtime_status:
+                stats['boot_time'] = runtime_status['boot_time']
+                stats['uptime_seconds'] = int(time.time() - runtime_status['boot_time'])
 
-                # Get boot time from config or status
-                if 'boot_time' in runtime_status:
-                    stats['boot_time'] = runtime_status['boot_time']
-                    stats['uptime_seconds'] = int(time.time() - runtime_status['boot_time'])
+            # Get peak users if available
+            if 'peak_users' in runtime_status:
+                stats['peak_users'] = runtime_status['peak_users']
 
-                # Get peak users if available
-                if 'peak_users' in runtime_status:
-                    stats['peak_users'] = runtime_status['peak_users']
-
-                stats['server_running'] = True
-            except (json.JSONDecodeError, IOError) as e:
-                # Status file exists but couldn't be read
-                stats['server_running'] = False
-                stats['connected_users'] = 0
-                stats['active_channels'] = 0
-                stats['linked_servers'] = 0
-        else:
-            # No status file = server not running
+            stats['server_running'] = True
+        except (json.JSONDecodeError, IOError) as e:
+            # Status file exists but couldn't be read
             stats['server_running'] = False
             stats['connected_users'] = 0
             stats['active_channels'] = 0
             stats['linked_servers'] = 0
+    else:
+        # No status file = server not running
+        stats['server_running'] = False
+        stats['connected_users'] = 0
+        stats['active_channels'] = 0
+        stats['linked_servers'] = 0
 
-        return stats
-
-    except Exception as e:
-        return {"error": str(e)}
+    return stats
 
 # ============================================================================
 # BAN/GLINE MANAGEMENT
 # ============================================================================
 
+@api_error_handler
 def get_server_access_list():
     """Get all server access rules (bans/glines)"""
-    db_path = get_db_path()
-
-    if not os.path.exists(db_path):
-        return {"error": f"Database not found at {db_path}"}
-
-    try:
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
+    with db_pool.get_connection() as conn:
         cursor = conn.cursor()
 
         cursor.execute("""
@@ -582,29 +567,25 @@ def get_server_access_list():
                 'expired': expired
             })
 
-        conn.close()
         return rules
 
-    except Exception as e:
-        return {"error": str(e)}
-
+@api_error_handler
 def add_server_access(access_type, pattern, set_by, reason, timeout=0):
     """Add a server access rule (ban/gline)
-    
+
     Args:
         timeout: Duration in minutes (0 = permanent), will be converted to absolute timestamp
     """
-    db_path = get_db_path()
+    # Validate inputs
+    validate_access_type(access_type)
+    validate_pattern(pattern)
+    validate_timeout(timeout)
 
-    if not os.path.exists(db_path):
-        return {"error": f"Database not found at {db_path}"}
-
-    try:
-        conn = sqlite3.connect(db_path)
+    with db_pool.get_connection() as conn:
         cursor = conn.cursor()
 
         set_at = int(time.time())
-        
+
         # Convert duration in minutes to absolute timestamp
         # 0 means permanent (no expiry)
         duration_minutes = int(timeout) if timeout else 0
@@ -618,23 +599,16 @@ def add_server_access(access_type, pattern, set_by, reason, timeout=0):
             VALUES (?, ?, ?, ?, ?, ?)
         """, (access_type, pattern, set_by, set_at, timeout_val, reason))
 
-        conn.commit()
-        conn.close()
-
         return {"success": True, "message": f"Added {access_type} for {pattern}"}
 
-    except Exception as e:
-        return {"error": str(e)}
-
+@api_error_handler
 def remove_server_access(access_type, pattern):
     """Remove a server access rule"""
-    db_path = get_db_path()
+    # Validate inputs
+    validate_access_type(access_type)
+    validate_pattern(pattern)
 
-    if not os.path.exists(db_path):
-        return {"error": f"Database not found at {db_path}"}
-
-    try:
-        conn = sqlite3.connect(db_path)
+    with db_pool.get_connection() as conn:
         cursor = conn.cursor()
 
         cursor.execute("""
@@ -642,31 +616,20 @@ def remove_server_access(access_type, pattern):
         """, (access_type, pattern))
 
         rows_affected = cursor.rowcount
-        conn.commit()
-        conn.close()
 
         if rows_affected > 0:
             return {"success": True, "message": f"Removed {access_type} for {pattern}"}
         else:
             return {"error": "Rule not found"}
 
-    except Exception as e:
-        return {"error": str(e)}
-
 # ============================================================================
 # NEWSFLASH MANAGEMENT
 # ============================================================================
 
+@api_error_handler
 def get_newsflash_list():
     """Get all newsflash messages"""
-    db_path = get_db_path()
-
-    if not os.path.exists(db_path):
-        return {"error": f"Database not found at {db_path}"}
-
-    try:
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
+    with db_pool.get_connection() as conn:
         cursor = conn.cursor()
 
         cursor.execute("""
@@ -685,21 +648,18 @@ def get_newsflash_list():
                 'created_at': row['created_at']
             })
 
-        conn.close()
         return newsflash
 
-    except Exception as e:
-        return {"error": str(e)}
-
+@api_error_handler
 def add_newsflash(message, created_by, priority=0):
     """Add a newsflash message"""
-    db_path = get_db_path()
+    # Validate inputs
+    if not message or len(message) > 500:
+        raise ValueError("Message must be between 1 and 500 characters")
+    if priority < 0 or priority > 10:
+        raise ValueError("Priority must be between 0 and 10")
 
-    if not os.path.exists(db_path):
-        return {"error": f"Database not found at {db_path}"}
-
-    try:
-        conn = sqlite3.connect(db_path)
+    with db_pool.get_connection() as conn:
         cursor = conn.cursor()
 
         created_at = int(time.time())
@@ -709,53 +669,35 @@ def add_newsflash(message, created_by, priority=0):
             VALUES (?, ?, ?, ?)
         """, (message, created_by, created_at, priority))
 
-        conn.commit()
-        conn.close()
-
         return {"success": True, "message": "NewsFlash added"}
 
-    except Exception as e:
-        return {"error": str(e)}
-
+@api_error_handler
 def delete_newsflash(msg_id):
     """Delete a newsflash message"""
-    db_path = get_db_path()
+    # Validate input
+    if not msg_id or int(msg_id) < 1:
+        raise ValueError("Invalid newsflash ID")
 
-    if not os.path.exists(db_path):
-        return {"error": f"Database not found at {db_path}"}
-
-    try:
-        conn = sqlite3.connect(db_path)
+    with db_pool.get_connection() as conn:
         cursor = conn.cursor()
 
         cursor.execute("DELETE FROM newsflash WHERE id = ?", (int(msg_id),))
 
         rows_affected = cursor.rowcount
-        conn.commit()
-        conn.close()
 
         if rows_affected > 0:
             return {"success": True, "message": "NewsFlash deleted"}
         else:
             return {"error": "NewsFlash not found"}
 
-    except Exception as e:
-        return {"error": str(e)}
-
 # ============================================================================
 # MAILBOX VIEWING
 # ============================================================================
 
+@api_error_handler
 def get_mailbox_messages(limit=50):
     """Get recent mailbox messages"""
-    db_path = get_db_path()
-
-    if not os.path.exists(db_path):
-        return {"error": f"Database not found at {db_path}"}
-
-    try:
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
+    with db_pool.get_connection() as conn:
         cursor = conn.cursor()
 
         cursor.execute("""
@@ -778,26 +720,16 @@ def get_mailbox_messages(limit=50):
                 'read': bool(row['read'])
             })
 
-        conn.close()
         return messages
-
-    except Exception as e:
-        return {"error": str(e)}
 
 # ============================================================================
 # SEARCH FUNCTIONS
 # ============================================================================
 
+@api_error_handler
 def search_registered_nicks(query):
     """Search registered nicknames"""
-    db_path = get_db_path()
-
-    if not os.path.exists(db_path):
-        return {"error": f"Database not found at {db_path}"}
-
-    try:
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
+    with db_pool.get_connection() as conn:
         cursor = conn.cursor()
 
         cursor.execute("""
@@ -818,22 +750,12 @@ def search_registered_nicks(query):
                 'email': row['email'] if row['email'] else 'Not set'
             })
 
-        conn.close()
         return results
 
-    except Exception as e:
-        return {"error": str(e)}
-
+@api_error_handler
 def search_channels(query):
     """Search registered channels from registered_channels table"""
-    db_path = get_db_path()
-
-    if not os.path.exists(db_path):
-        return {"error": f"Database not found at {db_path}"}
-
-    try:
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
+    with db_pool.get_connection() as conn:
         cursor = conn.cursor()
 
         # Search registered_channels table
@@ -856,27 +778,17 @@ def search_channels(query):
                 'owner': row[3] if row[3] else 'Unknown'  # owner
             })
 
-        conn.close()
         return results
-
-    except Exception as e:
-        return {"error": str(e)}
 
 
 # ============================================================================
 # EXISTING FUNCTIONS (keeping for compatibility)
 # ============================================================================
 
+@api_error_handler
 def get_recent_registrations(limit=10):
     """Get recently registered nicknames"""
-    db_path = get_db_path()
-
-    if not os.path.exists(db_path):
-        return {"error": f"Database not found at {db_path}"}
-
-    try:
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
+    with db_pool.get_connection() as conn:
         cursor = conn.cursor()
 
         cursor.execute("""
@@ -895,22 +807,12 @@ def get_recent_registrations(limit=10):
                 'mfa_enabled': bool(row['mfa_enabled'])
             })
 
-        conn.close()
         return registrations
 
-    except Exception as e:
-        return {"error": str(e)}
-
+@api_error_handler
 def get_registered_channels(limit=50):
     """Get registered channels"""
-    db_path = get_db_path()
-
-    if not os.path.exists(db_path):
-        return {"error": f"Database not found at {db_path}"}
-
-    try:
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
+    with db_pool.get_connection() as conn:
         cursor = conn.cursor()
 
         cursor.execute("""
@@ -930,22 +832,12 @@ def get_registered_channels(limit=50):
                 'last_used': row[2] if row[2] else row[1]  # last_used or registered_at
             })
 
-        conn.close()
         return channels
 
-    except Exception as e:
-        return {"error": str(e)}
-
+@api_error_handler
 def get_staff_list():
     """Get list of staff users"""
-    db_path = get_db_path()
-
-    if not os.path.exists(db_path):
-        return {"error": f"Database not found at {db_path}"}
-
-    try:
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
+    with db_pool.get_connection() as conn:
         cursor = conn.cursor()
 
         cursor.execute("""
@@ -967,14 +859,14 @@ def get_staff_list():
         staff = []
         for row in cursor.fetchall():
             username = row['username']
-            
+
             # Get all nicknames owned by this staff member
             cursor.execute(
                 "SELECT nickname FROM registered_nicks WHERE registered_by = ? ORDER BY registered_at DESC",
                 (username,)
             )
             owned_nicknames = [r['nickname'] for r in cursor.fetchall()]
-            
+
             staff.append({
                 'username': username,
                 'level': row['level'],
@@ -986,11 +878,7 @@ def get_staff_list():
                 'force_realname': bool(row['force_realname'])
             })
 
-        conn.close()
         return staff
-
-    except Exception as e:
-        return {"error": str(e)}
 
 # ============================================================================
 # STAFF MANAGEMENT
@@ -1651,36 +1539,29 @@ def test_staff_login_stdin(username):
     # Use the existing test_staff_login function
     return test_staff_login(username, password)
 
+@api_error_handler
 def get_staff_details(username):
     """Get detailed staff information including owned nicknames"""
-    db_path = get_db_path()
-    
-    if not os.path.exists(db_path):
-        return {"error": f"Database not found at {db_path}"}
-    
-    try:
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
+    with db_pool.get_connection() as conn:
         cursor = conn.cursor()
-        
+
         # Get staff details
         cursor.execute(
             "SELECT username, level, created_at, last_login, email, realname, force_realname FROM users WHERE username = ?",
             (username,)
         )
         row = cursor.fetchone()
-        
+
         if not row:
-            conn.close()
             return {"error": f"Staff account '{username}' not found"}
-        
+
         # Get all nicknames registered by this staff member
         cursor.execute(
             "SELECT nickname FROM registered_nicks WHERE registered_by = ? ORDER BY registered_at DESC",
             (username,)
         )
         owned_nicknames = [r['nickname'] for r in cursor.fetchall()]
-        
+
         details = {
             "username": row['username'],
             "level": row['level'],
@@ -1691,12 +1572,8 @@ def get_staff_details(username):
             "realname": row['realname'],
             "force_realname": bool(row['force_realname'])
         }
-        
-        conn.close()
+
         return {"success": True, "staff": details}
-        
-    except Exception as e:
-        return {"error": str(e)}
 
 def unregister_channel(channel_name):
     """Unregister a channel"""
@@ -1866,16 +1743,10 @@ def edit_channel(channel_name, new_owner=None, new_description=None, new_topic=N
     except Exception as e:
         return {"error": f"Failed to update channel: {str(e)}"}
 
+@api_error_handler
 def get_registered_nicks_paginated(limit=50, offset=0):
     """Get registered nicknames with pagination"""
-    db_path = get_db_path()
-
-    if not os.path.exists(db_path):
-        return {"error": f"Database not found at {db_path}"}
-
-    try:
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
+    with db_pool.get_connection() as conn:
         cursor = conn.cursor()
 
         # Get total count
@@ -1903,22 +1774,12 @@ def get_registered_nicks_paginated(limit=50, offset=0):
                 'registered_by': row['registered_by'] if row['registered_by'] else 'Unknown'
             })
 
-        conn.close()
         return {"data": nicknames, "total": total}
 
-    except Exception as e:
-        return {"error": str(e)}
-
+@api_error_handler
 def get_registered_channels_paginated(limit=50, offset=0):
     """Get registered channels with pagination"""
-    db_path = get_db_path()
-
-    if not os.path.exists(db_path):
-        return {"error": f"Database not found at {db_path}"}
-
-    try:
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
+    with db_pool.get_connection() as conn:
         cursor = conn.cursor()
 
         # Get total count
@@ -1946,22 +1807,13 @@ def get_registered_channels_paginated(limit=50, offset=0):
                 'last_used': row[2] if row[2] else row[1]  # last_used or registered_at
             })
 
-        conn.close()
         return {"data": channels, "total": total}
 
-    except Exception as e:
-        return {"error": str(e)}
 
-
+@api_error_handler
 def get_channel_details(channel_name):
     """Get detailed channel information for editing"""
-    db_path = get_db_path()
-
-    if not os.path.exists(db_path):
-        return {"error": f"Database not found at {db_path}"}
-
-    try:
-        conn = sqlite3.connect(db_path)
+    with db_pool.get_connection() as conn:
         cursor = conn.cursor()
 
         # Load from registered_channels
@@ -1969,7 +1821,6 @@ def get_channel_details(channel_name):
         row = cursor.fetchone()
 
         if not row:
-            conn.close()
             return {"error": f"Channel '{channel_name}' not found"}
 
         # Parse JSON properties (may be None for newly registered channels)
@@ -1989,21 +1840,12 @@ def get_channel_details(channel_name):
             "user_limit": channel_data.get("user_limit") or 0
         }
 
-        conn.close()
         return {"success": True, "channel": details}
 
-    except Exception as e:
-        return {"error": str(e)}
-
+@api_error_handler
 def get_channel_access(channel_name):
     """Get ACCESS lists for a channel"""
-    db_path = get_db_path()
-
-    if not os.path.exists(db_path):
-        return {"error": f"Database not found at {db_path}"}
-
-    try:
-        conn = sqlite3.connect(db_path)
+    with db_pool.get_connection() as conn:
         cursor = conn.cursor()
 
         # Check in registered_channels table (JSON properties)
@@ -2029,11 +1871,7 @@ def get_channel_access(channel_name):
                 'DENY': []
             }
 
-        conn.close()
         return {"access_list": access_list}
-
-    except Exception as e:
-        return {"error": str(e)}
 
 def set_channel_access(channel_name, access_list_json):
     """Set ACCESS lists for a channel"""
