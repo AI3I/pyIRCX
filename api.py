@@ -30,6 +30,22 @@ import bcrypt
 import socket
 from pathlib import Path
 from datetime import datetime
+import logging
+
+# Import connection pool and helpers
+import db_pool
+from api_helpers import (
+    api_error_handler,
+    validate_access_type,
+    validate_pattern,
+    validate_timeout,
+    validate_nickname,
+    validate_channel_name,
+    validate_staff_level
+)
+
+# Setup logging
+logger = logging.getLogger(__name__)
 
 # Default paths - check system install location first, then user home
 # System installation paths (from install.sh)
@@ -126,6 +142,34 @@ def get_db_path():
                 db_path = os.path.join(USER_INSTALL, db_path)
         return db_path
     return DEFAULT_DB
+
+
+def init_db_pool(pool_size=10):
+    """Initialize the database connection pool
+
+    Args:
+        pool_size: Number of connections to maintain in pool (default: 10)
+
+    Returns:
+        bool: True if initialized successfully, False otherwise
+    """
+    try:
+        db_path = get_db_path()
+        db_pool.init_pool(db_path, pool_size=pool_size)
+        logger.info(f"Database connection pool initialized: {db_path} (pool_size={pool_size})")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to initialize database pool: {e}")
+        return False
+
+
+# Initialize pool on module import
+try:
+    init_db_pool()
+except Exception as e:
+    # If pool init fails, log but don't crash - will fall back to direct connections
+    logger.warning(f"Connection pool initialization failed: {e}")
+
 
 # ============================================================================
 # REAL-TIME STATUS
