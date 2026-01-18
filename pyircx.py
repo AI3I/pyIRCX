@@ -3380,7 +3380,9 @@ class pyIRCXServer:
             await self.handle_access(user, params)
         elif cmd == "EVENT":
             await self.handle_event(user, params)
-        elif cmd in ["PRIVMSG", "WHISPER", "DATA", "NOTICE"]:
+        elif cmd in ["DATA", "REQUEST", "REPLY"]:
+            await self.handle_data(user, params, cmd)
+        elif cmd in ["PRIVMSG", "WHISPER", "NOTICE"]:
             await self.handle_msg(user, params, cmd)
         elif cmd == "KILL":
             await self.handle_kill(user, params)
@@ -3903,8 +3905,7 @@ class pyIRCXServer:
                 await user.send(f":{self.servername} NOTICE {user.nickname} :WHISPER rate limited (5 second cooldown)")
                 return
 
-        text = params[2] if cmd in ["WHISPER", "DATA"] and len(
-            params) >= 3 else params[1]
+        text = params[2] if cmd == "WHISPER" and len(params) >= 3 else params[1]
 
         # Validate message length
         max_msg_len = CONFIG.get('limits', 'msg_length', default=512)
@@ -4164,6 +4165,149 @@ class pyIRCXServer:
             else:
                 # No linked servers or target not found anywhere
                 await user.send(self.get_reply("401", user, target=target))
+
+    async def handle_data(self, user, params, cmd):
+        """Handle DATA/REQUEST/REPLY commands (IRCX)
+
+        Syntax: DATA/REQUEST/REPLY <target> <tag> :<message>
+
+        - DATA: Send tagged data (one-way communication)
+        - REQUEST: Send tagged data expecting a reply
+        - REPLY: Respond to a previous REQUEST
+
+        Tags identify how to interpret the payload. Reserved prefixes:
+        - ADM.* requires IRC administrator (+a)
+        - SYS.* requires IRC operator (+o)
+        - GDE.* requires IRC guide (+g)
+        - OWN.* requires channel owner (+q) when targeting channels
+        - HST.* requires channel host (+o) when targeting channels
+        """
+        # Require IRCX mode
+        if not (user.has_mode('x') or user.is_ircx):
+            await user.send(f":{self.servername} NOTICE {user.nickname} :{cmd} is an IRCX command. Use IRCX first to enable IRCX mode.")
+            return
+
+        if len(params) < 3:
+            await user.send(f":{self.servername} 461 {user.nickname} {cmd} :Not enough parameters")
+            return
+
+        targets_str = params[0]
+        tag = params[1]
+        message = params[2]
+
+        # Split comma-separated targets
+        targets = [t.strip() for t in targets_str.split(',') if t.strip()]
+        if not targets:
+            await user.send(f":{self.servername} 461 {user.nickname} {cmd} :No valid targets specified")
+            return
+
+        # Validate tag format
+        # Valid characters: [A-Za-z0-9.]
+        # Must start with letter
+        # Max 15 characters
+        if not tag or len(tag) > 15:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Invalid tag: must be 1-15 characters")
+            return
+
+        if not tag[0].isalpha():
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Invalid tag: must start with a letter")
+            return
+
+        import re
+        if not re.match(r'^[A-Za-z][A-Za-z0-9.]*$', tag):
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Invalid tag: only letters, numbers, and periods allowed")
+            return
+
+        # Check reserved prefix permissions
+        tag_upper = tag.upper()
+
+        # ADM.* requires IRC administrator
+        if tag_upper.startswith('ADM.'):
+            if not user.has_mode('a'):
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Tag prefix ADM.* requires IRC administrator privileges (+a)")
+                return
+
+        # SYS.* requires IRC operator
+        elif tag_upper.startswith('SYS.'):
+            if not user.has_mode('o'):
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Tag prefix SYS.* requires IRC operator privileges (+o)")
+                return
+
+        # GDE.* requires IRC guide
+        elif tag_upper.startswith('GDE.'):
+            if not user.has_mode('g'):
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Tag prefix GDE.* requires IRC guide privileges (+g)")
+                return
+
+        # OWN.* and HST.* require channel context - validate for all channel targets
+        if tag_upper.startswith(('OWN.', 'HST.')):
+            # Check if any target is a channel
+            has_channel = any(is_channel(t) for t in targets)
+            if not has_channel:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Tag prefix {tag_upper[:3]}* can only be used with channel targets")
+                return
+
+            # Validate permissions for all channel targets
+            for target in targets:
+                if is_channel(target):
+                    channel, chan_name = self.get_channel(target)
+                    if not channel:
+                        continue  # Will handle error later
+
+                    # OWN.* requires channel owner
+                    if tag_upper.startswith('OWN.'):
+                        if user.nickname not in channel.owners and not user.is_high_staff():
+                            await user.send(f":{self.servername} NOTICE {user.nickname} :Tag prefix OWN.* requires channel owner status (+q) in {chan_name}")
+                            return
+
+                    # HST.* requires channel host
+                    elif tag_upper.startswith('HST.'):
+                        if user.nickname not in channel.hosts and user.nickname not in channel.owners and not user.is_high_staff():
+                            await user.send(f":{self.servername} NOTICE {user.nickname} :Tag prefix HST.* requires channel host status (+o) in {chan_name}")
+                            return
+
+        # Escape control characters in message (except CTCP which uses \x01)
+        # Replace newlines, carriage returns, etc.
+        message = message.replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t')
+
+        # Route to all targets (channels and/or users)
+        for target in targets:
+            if is_channel(target):
+                channel, chan_name = self.get_channel(target)
+                if not channel:
+                    await user.send(self.get_reply("403", user, target=target))
+                    continue
+
+                if user.nickname not in channel.members:
+                    await user.send(self.get_reply("442", user, target=chan_name))
+                    continue
+
+                # Broadcast DATA/REQUEST/REPLY to channel members (IRCX clients only)
+                data_msg = f":{user.prefix()} {cmd} {chan_name} {tag} :{message}"
+                for member in channel.members.values():
+                    # Only send to IRCX-enabled clients
+                    if member != user and (member.has_mode('x') or member.is_ircx):
+                        await member.send(data_msg)
+
+                # Propagate to linked servers
+                if self.link_manager and self.link_manager.enabled:
+                    if not (hasattr(user, 'is_remote') and user.is_remote):
+                        await self.link_manager.broadcast_to_servers(data_msg)
+
+            else:
+                # Direct message to user
+                target_user = self.users.get(target)
+                if not target_user:
+                    await user.send(self.get_reply("401", user, target=target))
+                    continue
+
+                # Only send to IRCX-enabled clients
+                if not (target_user.has_mode('x') or target_user.is_ircx):
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :{target} does not support IRCX")
+                    continue
+
+                data_msg = f":{user.prefix()} {cmd} {target} {tag} :{message}"
+                await target_user.send(data_msg)
 
     async def handle_who(self, user, params):
         target = params[0] if params else "*"
@@ -7276,6 +7420,37 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  /WHISPER #lobby alice Hey, check your messages")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Note: You cannot use this in channels with +w mode (whispers disabled)")
+
+        elif topic in ["DATA", "REQUEST", "REPLY"]:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== DATA / REQUEST / REPLY Commands (IRCX) ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Send tagged, structured data to users or channels.")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Requires IRCX mode (+x). Only received by IRCX-enabled clients.")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Syntax: /{topic.upper()} <target> <tag> :<message>")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Command Types:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  DATA - Send tagged data (one-way communication)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  REQUEST - Send data expecting a reply")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  REPLY - Respond to a REQUEST")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Tag Format:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  - 1-15 characters: letters, numbers, periods")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  - Must start with a letter")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  - Recommended: ORG.APP.FEATURE (e.g., MYORG.AVATAR)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Reserved Tag Prefixes (require privileges):")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  ADM.* - IRC administrator (+a) only")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  SYS.* - IRC operator (+o) only")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  GDE.* - IRC guide (+g) only")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  OWN.* - Channel owner (+q) only")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  HST.* - Channel host (+o) only")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /DATA #lobby MYAPP.AVATAR https://example.com/avatar.png")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /REQUEST alice MYAPP.STATUS Get status")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /REPLY alice MYAPP.STATUS Online")
+            if user.is_staff():
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  /DATA #lobby SYS.AD.BANNER <banner-url> (operator only)")
 
         elif topic == "NOTICE":
             await user.send(f":{self.servername} NOTICE {user.nickname} :=== NOTICE Command ===")
