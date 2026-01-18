@@ -913,9 +913,30 @@ badword3"></textarea>
                                 <small>Port for server-to-server connections. Default: 7000. Must not conflict with client ports. Firewall: Allow only trusted server IPs.</small>
                             </div>
 
-                            <h4 style="margin-top: 20px;">Branch Servers</h4>
+                            <h4 style="margin-top: 20px;">Branch Servers (Leaf Nodes)</h4>
                                 <div class="form-group">
-                                    <small>Configure branch servers that can connect to this trunk. Each branch needs a unique name, port, and password.</small>
+                                    <div style="background: #e8f4f8; border-left: 4px solid #2196F3; padding: 12px; margin-bottom: 15px; border-radius: 4px;">
+                                        <strong>ℹ️ About Branch Configuration Generator</strong>
+                                        <p style="margin: 8px 0 0 0; font-size: 13px; line-height: 1.6;">
+                                            Each branch entry below represents a <strong>branch server</strong> that will connect to this trunk for centralized services.
+                                            Click <strong>"📄 Generate Configuration"</strong> to create a complete, ready-to-deploy config file for that branch server.
+                                        </p>
+                                        <details style="margin-top: 10px; font-size: 12px;">
+                                            <summary style="cursor: pointer; color: #1976D2; font-weight: 500;">▸ How it works (click to expand)</summary>
+                                            <ul style="margin: 8px 0 0 20px; line-height: 1.8;">
+                                                <li><strong>Branch Name</strong> → Becomes the server's unique identity (server.name)</li>
+                                                <li><strong>Host/IP</strong> → Where the trunk should connect to reach this branch</li>
+                                                <li><strong>Port</strong> → The linking port this branch will listen on (default: 7001)</li>
+                                                <li><strong>Password</strong> → Secure link password (shared secret for authentication)</li>
+                                                <li><strong>Advanced Options</strong> → Customize SSL paths, database name, and client ports</li>
+                                            </ul>
+                                            <p style="margin: 8px 0 0 0; padding: 8px; background: #fff3cd; border-radius: 3px;">
+                                                <strong>💡 Generated configs inherit ALL settings</strong> from this trunk (limits, security, servicebot rules, etc.)
+                                                but use branch-specific values for: server name, database file, SSL certificates, and linking configuration.
+                                                They are <strong>ready to deploy without editing!</strong>
+                                            </p>
+                                        </details>
+                                    </div>
                                     <div id="cfg-linking-branches-list" style="margin-top: 10px;">
                                         <!-- Branch entries will be added here dynamically -->
                                     </div>

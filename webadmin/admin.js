@@ -2102,55 +2102,62 @@ console.log("=== admin.js LOADING ===");
         div.className = 'branch-entry';
         div.style.cssText = 'border: 1px solid #ddd; padding: 10px; margin-bottom: 10px; border-radius: 4px; background: #f9f9f9;';
         div.innerHTML = `
+            <div style="background: #f5f5f5; padding: 3px 8px; margin-bottom: 8px; border-radius: 3px; font-size: 11px; color: #555;">
+                <strong>Linking Configuration</strong> (adds this branch to trunk's link table)
+            </div>
             <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 10px; align-items: end;">
                 <div>
-                    <label style="font-size: 12px; font-weight: bold;">Branch Name</label>
+                    <label style="font-size: 12px; font-weight: bold;">Branch Server Name <span style="color: #d32f2f;">*</span></label>
                     <input type="text" class="form-control branch-name" value="${escapeHtml(name)}" placeholder="branch1.example.com">
+                    <small style="font-size: 10px; color: #666;">→ config: server.name</small>
                 </div>
                 <div>
-                    <label style="font-size: 12px; font-weight: bold;">Host/IP</label>
-                    <input type="text" class="form-control branch-host" value="${escapeHtml(host)}" placeholder="10.0.1.2 or 2001:db8::1">
+                    <label style="font-size: 12px; font-weight: bold;">Branch Host/IP <span style="color: #d32f2f;">*</span></label>
+                    <input type="text" class="form-control branch-host" value="${escapeHtml(host)}" placeholder="10.0.1.2 or branch.local">
+                    <small style="font-size: 10px; color: #666;">→ trunk connects here</small>
                 </div>
                 <div>
-                    <label style="font-size: 12px; font-weight: bold;">Port</label>
+                    <label style="font-size: 12px; font-weight: bold;">Linking Port <span style="color: #d32f2f;">*</span></label>
                     <input type="number" class="form-control branch-port" value="${port || 7001}" placeholder="7001">
+                    <small style="font-size: 10px; color: #666;">→ config: linking.bind_port</small>
                 </div>
                 <div>
-                    <label style="font-size: 12px; font-weight: bold;">Password</label>
-                    <input type="password" class="form-control branch-password" value="${escapeHtml(password)}" placeholder="secure-pass">
+                    <label style="font-size: 12px; font-weight: bold;">Link Password <span style="color: #d32f2f;">*</span></label>
+                    <input type="password" class="form-control branch-password" value="${escapeHtml(password)}" placeholder="secure-password">
+                    <small style="font-size: 10px; color: #666;">→ shared secret (both servers)</small>
                 </div>
             </div>
-            <div style="margin-top: 10px;">
-                <button type="button" class="btn btn-sm btn-secondary branch-toggle-advanced" style="font-size: 11px; padding: 2px 8px;">⚙️ Show Advanced Options</button>
+
+            <div style="background: #f5f5f5; padding: 3px 8px; margin: 15px 0 8px 0; border-radius: 3px; font-size: 11px; color: #555;">
+                <strong>Branch-Specific Settings</strong> (customizes generated config file)
             </div>
-            <div class="branch-advanced" style="display: none; margin-top: 10px; padding: 10px; background: #fff; border: 1px solid #ddd; border-radius: 4px;">
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
-                    <div>
-                        <label style="font-size: 12px; font-weight: bold;">SSL Certificate Path</label>
-                        <input type="text" class="form-control branch-ssl-cert" placeholder="/etc/letsencrypt/live/${escapeHtml(name || 'branch')}/fullchain.pem">
-                        <small style="font-size: 10px; color: #666;">Leave blank to use default path</small>
-                    </div>
-                    <div>
-                        <label style="font-size: 12px; font-weight: bold;">SSL Key Path</label>
-                        <input type="text" class="form-control branch-ssl-key" placeholder="/etc/letsencrypt/live/${escapeHtml(name || 'branch')}/privkey.pem">
-                        <small style="font-size: 10px; color: #666;">Leave blank to use default path</small>
-                    </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+                <div>
+                    <label style="font-size: 12px; font-weight: bold;">SSL Certificate Path (optional)</label>
+                    <input type="text" class="form-control branch-ssl-cert" placeholder="/etc/letsencrypt/live/${escapeHtml(name || 'branchname')}/fullchain.pem">
+                    <small style="font-size: 10px; color: #666;">→ config: ssl.cert_file (auto-fills if empty)</small>
                 </div>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
-                    <div>
-                        <label style="font-size: 12px; font-weight: bold;">Database Path</label>
-                        <input type="text" class="form-control branch-db-path" placeholder="pyircx_branch.db">
-                        <small style="font-size: 10px; color: #666;">Leave blank to auto-generate from branch name</small>
-                    </div>
-                    <div>
-                        <label style="font-size: 12px; font-weight: bold;">Client Listen Ports (comma-separated)</label>
-                        <input type="text" class="form-control branch-listen-ports" placeholder="6667, 6697">
-                        <small style="font-size: 10px; color: #666;">Leave blank to inherit from trunk</small>
-                    </div>
+                <div>
+                    <label style="font-size: 12px; font-weight: bold;">SSL Private Key Path (optional)</label>
+                    <input type="text" class="form-control branch-ssl-key" placeholder="/etc/letsencrypt/live/${escapeHtml(name || 'branchname')}/privkey.pem">
+                    <small style="font-size: 10px; color: #666;">→ config: ssl.key_file (auto-fills if empty)</small>
                 </div>
             </div>
-            <div style="margin-top: 10px; display: flex; gap: 10px; align-items: center;">
-                <label style="font-size: 12px;"><input type="checkbox" class="branch-autoconnect" ${autoconnect ? 'checked' : ''}> Allow automatic connection and reconnection</label>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+                <div>
+                    <label style="font-size: 12px; font-weight: bold;">Database Filename (optional)</label>
+                    <input type="text" class="form-control branch-db-path" placeholder="pyircx_branchname.db">
+                    <small style="font-size: 10px; color: #666;">→ config: database.path (auto-generates if empty)</small>
+                </div>
+                <div>
+                    <label style="font-size: 12px; font-weight: bold;">Client Ports (optional)</label>
+                    <input type="text" class="form-control branch-listen-ports" placeholder="6667, 6697">
+                    <small style="font-size: 10px; color: #666;">→ config: network.listen_ports (inherits from trunk if empty)</small>
+                </div>
+            </div>
+
+            <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #ddd; display: flex; gap: 10px; align-items: center;">
+                <label style="font-size: 12px;"><input type="checkbox" class="branch-autoconnect" ${autoconnect ? 'checked' : ''}> Enable autoconnect (branch auto-reconnects to trunk)</label>
                 <div style="margin-left: auto; display: flex; gap: 10px;">
                     <button type="button" class="btn btn-sm btn-secondary branch-gen-password-btn">🔑 Generate Secure Password</button>
                     <button type="button" class="btn btn-sm btn-primary branch-gen-config-btn">📄 Generate Configuration</button>
@@ -2159,19 +2166,6 @@ console.log("=== admin.js LOADING ===");
             </div>
         `;
         list.appendChild(div);
-
-        // Add advanced options toggle handler
-        const toggleBtn = div.querySelector('.branch-toggle-advanced');
-        const advancedDiv = div.querySelector('.branch-advanced');
-        toggleBtn?.addEventListener('click', () => {
-            if (advancedDiv.style.display === 'none') {
-                advancedDiv.style.display = 'block';
-                toggleBtn.textContent = '⚙️ Hide Advanced Options';
-            } else {
-                advancedDiv.style.display = 'none';
-                toggleBtn.textContent = '⚙️ Show Advanced Options';
-            }
-        });
 
         // Add password generator handler
         const genPassBtn = div.querySelector('.branch-gen-password-btn');
