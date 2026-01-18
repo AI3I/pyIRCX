@@ -1005,11 +1005,17 @@ function handleMessage(data) {
         case '369': break;
 
         // LIST
-        case '321': listData = []; break; // Start of LIST - clear data
-        case '322': case '812': // LIST/LISTX reply
+        case '321': case '811': listData = []; break; // Start of LIST/LISTX - clear data
+        case '322': // LIST reply (channel users :topic)
             if (p.length >= 3) {
                 handleListReply(p[1], p[2], p[3] || '');
                 sysMsg(`${p[1]} (${p[2]} users): ${p[3]||''}`, 'system');
+            }
+            break;
+        case '812': // LISTX reply (channel users modes :topic)
+            if (p.length >= 3) {
+                handleListReply(p[1], p[2], p[4] || '');
+                sysMsg(`${p[1]} (${p[2]} users, ${p[3]}): ${p[4]||''}`, 'system');
             }
             break;
         case '323': case '813':

@@ -333,7 +333,7 @@ class RateLimiter:
         'WHISPER': 5.0,
         'WHO': 2.0,
         'WHOIS': 1.0,
-        'LIST': 5.0,
+        'LIST': 1.0,
         'MODE': 0.5,
         'PROP': 1.0,
         'INVITE': 2.0,
