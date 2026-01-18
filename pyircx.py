@@ -1866,6 +1866,10 @@ RESPONSES = {
     "804": "Authentication successful",
     "805": "{target} :Access list",
     "806": "{cls} {mask}",
+    "807": "{cls} {mask}",
+    "808": ":Start of events",
+    "809": "{cls} {mask}",
+    "810": ":End of events",
     "811": "Channel :Users Topic",
     "812": "{channel} {users} :{topic}",
     "813": "End of /LISTX",
@@ -2994,11 +2998,25 @@ class pyIRCXServer:
         return text
 
     async def fire_trap(self, cls, action, user, channel_name=None):
+        """Fire event notification to subscribed administrators/operators
+
+        Events are sent to users with +a (admin) or +o (operator) who have
+        matching traps subscribed. SOCKET events are never fired.
+        """
+        # SOCKET events are accepted but never fired
+        if cls == 'SOCKET':
+            return
+
         ts = int(time.time())
         msg = f":{self.servername} EVENT {ts} {cls} {action} {channel_name or ''} {user.prefix()} {user.ip}:{user.port} 0.0.0.0:0"
+
         for admin in self.users.values():
-            if admin.has_mode('a'):
+            # Only send to IRC operators and administrators
+            if admin.is_high_staff():
                 for t_cls, t_mask in admin.traps:
+                    # Skip SOCKET traps (they never match)
+                    if t_cls == 'SOCKET':
+                        continue
                     if t_cls == cls and fnmatch.fnmatch(user.prefix(), t_mask):
                         await admin.send(msg)
                         break
@@ -3495,6 +3513,10 @@ class pyIRCXServer:
             if self.link_manager and self.link_manager.enabled:
                 if not (hasattr(user, 'is_remote') and user.is_remote):
                     await self.link_manager.broadcast_to_servers(nick_msg)
+
+            # Fire USER/NICK event for monitoring
+            await self.fire_trap("USER", "NICK", user)
+
         else:
             # Just update channel membership for unregistered users
             for cn in list(user.channels):
@@ -3862,6 +3884,11 @@ class pyIRCXServer:
 
         # WHISPER restrictions: single recipient only, 5s rate limit
         if cmd == "WHISPER":
+            # WHISPER requires IRCX mode (+x)
+            if not (user.has_mode('x') or user.is_ircx):
+                await user.send(f":{self.servername} NOTICE {user.nickname} :WHISPER is an IRCX command. Use IRCX first to enable IRCX mode.")
+                return
+
             if ',' in target:
                 await user.send(self.get_reply("407", user, target=target))
                 return
@@ -4411,6 +4438,11 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :LIST rate limited")
             return
 
+        # LISTX requires IRCX mode (+x)
+        if is_listx and not (user.has_mode('x') or user.is_ircx):
+            await user.send(f":{self.servername} NOTICE {user.nickname} :LISTX is an IRCX command. Use IRCX first to enable IRCX mode.")
+            return
+
         is_staff = user.is_staff()
 
         if is_listx:
@@ -4474,6 +4506,8 @@ class pyIRCXServer:
                 if not channel:
                     # Not registered - create new dynamic channel
                     channel = Channel(chan_name)
+                    # Fire CHANNEL/CREATE event for monitoring (new dynamic channel)
+                    await self.fire_trap("CHANNEL", "CREATE", user, chan_name)
                 self.channels[chan_name] = channel
 
         used_owner_key = key and channel.owner_key and key.lower() == channel.owner_key.lower()
@@ -4588,6 +4622,9 @@ class pyIRCXServer:
                 await self.link_manager.broadcast_to_servers(msg)
                 logger.info(f"JOIN propagated for {user.nickname} to {chan_name}")
 
+        # Fire MEMBER/JOIN event for monitoring
+        await self.fire_trap("MEMBER", "JOIN", user, chan_name)
+
         # Broadcast MODE after JOIN so other clients see the user first
         if grant_owner:
             mode_msg = f":{user.prefix()} MODE {chan_name} +q {user.nickname}"
@@ -4644,6 +4681,10 @@ class pyIRCXServer:
         if self.link_manager and self.link_manager.enabled:
             if not (hasattr(user, 'is_remote') and user.is_remote):
                 await self.link_manager.broadcast_to_servers(msg)
+
+        # Fire MEMBER/PART event for monitoring
+        await self.fire_trap("MEMBER", "PART", user, chan_name)
+
         channel.members.pop(user.nickname, None)
         channel.owners.discard(user.nickname)
         channel.hosts.discard(user.nickname)
@@ -4663,6 +4704,9 @@ class pyIRCXServer:
         # Delete dynamic (unregistered) channels when empty
         # Registered channels and #System persist even when empty
         if len(channel.members) == 0 and not channel.registered and chan_name.lower() != "#system":
+            # Fire CHANNEL/DELETE event for monitoring (last user caused deletion)
+            await self.fire_trap("CHANNEL", "DELETE", user, chan_name)
+
             # If this is a clone, remove from parent's clone_children list
             if channel.is_clone() and channel.clone_parent:
                 parent, _ = self.get_channel(channel.clone_parent)
@@ -4742,6 +4786,10 @@ class pyIRCXServer:
             if self.link_manager and self.link_manager.enabled:
                 if not (hasattr(user, 'is_remote') and user.is_remote):
                     await self.link_manager.broadcast_to_servers(msg)
+
+            # Fire CHANNEL/TOPIC event for monitoring
+            await self.fire_trap("CHANNEL", "TOPIC", user, chan_name)
+
             # Log to transcript if +y mode is enabled
             self.log_transcript(channel, "TOPIC", user, message=new_topic)
             logger.info(f"Topic set in {chan_name} by {user.nickname}")
@@ -4880,6 +4928,11 @@ class pyIRCXServer:
         await user.send(f":{self.servername} 711 {user.nickname} {chan_name} :Your KNOCK has been delivered")
 
     async def handle_prop(self, user, params):
+        # Require IRCX mode (+x)
+        if not (user.has_mode('x') or user.is_ircx):
+            await user.send(f":{self.servername} NOTICE {user.nickname} :PROP is an IRCX command. Use IRCX first to enable IRCX mode.")
+            return
+
         if not params:
             await user.send(self.get_reply("461", user, command="PROP"))
             return
@@ -5168,6 +5221,8 @@ class pyIRCXServer:
         """
         IRCX ACCESS command - manage access lists for channels or server.
 
+        Requires IRCX mode (+x).
+
         Syntax:
             ACCESS <object> LIST [level]
             ACCESS <object> ADD <level> <mask> [timeout] [:<reason>]
@@ -5187,6 +5242,11 @@ class pyIRCXServer:
 
         Timeout: Minutes until entry expires (0 = permanent)
         """
+        # Require IRCX mode (+x)
+        if not (user.has_mode('x') or user.is_ircx):
+            await user.send(f":{self.servername} NOTICE {user.nickname} :ACCESS is an IRCX command. Use IRCX first to enable IRCX mode.")
+            return
+
         if len(params) < 2:
             await user.send(self.get_reply("461", user, command="ACCESS"))
             return
@@ -9039,9 +9099,84 @@ class pyIRCXServer:
             return ip  # Resolution failed, use IP
 
     async def handle_event(self, user, params):
-        if params and params[0].upper() == "ADD" and len(params) >= 3:
-            user.traps.append((params[1].upper(), params[2]))
-            await user.send(self.get_reply("806", user, cls=params[1].upper(), mask=params[2]))
+        """Handle EVENT command for real-time server monitoring
+
+        EVENT ADD <class> [<mask>] - Subscribe to events
+        EVENT DELETE <class> [<mask>] - Unsubscribe from events
+        EVENT LIST [<class>] - List active event subscriptions
+
+        Classes: CONNECT, MEMBER, CHANNEL, USER, SERVER, SOCKET (ignored)
+        """
+        # Require IRCX mode (+x)
+        if not (user.has_mode('x') or user.is_ircx):
+            await user.send(f":{self.servername} NOTICE {user.nickname} :EVENT is an IRCX command. Use IRCX first to enable IRCX mode.")
+            return
+
+        # Require operator or admin privileges for EVENT
+        if not user.is_high_staff():
+            await user.send(f":{self.servername} NOTICE {user.nickname} :EVENT command requires IRC operator or administrator privileges")
+            return
+
+        if not params:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: EVENT [ADD|DELETE|LIST] <class> [<mask>]")
+            return
+
+        action = params[0].upper()
+        valid_classes = {'CONNECT', 'MEMBER', 'CHANNEL', 'USER', 'SERVER', 'SOCKET'}
+
+        if action == "ADD":
+            if len(params) < 2:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: EVENT ADD <class> [<mask>]")
+                return
+
+            cls = params[1].upper()
+            if cls not in valid_classes:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Invalid event class. Valid: CONNECT, MEMBER, CHANNEL, USER, SERVER, SOCKET")
+                return
+
+            # SOCKET class is accepted but returns no events (silently ignored)
+            mask = params[2] if len(params) >= 3 else "*!*@*"
+            user.traps.append((cls, mask))
+            await user.send(self.get_reply("806", user, cls=cls, mask=mask))
+
+        elif action == "DELETE":
+            if len(params) < 2:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: EVENT DELETE <class> [<mask>]")
+                return
+
+            cls = params[1].upper()
+            mask = params[2] if len(params) >= 3 else "*!*@*"
+
+            # Remove matching trap
+            original_count = len(user.traps)
+            user.traps = [(c, m) for c, m in user.traps if not (c == cls and m == mask)]
+
+            if len(user.traps) < original_count:
+                await user.send(self.get_reply("807", user, cls=cls, mask=mask))
+            else:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :No matching event trap found")
+
+        elif action == "LIST":
+            # List all traps or filter by class
+            filter_cls = params[1].upper() if len(params) >= 2 else None
+
+            if filter_cls and filter_cls not in valid_classes:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Invalid event class. Valid: CONNECT, MEMBER, CHANNEL, USER, SERVER, SOCKET")
+                return
+
+            await user.send(self.get_reply("808", user))
+
+            # SOCKET traps are never shown (they don't fire events)
+            for cls, mask in user.traps:
+                if cls == 'SOCKET':
+                    continue
+                if filter_cls is None or cls == filter_cls:
+                    await user.send(self.get_reply("809", user, cls=cls, mask=mask))
+
+            await user.send(self.get_reply("810", user))
+
+        else:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: EVENT [ADD|DELETE|LIST] <class> [<mask>]")
 
     # ==========================================================================
     # SERVICE HANDLERS (Registrar, Messenger, NewsFlash)
@@ -10428,6 +10563,10 @@ class pyIRCXServer:
         if self.link_manager and self.link_manager.enabled:
             if not (hasattr(user, 'is_remote') and user.is_remote):
                 await self.link_manager.broadcast_to_servers(msg)
+
+        # Fire MEMBER/KICK event for monitoring (use target as the affected user)
+        await self.fire_trap("MEMBER", "KICK", target, chan_name)
+
         if user.is_high_staff():
             await self.log_staff(user.nickname, "KICK", f"{target_nick} from {chan_name}", reason)
 
@@ -10468,6 +10607,10 @@ class pyIRCXServer:
                         if self.link_manager and self.link_manager.enabled:
                             if not (hasattr(user, 'is_remote') and user.is_remote):
                                 await self.link_manager.broadcast_to_servers(mode_msg)
+
+                        # Fire USER/MODE event for monitoring
+                        await self.fire_trap("USER", "MODE", user)
+
                     else:
                         # Unknown mode
                         await user.send(f":{self.servername} 501 {user.nickname} :Unknown MODE flag")
@@ -10803,6 +10946,10 @@ class pyIRCXServer:
         if user.disconnected:
             return
         user.disconnected = True  # Mark user as disconnected
+
+        # Fire USER/LOGOFF event for monitoring (only for registered users)
+        if user.registered:
+            await self.fire_trap("USER", "LOGOFF", user)
 
         # Notify watchers that this user has gone offline
         if user.registered:
