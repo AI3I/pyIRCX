@@ -1271,18 +1271,15 @@ def unregister_nickname(nickname):
 
         return {"success": True, "message": f"Nickname '{nickname}' has been unregistered"}
 
+@api_error_handler
 def edit_nickname(nickname, new_password=None, new_email=None):
     """Edit a registered nickname's password and/or email"""
-    db_path = get_db_path()
-
-    if not os.path.exists(db_path):
-        return {"error": f"Database not found at {db_path}"}
-
+    # Validate inputs
+    validate_nickname(nickname)
     if not new_password and new_email is None:
-        return {"error": "No changes specified. Provide new_password and/or new_email."}
+        raise ValueError("No changes specified. Provide new_password and/or new_email.")
 
-    try:
-        conn = sqlite3.connect(db_path)
+    with db_pool.get_connection() as conn:
         cursor = conn.cursor()
 
         # Check if nickname exists
@@ -1290,7 +1287,6 @@ def edit_nickname(nickname, new_password=None, new_email=None):
         nick_row = cursor.fetchone()
 
         if not nick_row:
-            conn.close()
             return {"error": f"Nickname '{nickname}' is not registered"}
 
         nick_uuid = nick_row[0]
@@ -1300,8 +1296,7 @@ def edit_nickname(nickname, new_password=None, new_email=None):
         # Update password if provided
         if new_password:
             if len(new_password) < 8:
-                conn.close()
-                return {"error": "Password must be at least 8 characters"}
+                raise ValueError("Password must be at least 8 characters")
             password_hash = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
             updates.append("password_hash = ?")
             params.append(password_hash)
@@ -1313,8 +1308,7 @@ def edit_nickname(nickname, new_password=None, new_email=None):
             else:
                 # Validate email
                 if not re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', new_email):
-                    conn.close()
-                    return {"error": "Invalid email address"}
+                    raise ValueError("Invalid email address")
                 updates.append("email = ?")
                 params.append(new_email)
 
@@ -1322,9 +1316,6 @@ def edit_nickname(nickname, new_password=None, new_email=None):
         params.append(nick_uuid)
         query = f"UPDATE registered_nicks SET {', '.join(updates)} WHERE uuid = ?"
         cursor.execute(query, params)
-
-        conn.commit()
-        conn.close()
 
         changes = []
         if new_password:
@@ -1334,65 +1325,53 @@ def edit_nickname(nickname, new_password=None, new_email=None):
 
         return {"success": True, "message": f"Updated {' and '.join(changes)} for nickname '{nickname}'"}
 
-    except Exception as e:
-        return {"error": str(e)}
-
+@api_error_handler
 def reset_mfa(nickname):
     """Reset MFA for a nickname (admin function)"""
-    db_path = get_db_path()
-    
-    if not os.path.exists(db_path):
-        return {"error": f"Database not found at {db_path}"}
-    
-    try:
-        conn = sqlite3.connect(db_path)
+    # Validate input
+    validate_nickname(nickname)
+
+    with db_pool.get_connection() as conn:
         cursor = conn.cursor()
-        
+
         # Check if nickname exists
         cursor.execute("SELECT uuid FROM registered_nicks WHERE LOWER(nickname) = LOWER(?)", (nickname,))
         nick_row = cursor.fetchone()
-        
+
         if not nick_row:
-            conn.close()
             return {"error": f"Nickname '{nickname}' is not registered"}
-        
+
         # Reset MFA
         cursor.execute(
             "UPDATE registered_nicks SET mfa_enabled = 0, mfa_secret = NULL WHERE LOWER(nickname) = LOWER(?)",
             (nickname,)
         )
-        conn.commit()
-        conn.close()
-        
-        return {"success": True, "message": f"MFA disabled for '{nickname}'"}
-    
-    except Exception as e:
-        return {"error": str(e)}
 
+        return {"success": True, "message": f"MFA disabled for '{nickname}'"}
+
+@api_error_handler
 def test_identify(nickname, password):
     """Test if a nickname/password combination is valid"""
-    db_path = get_db_path()
-    
-    if not os.path.exists(db_path):
-        return {"error": f"Database not found at {db_path}"}
-    
-    try:
-        conn = sqlite3.connect(db_path)
+    # Validate inputs
+    validate_nickname(nickname)
+    if not password:
+        raise ValueError("Password is required")
+
+    with db_pool.get_connection() as conn:
         cursor = conn.cursor()
-        
+
         # Get password hash
         cursor.execute(
             "SELECT password_hash, mfa_enabled FROM registered_nicks WHERE LOWER(nickname) = LOWER(?)",
             (nickname,)
         )
         row = cursor.fetchone()
-        conn.close()
-        
+
         if not row:
             return {"success": False, "message": "Nickname not registered"}
-        
+
         password_hash, mfa_enabled = row
-        
+
         # Verify password
         if bcrypt.checkpw(password.encode('utf-8'), password_hash.encode('utf-8')):
             if mfa_enabled:
@@ -1401,42 +1380,34 @@ def test_identify(nickname, password):
                 return {"success": True, "message": "Password correct (authentication would succeed)", "mfa_required": False}
         else:
             return {"success": False, "message": "Password incorrect"}
-    
-    except Exception as e:
-        return {"error": str(e)}
 
+@api_error_handler
 def test_staff_login(username, password):
     """Test if a staff username/password combination is valid"""
-    db_path = get_db_path()
-    
-    if not os.path.exists(db_path):
-        return {"error": f"Database not found at {db_path}"}
-    
-    try:
-        conn = sqlite3.connect(db_path)
+    # Validate inputs
+    if not username or not password:
+        raise ValueError("Username and password are required")
+
+    with db_pool.get_connection() as conn:
         cursor = conn.cursor()
-        
+
         # Get password hash and level
         cursor.execute(
             "SELECT password_hash, level FROM users WHERE username = ?",
             (username,)
         )
         row = cursor.fetchone()
-        conn.close()
-        
+
         if not row:
             return {"success": False, "message": "Staff account not found"}
-        
+
         password_hash, level = row
-        
+
         # Verify password
         if bcrypt.checkpw(password.encode('utf-8'), password_hash.encode('utf-8')):
             return {"success": True, "message": f"Password correct (Level: {level})", "level": level}
         else:
             return {"success": False, "message": "Password incorrect"}
-    
-    except Exception as e:
-        return {"error": str(e)}
 
 def test_staff_login_stdin(username):
     """Test if a staff username/password combination is valid (password from stdin)"""
@@ -1482,15 +1453,13 @@ def get_staff_details(username):
 
         return {"success": True, "staff": details}
 
+@api_error_handler
 def unregister_channel(channel_name):
     """Unregister a channel"""
-    db_path = get_db_path()
+    # Validate input
+    validate_channel_name(channel_name)
 
-    if not os.path.exists(db_path):
-        return {"error": f"Database not found at {db_path}"}
-
-    try:
-        conn = sqlite3.connect(db_path)
+    with db_pool.get_connection() as conn:
         cursor = conn.cursor()
 
         # Check if channel exists
@@ -1498,29 +1467,21 @@ def unregister_channel(channel_name):
         chan_row = cursor.fetchone()
 
         if not chan_row:
-            conn.close()
             return {"error": f"Channel '{channel_name}' is not registered"}
 
         # Delete the channel
         cursor.execute("DELETE FROM registered_channels WHERE LOWER(channel_name) = LOWER(?)", (channel_name,))
-        conn.commit()
-        conn.close()
 
         return {"success": True, "message": f"Channel '{channel_name}' has been unregistered"}
 
-    except Exception as e:
-        return {"error": str(e)}
-
+@api_error_handler
 def edit_channel(channel_name, new_owner=None, new_description=None, new_topic=None, new_modes=None,
                  new_onjoin=None, new_onpart=None, new_memberkey=None, new_hostkey=None, new_ownerkey=None, new_voicekey=None, new_userlimit=None):
     """Edit a registered channel's properties by updating registered_channels table"""
-    db_path = get_db_path()
+    # Validate input
+    validate_channel_name(channel_name)
 
-    if not os.path.exists(db_path):
-        return {"error": f"Database not found at {db_path}"}
-
-    try:
-        conn = sqlite3.connect(db_path)
+    with db_pool.get_connection() as conn:
         cursor = conn.cursor()
 
         # Load channel data from registered_channels (JSON format in properties column)
@@ -1528,7 +1489,6 @@ def edit_channel(channel_name, new_owner=None, new_description=None, new_topic=N
         row = cursor.fetchone()
 
         if not row:
-            conn.close()
             return {"error": f"Channel '{channel_name}' is not registered"}
 
         # Parse JSON properties (may be None for newly registered channels)
@@ -1551,7 +1511,6 @@ def edit_channel(channel_name, new_owner=None, new_description=None, new_topic=N
                 channel_data['owners'] = [new_owner]
                 changes.append("owner")
             else:
-                conn.close()
                 return {"error": f"Owner nickname '{new_owner}' not found"}
 
         # Update description
@@ -1626,7 +1585,6 @@ def edit_channel(channel_name, new_owner=None, new_description=None, new_topic=N
             changes.append("userlimit")
 
         if not changes:
-            conn.close()
             return {"error": "No changes were made"}
 
         # Save back to registered_channels
@@ -1635,20 +1593,14 @@ def edit_channel(channel_name, new_owner=None, new_description=None, new_topic=N
                          WHERE LOWER(channel_name) = LOWER(?)""",
                       (json.dumps(channel_data), new_owner_uuid, new_description_val, int(time.time()), channel_name))
 
-        conn.commit()
-        conn.close()
+    # Kill channel to force reload from database (outside transaction)
+    kill_result = send_irc_kill_channel(channel_name)
 
-        # Kill channel to force reload from database
-        kill_result = send_irc_kill_channel(channel_name)
+    message = f"Updated {', '.join(changes)} for channel '{channel_name}'"
+    if kill_result.get("success"):
+        message += " (channel will reload)"
 
-        message = f"Updated {', '.join(changes)} for channel '{channel_name}'"
-        if kill_result.get("success"):
-            message += " (channel will reload)"
-
-        return {"success": True, "message": message}
-
-    except Exception as e:
-        return {"error": f"Failed to update channel: {str(e)}"}
+    return {"success": True, "message": message}
 
 @api_error_handler
 def get_registered_nicks_paginated(limit=50, offset=0):
@@ -1780,17 +1732,20 @@ def get_channel_access(channel_name):
 
         return {"access_list": access_list}
 
+@api_error_handler
 def set_channel_access(channel_name, access_list_json):
     """Set ACCESS lists for a channel"""
-    db_path = get_db_path()
-
-    if not os.path.exists(db_path):
-        return {"error": f"Database not found at {db_path}"}
+    # Validate inputs
+    validate_channel_name(channel_name)
+    if not access_list_json:
+        raise ValueError("Access list JSON is required")
 
     try:
         access_list = json.loads(access_list_json)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON: {str(e)}")
 
-        conn = sqlite3.connect(db_path)
+    with db_pool.get_connection() as conn:
         cursor = conn.cursor()
 
         # Check if channel exists in registered_channels
@@ -1805,21 +1760,12 @@ def set_channel_access(channel_name, access_list_json):
                          (json.dumps(data), int(time.time()), channel_name))
         else:
             # Channel not registered - cannot set ACCESS on unregistered channel
-            conn.close()
             return {"error": f"Channel '{channel_name}' is not registered. Register it first."}
 
-        conn.commit()
-        conn.close()
+    # Kill channel to force reload from database (outside transaction)
+    send_irc_kill_channel(channel_name)
 
-        # Kill channel to force reload from database
-        send_irc_kill_channel(channel_name)
-
-        return {"success": True, "message": f"ACCESS lists updated for {channel_name}"}
-
-    except json.JSONDecodeError as e:
-        return {"error": f"Invalid JSON: {str(e)}"}
-    except Exception as e:
-        return {"error": str(e)}
+    return {"success": True, "message": f"ACCESS lists updated for {channel_name}"}
 
 # ============================================================================
 # MAIN COMMAND DISPATCHER
