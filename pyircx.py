@@ -7208,7 +7208,7 @@ class pyIRCXServer:
                 return
 
             if len(params) < 3:
-                await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: STAFF MFA <username> ENABLE <code> | DISABLE <code> | STATUS")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: STAFF MFA <username> ENABLE <code> | DISABLE <code> | RESET | STATUS")
                 return
 
             username = params[1]
@@ -7304,9 +7304,21 @@ class pyIRCXServer:
                         logger.info(f"STAFF MFA: {user.nickname} disabled MFA for {username}")
                         await self.log_staff(user.nickname, "STAFF MFA DISABLE", username, "MFA disabled by admin")
 
+                    elif mfa_action == "RESET":
+                        # Admin reset of MFA (clears both secret and enabled flag)
+                        # This is for when a staff member loses access to their authenticator
+                        await db.execute("UPDATE users SET mfa_enabled = 0, mfa_secret = NULL WHERE username = ?",
+                                        (username,))
+                        await db.commit()
+
+                        await user.send(f":{self.servername} NOTICE {user.nickname} :MFA has been reset for {username}")
+                        await user.send(f":{self.servername} NOTICE {user.nickname} :{username} can now run AUTH ENABLE to set up MFA again")
+                        logger.info(f"STAFF MFA: {user.nickname} reset MFA for {username}")
+                        await self.log_staff(user.nickname, "STAFF MFA RESET", username, "MFA reset by admin")
+
                     else:
                         await user.send(f":{self.servername} NOTICE {user.nickname} :Invalid MFA action: {mfa_action}")
-                        await user.send(f":{self.servername} NOTICE {user.nickname} :Use: ENABLE, DISABLE, or STATUS")
+                        await user.send(f":{self.servername} NOTICE {user.nickname} :Use: ENABLE, DISABLE, RESET, or STATUS")
 
             except Exception as e:
                 logger.error(f"STAFF MFA error: {e}")
@@ -7846,11 +7858,13 @@ class pyIRCXServer:
                 await user.send(f":{self.servername} NOTICE {user.nickname} :  /AUTH VERIFY <code> - Complete MFA verification")
                 await user.send(f":{self.servername} NOTICE {user.nickname} :  /AUTH ENABLE <password> - Enable MFA for your account")
                 await user.send(f":{self.servername} NOTICE {user.nickname} :  /AUTH DISABLE <password> <code> - Disable MFA (requires code)")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  /AUTH RESET <password> - Reset MFA (start over)")
                 await user.send(f":{self.servername} NOTICE {user.nickname} :")
                 await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
                 await user.send(f":{self.servername} NOTICE {user.nickname} :  /AUTH admin mypassword - Authenticate as IRC Administrator")
                 await user.send(f":{self.servername} NOTICE {user.nickname} :  /AUTH VERIFY 123456 - Complete MFA login")
                 await user.send(f":{self.servername} NOTICE {user.nickname} :  /AUTH ENABLE mypassword - Set up two-factor authentication")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  /AUTH RESET mypassword - Clear MFA and start over")
                 await user.send(f":{self.servername} NOTICE {user.nickname} :")
                 await user.send(f":{self.servername} NOTICE {user.nickname} :Security: Progressive delays on failures, account lockout after 5 attempts,")
                 await user.send(f":{self.servername} NOTICE {user.nickname} :optional SSL/TLS requirement, all attempts logged to #System channel.")
@@ -9043,14 +9057,15 @@ class pyIRCXServer:
           AUTH VERIFY <code>              - Complete MFA verification
           AUTH ENABLE <password>          - Enable MFA for your staff account
           AUTH DISABLE <password> <code>  - Disable MFA (requires valid code)
+          AUTH RESET <password>           - Reset MFA setup (start over)
         """
         if not params:
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: AUTH <username> <password> | AUTH VERIFY <code> | AUTH ENABLE <password> | AUTH DISABLE <password> <code>")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: AUTH <username> <password> | AUTH VERIFY <code> | AUTH ENABLE <password> | AUTH DISABLE <password> <code> | AUTH RESET <password>")
             return
 
         subcmd = params[0].upper()
 
-        # Handle AUTH VERIFY, AUTH ENABLE, AUTH DISABLE
+        # Handle AUTH VERIFY, AUTH ENABLE, AUTH DISABLE, AUTH RESET
         if subcmd == "VERIFY":
             await self._auth_verify(user, params)
             return
@@ -9059,6 +9074,9 @@ class pyIRCXServer:
             return
         elif subcmd == "DISABLE":
             await self._auth_disable(user, params)
+            return
+        elif subcmd == "RESET":
+            await self._auth_reset(user, params)
             return
 
         # Otherwise, treat first param as username for AUTH <username> <password>
@@ -9415,6 +9433,54 @@ class pyIRCXServer:
         except Exception as e:
             logger.error(f"AUTH DISABLE error: {e}")
             await user.send(f":{self.servername} NOTICE {user.nickname} :MFA disable failed - internal error")
+
+    async def _auth_reset(self, user, params):
+        """Reset MFA setup for staff account (clears mfa_secret and mfa_enabled)"""
+        if len(params) < 2:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: AUTH RESET <your-password>")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :This will clear your MFA setup so you can start over with AUTH ENABLE")
+            return
+
+        password = params[1]
+
+        # Must be authenticated staff
+        if not user.authenticated or user.staff_level not in ["ADMIN", "SYSOP", "GUIDE"]:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :You must be authenticated as staff to reset MFA")
+            return
+
+        username = user.username.lstrip('~')
+
+        try:
+            row = await self.db_pool.execute_one(
+                "SELECT password_hash, mfa_enabled, mfa_secret FROM users WHERE username=?",
+                (username,)
+            )
+
+            if not row:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Staff account not found")
+                return
+
+            password_hash, mfa_enabled, mfa_secret = row
+
+            # Verify password
+            if not await check_password_async(password, password_hash):
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Incorrect password")
+                logger.warning(f"AUTH RESET: Failed password verification for {username}")
+                return
+
+            # Reset MFA (clear both secret and enabled flag)
+            await self.db_pool.execute_write(
+                "UPDATE users SET mfa_enabled = 0, mfa_secret = NULL WHERE username = ?",
+                (username,)
+            )
+
+            await user.send(f":{self.servername} NOTICE {user.nickname} :MFA has been reset for your account")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :You can now run AUTH ENABLE to set up MFA again")
+            logger.info(f"AUTH RESET: {username} reset MFA")
+
+        except Exception as e:
+            logger.error(f"AUTH RESET error: {e}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :MFA reset failed - internal error")
 
     async def _apply_staff_auth(self, user, username, level, email, realname, force_realname):
         """Apply staff authentication - set modes and update user state"""
