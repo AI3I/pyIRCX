@@ -3768,7 +3768,7 @@ class pyIRCXServer:
         if not user.has_mode('a'):  # ADMIN bypasses
             user_hostmask = user.prefix()
             # Check DENY rules first
-            for pattern, set_by, _, reason in self.access_list['DENY']:
+            for pattern, set_by, set_at, timeout, reason in self.access_list['DENY']:
                 if fnmatch.fnmatch(user_hostmask, pattern) or fnmatch.fnmatch(user.ip or '', pattern):
                     reason_msg = f" ({reason})" if reason else ""
                     await user.send(f":{self.servername} NOTICE {user.nickname} :Access denied{reason_msg}")
@@ -6299,7 +6299,7 @@ class pyIRCXServer:
             # ACCESS DENY list
             await user.send(f":{self.servername} NOTICE {user.nickname} :ACCESS DENY entries: {len(self.access_list['DENY'])}")
             if self.access_list['DENY']:
-                for pattern, set_by, set_at, reason in self.access_list['DENY']:
+                for pattern, set_by, set_at, timeout, reason in self.access_list['DENY']:
                     reason_str = f" :{reason}" if reason else ""
                     await user.send(f":{self.servername} NOTICE {user.nickname} :  {pattern} (by {set_by}){reason_str}")
 
