@@ -607,6 +607,7 @@ class User:
         self.staff_level = "USER"
         self.last_nick_change = 0  # Timestamp of last nick change
         self.pending_mfa = None  # UUID of nick awaiting MFA verification
+        self.pending_staff_auth = None  # Dict with username, level, timestamp for AUTH MFA
         self.watch_list = set()  # Nicknames this user is watching
         self.silence_list = set()  # Hostmask patterns to ignore
         self.disconnected = False  # Flag set when user is being disconnected
@@ -2644,6 +2645,14 @@ class pyIRCXServer:
                     await db.execute("ALTER TABLE users ADD COLUMN force_realname INTEGER DEFAULT 0")
                 except aiosqlite.OperationalError:
                     pass  # Column already exists
+                try:
+                    await db.execute("ALTER TABLE users ADD COLUMN mfa_enabled INTEGER DEFAULT 0")
+                except aiosqlite.OperationalError:
+                    pass  # Column already exists
+                try:
+                    await db.execute("ALTER TABLE users ADD COLUMN mfa_secret TEXT")
+                except aiosqlite.OperationalError:
+                    pass  # Column already exists
 
                 # Registered nicknames with UUID and MFA
                 await db.execute("""CREATE TABLE IF NOT EXISTS registered_nicks (
@@ -3436,9 +3445,10 @@ class pyIRCXServer:
             await self.handle_register(user, params)
         elif cmd == "UNREGISTER":
             await self.handle_unregister(user, params)
+        elif cmd == "AUTH":
+            await self.handle_auth(user, params)
         elif cmd == "DROP":
-            # Alias for UNREGISTER
-            await self.handle_unregister(user, params)
+            await self.handle_drop(user, params)
         elif cmd == "IDENTIFY":
             await self.handle_identify(user, params)
         elif cmd == "MFA":
@@ -3675,59 +3685,67 @@ class pyIRCXServer:
 
         # Fall back to PASS-based authentication
         elif user.provided_pass:
-            # Check if we should route to trunk for authentication
-            services_mode = CONFIG.get('services', 'mode', default='local')
-            is_services_hub = CONFIG.get('services', 'is_services_hub', default=False)
-
-            # If centralized mode and we're NOT the trunk, route to trunk
-            if services_mode == 'centralized' and not is_services_hub:
-                # Branch server - route staff auth to trunk
-                if self.link_manager and self.link_manager.enabled:
-                    auth_result = await self.link_manager.route_staff_auth(user.username, user.provided_pass, user)
-                    if auth_result:
-                        auth, level = auth_result['authenticated'], auth_result['level']
-                        if auth:
-                            user.staff_email = auth_result.get('email')
-                            user.staff_realname = auth_result.get('realname')
-                            user.force_staff_realname = auth_result.get('force_realname', False)
-                            logger.info(f"Staff auth via trunk: {user.username} as {level}")
-                    else:
-                        # Trunk not available - deny authentication
-                        logger.warning(f"Staff auth failed: Trunk unavailable for {user.username}")
-                        auth, level = False, "USER"
+            # Check SSL requirement for PASS-based staff authentication (configurable)
+            pass_require_ssl = CONFIG.get('security', 'pass_require_ssl', default=False)
+            if pass_require_ssl and not user.using_ssl:
+                # Block staff auth via PASS on non-SSL connections
+                logger.warning(f"PASS staff auth blocked: {user.username} ({user.ip}) - no SSL")
+                # User will connect as regular user (no staff privileges)
+                auth, level = False, "USER"
             else:
-                # Trunk server or local mode - authenticate locally
-                # Try localhost admin token first (for Cockpit API)
-                if user.ip in ['127.0.0.1', '::1', '::ffff:127.0.0.1']:
-                    try:
-                        with open('/etc/pyircx/cockpit_admin_token', 'r') as f:
-                            admin_token = f.read().strip()
-                        if user.provided_pass == admin_token:
-                            auth, level = True, "ADMIN"
-                            logger.info(f"Cockpit admin token accepted from localhost for {user.username}")
-                    except (FileNotFoundError, PermissionError, IOError):
-                        pass  # Token file doesn't exist or can't be read
+                # Check if we should route to trunk for authentication
+                services_mode = CONFIG.get('services', 'mode', default='local')
+                is_services_hub = CONFIG.get('services', 'is_services_hub', default=False)
 
-                # If admin token didn't match, try normal password authentication
-                if not auth:
-                    try:
-                        row = await self.db_pool.execute_one(
-                            "SELECT password_hash, level, email, realname, force_realname FROM users WHERE username=?",
-                            (user.username,)
-                        )
-                        if row:
-                            # Use non-blocking bcrypt check
-                            if await check_password_async(user.provided_pass, row[0]):
-                                auth, level = True, row[1]
-                                user.staff_email = row[2]
-                                user.staff_realname = row[3]
-                                user.force_staff_realname = bool(row[4])
-                                self.failed_auth_tracker.record_success(user.ip)
-                            else:
-                                self.failed_auth_tracker.record_failure(user.ip)
-                    except Exception as e:
-                        if self.debug_mode:
-                            logger.error(f"Auth error: {e}")
+                # If centralized mode and we're NOT the trunk, route to trunk
+                if services_mode == 'centralized' and not is_services_hub:
+                    # Branch server - route staff auth to trunk
+                    if self.link_manager and self.link_manager.enabled:
+                        auth_result = await self.link_manager.route_staff_auth(user.username, user.provided_pass, user)
+                        if auth_result:
+                            auth, level = auth_result['authenticated'], auth_result['level']
+                            if auth:
+                                user.staff_email = auth_result.get('email')
+                                user.staff_realname = auth_result.get('realname')
+                                user.force_staff_realname = auth_result.get('force_realname', False)
+                                logger.info(f"Staff auth via trunk: {user.username} as {level}")
+                        else:
+                            # Trunk not available - deny authentication
+                            logger.warning(f"Staff auth failed: Trunk unavailable for {user.username}")
+                            auth, level = False, "USER"
+                else:
+                    # Trunk server or local mode - authenticate locally
+                    # Try localhost admin token first (for Cockpit API)
+                    if user.ip in ['127.0.0.1', '::1', '::ffff:127.0.0.1']:
+                        try:
+                            with open('/etc/pyircx/cockpit_admin_token', 'r') as f:
+                                admin_token = f.read().strip()
+                            if user.provided_pass == admin_token:
+                                auth, level = True, "ADMIN"
+                                logger.info(f"Cockpit admin token accepted from localhost for {user.username}")
+                        except (FileNotFoundError, PermissionError, IOError):
+                            pass  # Token file doesn't exist or can't be read
+
+                    # If admin token didn't match, try normal password authentication
+                    if not auth:
+                        try:
+                            row = await self.db_pool.execute_one(
+                                "SELECT password_hash, level, email, realname, force_realname FROM users WHERE username=?",
+                                (user.username,)
+                            )
+                            if row:
+                                # Use non-blocking bcrypt check
+                                if await check_password_async(user.provided_pass, row[0]):
+                                    auth, level = True, row[1]
+                                    user.staff_email = row[2]
+                                    user.staff_realname = row[3]
+                                    user.force_staff_realname = bool(row[4])
+                                    self.failed_auth_tracker.record_success(user.ip)
+                                else:
+                                    self.failed_auth_tracker.record_failure(user.ip)
+                        except Exception as e:
+                            if self.debug_mode:
+                                logger.error(f"Auth error: {e}")
 
         if auth and level in ["ADMIN", "SYSOP", "GUIDE"]:
             user.host = self.servername
@@ -6641,7 +6659,7 @@ class pyIRCXServer:
             return
 
         if not params:
-            await user.send(f":{self.servername} NOTICE {user.nickname} :STAFF subcommands: LIST, ADD, DEL, SET, PASS")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :STAFF subcommands: LIST, ADD, DEL, SET, PASS, MFA")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Staff levels: ADMIN, SYSOP, GUIDE")
             return
 
@@ -6969,6 +6987,122 @@ class pyIRCXServer:
                 logger.error(f"STAFF PASS error: {e}")
                 await user.send(self.get_reply("888", user))
 
+
+        elif subcmd == "MFA":
+            # Manage MFA for staff accounts (ADMIN only)
+            # Syntax: STAFF MFA <username> ENABLE <code>   - Enable MFA with verified code
+            #         STAFF MFA <username> DISABLE <code>  - Disable MFA with verified code
+            #         STAFF MFA <username> STATUS          - Show MFA status
+
+            if not is_admin:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :STAFF MFA requires IRC administrator privileges")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Use AUTH ENABLE to manage your own MFA")
+                return
+
+            if len(params) < 3:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: STAFF MFA <username> ENABLE <code> | DISABLE <code> | STATUS")
+                return
+
+            username = params[1]
+            mfa_action = params[2].upper()
+
+            try:
+                async with aiosqlite.connect(CONFIG.get('database', 'path')) as db:
+                    # Check if user exists
+                    async with db.execute("SELECT mfa_enabled, mfa_secret FROM users WHERE username = ?",
+                                         (username,)) as cursor:
+                        row = await cursor.fetchone()
+                        if not row:
+                            await user.send(f":{self.servername} NOTICE {user.nickname} :Staff account '{username}' not found")
+                            return
+
+                        mfa_enabled, mfa_secret = row
+
+                    if mfa_action == "STATUS":
+                        # Show MFA status
+                        status = "enabled" if mfa_enabled else ("setup pending" if mfa_secret else "disabled")
+                        await user.send(f":{self.servername} NOTICE {user.nickname} :MFA status for {username}: {status}")
+                        if mfa_secret and not mfa_enabled:
+                            await user.send(f":{self.servername} NOTICE {user.nickname} :Secret exists but awaiting first verification")
+                        logger.info(f"STAFF MFA: {user.nickname} checked MFA status for {username}")
+
+                    elif mfa_action == "ENABLE":
+                        # Enable MFA with code verification
+                        if len(params) < 4:
+                            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: STAFF MFA {username} ENABLE <6-digit code>")
+                            await user.send(f":{self.servername} NOTICE {user.nickname} :The user must run AUTH ENABLE first to generate their secret")
+                            return
+
+                        code = params[3]
+
+                        if mfa_enabled:
+                            await user.send(f":{self.servername} NOTICE {user.nickname} :MFA is already enabled for {username}")
+                            return
+
+                        if not mfa_secret:
+                            await user.send(f":{self.servername} NOTICE {user.nickname} :User {username} must run AUTH ENABLE first to generate MFA secret")
+                            return
+
+                        # Verify the code
+                        import pyotp
+                        totp = pyotp.TOTP(mfa_secret)
+
+                        if not totp.verify(code, valid_window=1):
+                            await user.send(f":{self.servername} NOTICE {user.nickname} :Invalid MFA code for {username}")
+                            logger.warning(f"STAFF MFA: {user.nickname} failed to enable MFA for {username} (invalid code)")
+                            return
+
+                        # Enable MFA!
+                        await db.execute("UPDATE users SET mfa_enabled = 1 WHERE username = ?",
+                                        (username,))
+                        await db.commit()
+
+                        await user.send(f":{self.servername} NOTICE {user.nickname} :MFA enabled for {username}")
+                        logger.info(f"STAFF MFA: {user.nickname} enabled MFA for {username}")
+                        await self.log_staff(user.nickname, "STAFF MFA ENABLE", username, "MFA enabled by admin")
+
+                    elif mfa_action == "DISABLE":
+                        # Disable MFA with code verification
+                        if len(params) < 4:
+                            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: STAFF MFA {username} DISABLE <6-digit code>")
+                            await user.send(f":{self.servername} NOTICE {user.nickname} :Current valid code required to disable MFA")
+                            return
+
+                        code = params[3]
+
+                        if not mfa_enabled:
+                            await user.send(f":{self.servername} NOTICE {user.nickname} :MFA is not enabled for {username}")
+                            return
+
+                        if not mfa_secret:
+                            await user.send(f":{self.servername} NOTICE {user.nickname} :MFA configuration error for {username}")
+                            return
+
+                        # Verify the code
+                        import pyotp
+                        totp = pyotp.TOTP(mfa_secret)
+
+                        if not totp.verify(code, valid_window=1):
+                            await user.send(f":{self.servername} NOTICE {user.nickname} :Invalid MFA code for {username}")
+                            logger.warning(f"STAFF MFA: {user.nickname} failed to disable MFA for {username} (invalid code)")
+                            return
+
+                        # Disable MFA
+                        await db.execute("UPDATE users SET mfa_enabled = 0, mfa_secret = NULL WHERE username = ?",
+                                        (username,))
+                        await db.commit()
+
+                        await user.send(f":{self.servername} NOTICE {user.nickname} :MFA disabled for {username}")
+                        logger.info(f"STAFF MFA: {user.nickname} disabled MFA for {username}")
+                        await self.log_staff(user.nickname, "STAFF MFA DISABLE", username, "MFA disabled by admin")
+
+                    else:
+                        await user.send(f":{self.servername} NOTICE {user.nickname} :Invalid MFA action: {mfa_action}")
+                        await user.send(f":{self.servername} NOTICE {user.nickname} :Use: ENABLE, DISABLE, or STATUS")
+
+            except Exception as e:
+                logger.error(f"STAFF MFA error: {e}")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :MFA operation failed - internal error")
         else:
             await user.send(f":{self.servername} NOTICE {user.nickname} :That subcommand is not recognized: {subcmd}")
             await user.send(f":{self.servername} NOTICE {user.nickname} :STAFF subcommands: LIST, ADD, DEL, SET, PASS")
@@ -8600,6 +8734,551 @@ class pyIRCXServer:
         except Exception as e:
             logger.error(f"MFA disable error: {e}")
             await user.send(f":{self.servername} NOTICE {user.nickname} :MFA disable failed")
+
+    # ==========================================================================
+    # STAFF AUTH COMMAND
+    # ==========================================================================
+
+    async def handle_auth(self, user, params):
+        """Handle AUTH command for staff privilege elevation
+
+        Syntax:
+          AUTH <username> <password>      - Elevate to staff (initiate MFA if enabled)
+          AUTH VERIFY <code>              - Complete MFA verification
+          AUTH ENABLE <password>          - Enable MFA for your staff account
+          AUTH DISABLE <password> <code>  - Disable MFA (requires valid code)
+        """
+        if not params:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: AUTH <username> <password> | AUTH VERIFY <code> | AUTH ENABLE <password> | AUTH DISABLE <password> <code>")
+            return
+
+        subcmd = params[0].upper()
+
+        # Handle AUTH VERIFY, AUTH ENABLE, AUTH DISABLE
+        if subcmd == "VERIFY":
+            await self._auth_verify(user, params)
+            return
+        elif subcmd == "ENABLE":
+            await self._auth_enable(user, params)
+            return
+        elif subcmd == "DISABLE":
+            await self._auth_disable(user, params)
+            return
+
+        # Otherwise, treat first param as username for AUTH <username> <password>
+        if len(params) < 2:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: AUTH <username> <password>")
+            return
+
+        username = params[0]
+        password = params[1]
+
+        # Check SSL requirement (configurable)
+        auth_require_ssl = CONFIG.get('security', 'auth_require_ssl', default=True)
+        if auth_require_ssl and not user.using_ssl:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :AUTH command requires an SSL/TLS connection (port 6697)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Your credentials would be transmitted in plaintext")
+            logger.warning(f"AUTH: {user.nickname} ({user.ip}) attempted AUTH on non-SSL connection")
+            await self._send_system_alert(f"AUTH blocked: {user.nickname} ({user.ip}) - no SSL")
+            return
+
+        # Progressive delay tracking
+        delay = await self._get_auth_delay(username, user.ip)
+        if delay > 0:
+            await asyncio.sleep(delay)
+
+        # Check lockout
+        if await self._is_auth_locked_out(username, user.ip):
+            remaining = await self._get_lockout_remaining(username, user.ip)
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Too many failed authentication attempts")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Account locked. Try again in {remaining}s")
+            logger.warning(f"AUTH: {username} locked out (IP: {user.ip})")
+            await self._send_system_alert(f"AUTH lockout: {username} from {user.nickname} ({user.ip})")
+            return
+
+        # Authenticate against staff database
+        try:
+            row = await self.db_pool.execute_one(
+                "SELECT password_hash, level, mfa_enabled, mfa_secret, email, realname, force_realname FROM users WHERE username=?",
+                (username,)
+            )
+
+            if not row:
+                await self._record_auth_failure(username, user.ip)
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Authentication failed")
+                logger.warning(f"AUTH: Failed attempt for unknown user '{username}' from {user.nickname} ({user.ip})")
+                await self._send_system_alert(f"AUTH failed: unknown user '{username}' from {user.nickname} ({user.ip})")
+                return
+
+            password_hash, level, mfa_enabled, mfa_secret, email, realname, force_realname = row
+
+            # Verify password
+            if not await check_password_async(password, password_hash):
+                await self._record_auth_failure(username, user.ip)
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Authentication failed")
+                logger.warning(f"AUTH: Failed password for '{username}' from {user.nickname} ({user.ip})")
+                await self._send_system_alert(f"AUTH failed: wrong password for '{username}' from {user.nickname} ({user.ip})")
+                return
+
+            # Password correct! Clear failed attempts
+            await self._record_auth_success(username, user.ip)
+
+            # Check if MFA is enabled
+            if mfa_enabled and mfa_secret:
+                # Set pending state - modes will NOT be applied until MFA verify
+                user.pending_staff_auth = {
+                    'username': username,
+                    'level': level,
+                    'email': email,
+                    'realname': realname,
+                    'force_realname': bool(force_realname),
+                    'timestamp': time.time()
+                }
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Password accepted. MFA verification required.")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Enter code: /AUTH VERIFY <6-digit code>")
+                logger.info(f"AUTH: Password OK for '{username}' from {user.nickname} ({user.ip}), awaiting MFA")
+                await self._send_system_alert(f"AUTH pending MFA: '{username}' from {user.nickname} ({user.ip}) as {level}")
+                return
+
+            # No MFA - apply privileges immediately
+            await self._apply_staff_auth(user, username, level, email, realname, bool(force_realname))
+
+        except Exception as e:
+            logger.error(f"AUTH error: {e}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Authentication failed - internal error")
+
+    async def _auth_verify(self, user, params):
+        """Verify MFA code for pending AUTH or to complete MFA setup"""
+        if len(params) < 2:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: AUTH VERIFY <6-digit code>")
+            return
+
+        code = params[1]
+
+        # Case 1: Pending authentication (user just did AUTH <username> <password>)
+        if user.pending_staff_auth:
+            # Check timeout (5 minutes)
+            if time.time() - user.pending_staff_auth['timestamp'] > 300:
+                user.pending_staff_auth = None
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Authentication session expired. Please AUTH again.")
+                logger.info(f"AUTH: MFA session expired for {user.nickname}")
+                return
+
+            username = user.pending_staff_auth['username']
+            level = user.pending_staff_auth['level']
+
+            try:
+                row = await self.db_pool.execute_one(
+                    "SELECT mfa_secret, mfa_enabled FROM users WHERE username=?",
+                    (username,)
+                )
+
+                if not row or not row[0]:
+                    user.pending_staff_auth = None
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :MFA configuration error")
+                    logger.error(f"AUTH: MFA secret not found for {username}")
+                    return
+
+                mfa_secret, mfa_enabled = row
+
+                # Verify TOTP code
+                import pyotp
+                totp = pyotp.TOTP(mfa_secret)
+
+                if not totp.verify(code, valid_window=1):
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :Invalid MFA code")
+                    logger.warning(f"AUTH: Invalid MFA code for '{username}' from {user.nickname} ({user.ip})")
+                    await self._send_system_alert(f"AUTH MFA failed: invalid code for '{username}' from {user.nickname} ({user.ip})")
+                    return
+
+                # Code is valid! If MFA was in setup mode, enable it now
+                if not mfa_enabled:
+                    await self.db_pool.execute(
+                        "UPDATE users SET mfa_enabled = 1 WHERE username = ?",
+                        (username,)
+                    )
+                    logger.info(f"AUTH VERIFY: MFA enabled for {username} after first successful verification")
+
+                # MFA verified! Apply privileges NOW
+                email = user.pending_staff_auth.get('email')
+                realname = user.pending_staff_auth.get('realname')
+                force_realname = user.pending_staff_auth.get('force_realname', False)
+                user.pending_staff_auth = None
+
+                await self._apply_staff_auth(user, username, level, email, realname, force_realname)
+
+            except Exception as e:
+                logger.error(f"AUTH VERIFY error: {e}")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :MFA verification failed - internal error")
+            return
+
+        # Case 2: Completing MFA setup (user is already authenticated and ran AUTH ENABLE)
+        if user.authenticated and user.staff_level in ["ADMIN", "SYSOP", "GUIDE"]:
+            username = user.username.lstrip('~')
+
+            try:
+                row = await self.db_pool.execute_one(
+                    "SELECT mfa_enabled, mfa_secret FROM users WHERE username=?",
+                    (username,)
+                )
+
+                if not row:
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :Staff account not found")
+                    return
+
+                mfa_enabled, mfa_secret = row
+
+                if mfa_enabled:
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :MFA is already enabled")
+                    return
+
+                if not mfa_secret:
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :Run AUTH ENABLE first to set up MFA")
+                    return
+
+                # Verify the code
+                import pyotp
+                totp = pyotp.TOTP(mfa_secret)
+
+                if totp.verify(code, valid_window=1):
+                    await self.db_pool.execute(
+                        "UPDATE users SET mfa_enabled = 1 WHERE username = ?",
+                        (username,)
+                    )
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :MFA is now enabled for your account")
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :You will need to provide an MFA code when using AUTH from now on")
+                    logger.info(f"AUTH VERIFY: {username} enabled MFA via setup completion")
+                else:
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :Invalid MFA code. Setup cancelled.")
+                    await self.db_pool.execute(
+                        "UPDATE users SET mfa_secret = NULL WHERE username = ?",
+                        (username,)
+                    )
+                    logger.warning(f"AUTH VERIFY: {username} failed MFA setup verification")
+
+            except Exception as e:
+                logger.error(f"AUTH VERIFY setup error: {e}")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :MFA verification failed - internal error")
+            return
+
+        # Case 3: No pending auth and not authenticated - error
+        await user.send(f":{self.servername} NOTICE {user.nickname} :No pending authentication. Use: AUTH <username> <password>")
+        await user.send(f":{self.servername} NOTICE {user.nickname} :Or run AUTH ENABLE first to set up MFA")
+
+    async def _auth_enable(self, user, params):
+        """Enable MFA for staff account (self-service)"""
+        if len(params) < 2:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: AUTH ENABLE <your-password>")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Your password is required to enable MFA")
+            return
+
+        password = params[1]
+
+        # Must be authenticated staff
+        if not user.authenticated or user.staff_level not in ["ADMIN", "SYSOP", "GUIDE"]:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :You must be authenticated as staff to enable MFA")
+            return
+
+        username = user.username.lstrip('~')
+
+        try:
+            row = await self.db_pool.execute_one(
+                "SELECT password_hash, mfa_enabled, mfa_secret FROM users WHERE username=?",
+                (username,)
+            )
+
+            if not row:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Staff account not found")
+                return
+
+            password_hash, mfa_enabled, existing_secret = row
+
+            # Verify password
+            if not await check_password_async(password, password_hash):
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Incorrect password")
+                logger.warning(f"AUTH ENABLE: Failed password verification for {username}")
+                return
+
+            if mfa_enabled and existing_secret:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :MFA is already enabled for your account")
+                return
+
+            # Generate new TOTP secret
+            import pyotp
+            secret = pyotp.random_base32()
+            totp = pyotp.TOTP(secret)
+
+            # Store secret but don't enable yet
+            await self.db_pool.execute(
+                "UPDATE users SET mfa_secret = ? WHERE username = ?",
+                (secret, username)
+            )
+
+            # Generate provisioning URI
+            issuer = CONFIG.get('server', 'name', default='pyIRCX')
+            provisioning_uri = totp.provisioning_uri(name=username, issuer_name=issuer)
+
+            await user.send(f":{self.servername} NOTICE {user.nickname} :MFA Setup - Add to your authenticator app:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  Secret: {secret}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  URI: {provisioning_uri}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Complete setup with: AUTH VERIFY <6-digit code>")
+            logger.info(f"AUTH ENABLE: {username} generated MFA secret")
+
+        except Exception as e:
+            logger.error(f"AUTH ENABLE error: {e}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :MFA setup failed - internal error")
+
+    async def _auth_disable(self, user, params):
+        """Disable MFA for staff account"""
+        if len(params) < 3:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: AUTH DISABLE <your-password> <6-digit-code>")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Both password and current MFA code required to disable MFA")
+            return
+
+        password = params[1]
+        code = params[2]
+
+        # Must be authenticated staff
+        if not user.authenticated or user.staff_level not in ["ADMIN", "SYSOP", "GUIDE"]:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :You must be authenticated as staff")
+            return
+
+        username = user.username.lstrip('~')
+
+        try:
+            row = await self.db_pool.execute_one(
+                "SELECT password_hash, mfa_enabled, mfa_secret FROM users WHERE username=?",
+                (username,)
+            )
+
+            if not row:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Staff account not found")
+                return
+
+            password_hash, mfa_enabled, mfa_secret = row
+
+            # Verify password
+            if not await check_password_async(password, password_hash):
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Incorrect password")
+                return
+
+            if not mfa_enabled:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :MFA is not enabled")
+                return
+
+            if not mfa_secret:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :MFA configuration error")
+                return
+
+            # Verify MFA code
+            import pyotp
+            totp = pyotp.TOTP(mfa_secret)
+
+            if not totp.verify(code, valid_window=1):
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Invalid MFA code")
+                return
+
+            # Disable MFA
+            await self.db_pool.execute(
+                "UPDATE users SET mfa_enabled = 0, mfa_secret = NULL WHERE username = ?",
+                (username,)
+            )
+
+            await user.send(f":{self.servername} NOTICE {user.nickname} :MFA has been disabled for your account")
+            logger.info(f"AUTH DISABLE: {username} disabled MFA")
+
+        except Exception as e:
+            logger.error(f"AUTH DISABLE error: {e}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :MFA disable failed - internal error")
+
+    async def _apply_staff_auth(self, user, username, level, email, realname, force_realname):
+        """Apply staff authentication - set modes and update user state"""
+        # Remove old staff modes if changing levels
+        if user.authenticated:
+            user.set_mode('a', False)
+            user.set_mode('o', False)
+            user.set_mode('g', False)
+
+        # Apply new staff authentication
+        user.authenticated = True
+        user.staff_level = level
+        user.host = self.servername
+        user.username = username
+
+        if email:
+            user.staff_email = email
+        if realname:
+            user.staff_realname = realname
+        if force_realname and realname:
+            user.realname = realname
+
+        # Apply mode based on level
+        mode_char = None
+        mode_name = None
+        if level == "ADMIN":
+            user.set_mode('a', True)
+            mode_char = '+a'
+            mode_name = "IRC Administrator"
+        elif level == "SYSOP":
+            user.set_mode('o', True)
+            mode_char = '+o'
+            mode_name = "IRC Operator"
+        elif level == "GUIDE":
+            user.set_mode('g', True)
+            mode_char = '+g'
+            mode_name = "IRC Guide"
+
+        # Send mode change to user
+        if mode_char:
+            await user.send(f":{user.nickname} MODE {user.nickname} :{mode_char}")
+
+        # Send success message
+        await user.send(f":{self.servername} NOTICE {user.nickname} :You are now authenticated as {mode_name}")
+        await user.send(f":{self.servername} 386 {user.nickname} :You are now authenticated as IRC {level.lower()}")
+
+        # Log successful authentication
+        logger.info(f"AUTH: {username} authenticated successfully from {user.nickname} ({user.ip}) as {level}")
+
+        # Update last_login in database
+        try:
+            await self.db_pool.execute(
+                "UPDATE users SET last_login = ? WHERE username = ?",
+                (int(time.time()), username)
+            )
+        except Exception as e:
+            logger.error(f"AUTH: Failed to update last_login: {e}")
+
+        # Alert #System channel
+        await self._send_system_alert(f"AUTH success: {username} from {user.nickname} ({user.ip}) as {level}")
+
+        # Log to staff audit
+        await self.log_staff(username, "AUTH", user.nickname, f"Authenticated as {level} from {user.ip}")
+
+    async def _send_system_alert(self, message):
+        """Send alert to #System channel about AUTH attempts"""
+        if '#System' not in self.channels:
+            return
+
+        system_channel = self.channels['#System']
+        timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
+        alert_msg = f":{self.servername} PRIVMSG #System :[{timestamp}] {message}"
+
+        for member in system_channel.members.values():
+            if member.has_mode('a') or member.has_mode('o'):
+                await member.send(alert_msg)
+
+    async def _get_auth_delay(self, username, ip):
+        """Get progressive delay for failed auth attempts"""
+        failure_count = await self._count_auth_failures(username, ip)
+        delays = {0: 0, 1: 0, 2: 2, 3: 5, 4: 10}
+        return delays.get(failure_count, 0)
+
+    async def _is_auth_locked_out(self, username, ip):
+        """Check if username/IP is locked out"""
+        max_attempts = CONFIG.get('security', 'auth_max_attempts', default=5)
+        failure_count = await self._count_auth_failures(username, ip)
+        return failure_count >= max_attempts
+
+    async def _get_lockout_remaining(self, username, ip):
+        """Get remaining lockout time in seconds"""
+        lockout_duration = CONFIG.get('security', 'auth_lockout_duration', default=900)
+        try:
+            first_failure = await self._get_first_failure_time(username, ip)
+            if first_failure:
+                elapsed = time.time() - first_failure
+                remaining = max(0, lockout_duration - int(elapsed))
+                return remaining
+        except Exception:
+            pass
+        return lockout_duration
+
+    async def _count_auth_failures(self, username, ip):
+        """Count recent auth failures for username/IP within lockout window"""
+        window = CONFIG.get('security', 'auth_lockout_window', default=600)
+        cutoff = time.time() - window
+
+        try:
+            row = await self.db_pool.execute_one(
+                """SELECT COUNT(*) FROM staff_audit
+                   WHERE action = 'AUTH_FAIL'
+                   AND (staff_username = ? OR details LIKE ?)
+                   AND timestamp > ?""",
+                (username, f'%{ip}%', cutoff)
+            )
+            return row[0] if row else 0
+        except Exception as e:
+            logger.error(f"_count_auth_failures error: {e}")
+            return 0
+
+    async def _get_first_failure_time(self, username, ip):
+        """Get timestamp of first failure in current window"""
+        window = CONFIG.get('security', 'auth_lockout_window', default=600)
+        cutoff = time.time() - window
+
+        try:
+            row = await self.db_pool.execute_one(
+                """SELECT MIN(timestamp) FROM staff_audit
+                   WHERE action = 'AUTH_FAIL'
+                   AND (staff_username = ? OR details LIKE ?)
+                   AND timestamp > ?""",
+                (username, f'%{ip}%', cutoff)
+            )
+            return row[0] if row and row[0] else None
+        except Exception:
+            return None
+
+    async def _record_auth_failure(self, username, ip):
+        """Record failed AUTH attempt"""
+        await self.log_staff(username, "AUTH_FAIL", "system", f"Failed AUTH from IP {ip}")
+
+    async def _record_auth_success(self, username, ip):
+        """Record successful AUTH attempt (clears failures)"""
+        pass
+
+    async def handle_drop(self, user, params):
+        """Handle DROP command - drop staff privileges and return to regular user
+
+        Syntax:
+          DROP  - Drop staff authentication and return to regular user mode
+        """
+        if not user.authenticated:
+            await user.send(f":{self.servername} NOTICE {user.nickname} :You are not authenticated as staff")
+            return
+
+        # Store info before dropping
+        old_level = user.staff_level
+        old_username = user.username.lstrip('~')
+
+        # Remove staff modes
+        if user.has_mode('a'):
+            user.set_mode('a', False)
+            await user.send(f":{user.nickname} MODE {user.nickname} :-a")
+        elif user.has_mode('o'):
+            user.set_mode('o', False)
+            await user.send(f":{user.nickname} MODE {user.nickname} :-o")
+        elif user.has_mode('g'):
+            user.set_mode('g', False)
+            await user.send(f":{user.nickname} MODE {user.nickname} :-g")
+
+        # Reset to regular user
+        user.authenticated = False
+        user.staff_level = "USER"
+        user.username = '~' + user.nickname.lower()
+        user.host = user.original_host if hasattr(user, 'original_host') else user.ip
+
+        # Clear pending staff auth if any
+        user.pending_staff_auth = None
+
+        await user.send(f":{self.servername} NOTICE {user.nickname} :Staff privileges dropped. You are now a regular user.")
+        await user.send(f":{self.servername} NOTICE {user.nickname} :Use AUTH to re-authenticate if needed.")
+
+        logger.info(f"DROP: {old_username} ({old_level}) dropped to regular user from {user.nickname} ({user.ip})")
+
+        # Alert #System channel
+        await self._send_system_alert(f"DROP: {old_username} ({old_level}) dropped privileges from {user.nickname} ({user.ip})")
+
+        # Log to staff audit
+        await self.log_staff(old_username, "DROP", user.nickname, f"Dropped {old_level} privileges from {user.ip}")
 
     # ==========================================================================
     # WATCH, SILENCE, CHGPASS, MEMO COMMANDS
