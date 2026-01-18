@@ -473,7 +473,7 @@ if [[ ! $REPLY =~ ^[Nn]$ ]]; then
         chmod 775 "$CONFIG_DIR" 2>/dev/null || true  # Group needs write for web admin config edits
         chmod 750 "$INSTALL_DIR/transcripts" 2>/dev/null || true  # Keep transcripts private
         chmod 660 "$INSTALL_DIR/pyircx.db" 2>/dev/null || true  # Database group writable
-        chmod 660 "$CONFIG_DIR/pyircx_config.json" 2>/dev/null || true  # Config group writable (for web admin)
+        chmod 600 "$CONFIG_DIR/pyircx_config.json" 2>/dev/null || true  # Config owner-only (sensitive data)
         chmod 755 "$INSTALL_DIR/pyircx.py" 2>/dev/null || true
         chmod 755 "$INSTALL_DIR/api.py" 2>/dev/null || true
         chmod 755 "$INSTALL_DIR/linking.py" 2>/dev/null || true
