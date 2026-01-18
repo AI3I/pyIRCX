@@ -730,6 +730,95 @@ async def test_staff_stats_network():
     
     # Should show users from all servers
     has_stats = any('users' in line.lower() for line in admin.buffer)
-    
+
     assert has_stats, "STATS should aggregate network-wide information"
+
+@runner.test("INVITE propagates cross-server")
+async def test_invite_crossserver():
+    """Test INVITE command works across servers"""
+    # User on trunk invites user on branch to trunk channel
+    trunk_user = IRCTestClient("invite_trunk")
+    branch_user = IRCTestClient("invite_branch", host="127.0.0.1", port=6668)
+
+    await trunk_user.connect("InviteTrunk")
+    await branch_user.connect("InviteBranch")
+    await asyncio.sleep(0.5)
+
+    # Trunk user creates invite-only channel
+    await trunk_user.send_raw("JOIN #invitetest")
+    await asyncio.sleep(0.3)
+    await trunk_user.send_raw("MODE #invitetest +i")
+    await asyncio.sleep(0.3)
+
+    # Trunk user invites branch user
+    trunk_user.buffer.clear()
+    branch_user.buffer.clear()
+    await trunk_user.send_raw("INVITE InviteBranch #invitetest")
+    await asyncio.sleep(0.5)
+
+    # Branch user should receive INVITE
+    has_invite = any('INVITE' in line and '#invitetest' in line for line in branch_user.buffer)
+
+    # Branch user should now be able to join
+    await branch_user.send_raw("JOIN #invitetest")
+    await asyncio.sleep(0.5)
+
+    has_join = any('JOIN' in line and '#invitetest' in line for line in branch_user.buffer)
+
+    assert has_invite, "INVITE should propagate to user on different server"
+    assert has_join, "Invited user should be able to join invite-only channel"
+
+    await trunk_user.disconnect()
+    await branch_user.disconnect()
+
+@runner.test("NOTICE propagates cross-server")
+async def test_notice_crossserver():
+    """Test NOTICE command works across servers"""
+    trunk_user = IRCTestClient("notice_trunk")
+    branch_user = IRCTestClient("notice_branch", host="127.0.0.1", port=6668)
+
+    await trunk_user.connect("NoticeTrunk")
+    await branch_user.connect("NoticeBranch")
+    await asyncio.sleep(0.5)
+
+    # Trunk sends NOTICE to branch user
+    branch_user.buffer.clear()
+    await trunk_user.send_raw("NOTICE NoticeBranch :Cross-server notice test")
+    await asyncio.sleep(0.5)
+
+    # Branch user should receive NOTICE
+    has_notice = any('NOTICE' in line and 'Cross-server notice test' in line for line in branch_user.buffer)
+
+    assert has_notice, "NOTICE should propagate to user on different server"
+
+    await trunk_user.disconnect()
+    await branch_user.disconnect()
+
+@runner.test("NOTICE to channel propagates cross-server")
+async def test_notice_channel_crossserver():
+    """Test channel NOTICE works across servers"""
+    trunk_user = IRCTestClient("notice_trunk_chan")
+    branch_user = IRCTestClient("notice_branch_chan", host="127.0.0.1", port=6668)
+
+    await trunk_user.connect("NoticeTrunkChan")
+    await branch_user.connect("NoticeBranchChan")
+    await asyncio.sleep(0.5)
+
+    # Both join same channel
+    await trunk_user.send_raw("JOIN #noticechan")
+    await branch_user.send_raw("JOIN #noticechan")
+    await asyncio.sleep(0.5)
+
+    # Trunk sends channel NOTICE
+    branch_user.buffer.clear()
+    await trunk_user.send_raw("NOTICE #noticechan :Channel notice test")
+    await asyncio.sleep(0.5)
+
+    # Branch user should receive channel NOTICE
+    has_notice = any('NOTICE' in line and '#noticechan' in line and 'Channel notice test' in line for line in branch_user.buffer)
+
+    assert has_notice, "Channel NOTICE should propagate to users on different servers"
+
+    await trunk_user.disconnect()
+    await branch_user.disconnect()
 

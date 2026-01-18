@@ -3777,6 +3777,28 @@ class pyIRCXServer:
             return
         target = params[0]
 
+        # Server-wide messaging: PRIVMSG/NOTICE $ sends to all local users (staff only)
+        if target == '$':
+            # Require staff privileges for server-wide messages
+            if not user.is_high_staff():
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Server-wide messaging requires IRC operator or administrator privileges")
+                return
+
+            text = params[1]
+            msg_type = "NOTICE" if cmd == "NOTICE" else "PRIVMSG"
+            sent_count = 0
+
+            # Send to all local users (not virtual, not services)
+            for local_user in self.users.values():
+                if local_user.is_virtual or local_user == user:
+                    continue
+                await local_user.send(f":{user.prefix()} {msg_type} $ :{text}")
+                sent_count += 1
+
+            # Confirm to sender
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Server-wide {msg_type} sent to {sent_count} user(s) on {self.servername}")
+            return
+
         # WHISPER restrictions: single recipient only, 5s rate limit
         if cmd == "WHISPER":
             if ',' in target:
@@ -7082,7 +7104,7 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :Common properties: OWNERKEY, HOSTKEY, VOICEKEY, MEMBERKEY, TOPIC, ONJOIN, ONPART")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Note: Only channel owners can set properties")
 
-        elif topic in ["WHISPER", "NOTICE"]:
+        elif topic == "WHISPER":
             await user.send(f":{self.servername} NOTICE {user.nickname} :=== WHISPER Command (IRCX) ===")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /WHISPER <#channel> <nickname> <message>")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Send a private message to someone in a channel.")
@@ -7090,6 +7112,17 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  /WHISPER #lobby alice Hey, check your messages")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Note: You cannot use this in channels with +w mode (whispers disabled)")
+
+        elif topic == "NOTICE":
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== NOTICE Command ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /NOTICE <target> <message>")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Send a notice to a user or channel (no auto-reply expected).")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /NOTICE alice Important: Server maintenance at 10 PM")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  /NOTICE #lobby Server will restart in 5 minutes")
+            if user.is_high_staff():
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  /NOTICE $ <message> - Server-wide notice (operator/admin only)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Note: NOTICE is typically used for automated responses and shouldn't trigger auto-replies")
 
         elif topic in ["REGISTER", "IDENTIFY", "UNREGISTER"]:
             await user.send(f":{self.servername} NOTICE {user.nickname} :=== Registration Commands ===")
@@ -7137,6 +7170,8 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :  /MSG #lobby Hello everyone! - Send to channel")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  /MSG Registrar HELP - Talk to a service")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  /MSG NickServ IDENTIFY password - Alternative syntax")
+            if user.is_high_staff():
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  /MSG $ <message> - Server-wide message (operator/admin only)")
 
         elif topic in ["AWAY", "BACK"]:
             await user.send(f":{self.servername} NOTICE {user.nickname} :=== AWAY Command ===")
