@@ -9314,10 +9314,39 @@ class pyIRCXServer:
             issuer = CONFIG.get('server', 'name', default='pyIRCX')
             provisioning_uri = totp.provisioning_uri(name=username, issuer_name=issuer)
 
-            await user.send(f":{self.servername} NOTICE {user.nickname} :MFA Setup - Add to your authenticator app:")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  Secret: {secret}")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  URI: {provisioning_uri}")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Complete setup with: AUTH VERIFY <6-digit code>")
+            # Generate ASCII QR code and send via System
+            try:
+                import qrcode
+                import io
+                qr = qrcode.QRCode(border=1)
+                qr.add_data(provisioning_uri)
+                qr.make()
+
+                f = io.StringIO()
+                qr.print_ascii(out=f, invert=True)
+                ascii_qr = f.getvalue()
+
+                # Have System service send the QR code (bypasses flood protection)
+                system_user = self.users.get('System')
+                if system_user:
+                    await user.send(f":System!System@{self.servername} PRIVMSG {user.nickname} :=== Staff MFA Setup - Scan with your authenticator app ===")
+                    for line in ascii_qr.split('\n'):
+                        if line.strip():
+                            await user.send(f":System!System@{self.servername} PRIVMSG {user.nickname} :{line}")
+                    await user.send(f":System!System@{self.servername} PRIVMSG {user.nickname} :=== End QR Code ===")
+                    await user.send(f":System!System@{self.servername} PRIVMSG {user.nickname} :Manual entry secret: {secret}")
+                    await user.send(f":System!System@{self.servername} PRIVMSG {user.nickname} :To complete setup: /AUTH VERIFY <6-digit code>")
+                else:
+                    # Fallback if System not available
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :MFA Secret: {secret}")
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :Complete setup with: AUTH VERIFY <6-digit code>")
+            except ImportError:
+                # qrcode not available, fall back to text
+                await user.send(f":{self.servername} NOTICE {user.nickname} :MFA Setup - Add to your authenticator app:")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  Secret: {secret}")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  URI: {provisioning_uri}")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Complete setup with: AUTH VERIFY <6-digit code>")
+
             logger.info(f"AUTH ENABLE: {username} generated MFA secret")
 
         except Exception as e:
