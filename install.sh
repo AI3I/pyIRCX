@@ -440,7 +440,7 @@ set_permissions() {
     chmod 775 "$CONFIG_DIR"  # Group needs write for web admin config edits
     chmod 750 "$INSTALL_DIR/transcripts"  # Keep transcripts private
     chmod 660 "$INSTALL_DIR/pyircx.db" 2>/dev/null || true  # Database group writable
-    chmod 600 "$CONFIG_DIR/pyircx_config.json" 2>/dev/null || true  # Config owner-only (sensitive data)
+    chmod 640 "$CONFIG_DIR/pyircx_config.json" 2>/dev/null || true  # Config group-readable (needed for webadmin)
     chmod 755 "$INSTALL_DIR/pyircx.py"
     chmod 755 "$INSTALL_DIR/api.py" 2>/dev/null || true
     chmod 755 "$INSTALL_DIR/linking.py" 2>/dev/null || true
@@ -922,6 +922,14 @@ main() {
     echo "  Backup database: cp $INSTALL_DIR/pyircx.db backup_$(date +%Y%m%d).db"
     echo ""
     echo "Default IRC ports: 6667 (plain), 6697 (SSL if configured)"
+    echo ""
+    echo -e "${RED}⚠ SECURITY NOTICE${NC}"
+    echo "  SSL authentication is currently DISABLED for easier initial setup."
+    echo "  After configuring SSL, enable it in $CONFIG_DIR/pyircx_config.json:"
+    echo "    \"auth_require_ssl\": true"
+    echo ""
+    echo "  This will require staff authentication over encrypted connections only."
+    echo "  Run: sudo ./setup_ssl.sh to configure SSL/TLS"
     echo ""
     echo "========================================"
     echo -e "${YELLOW}Optional: Web Server Setup (Apache/httpd)${NC}"

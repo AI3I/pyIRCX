@@ -473,7 +473,7 @@ if [[ ! $REPLY =~ ^[Nn]$ ]]; then
         chmod 775 "$CONFIG_DIR" 2>/dev/null || true  # Group needs write for web admin config edits
         chmod 750 "$INSTALL_DIR/transcripts" 2>/dev/null || true  # Keep transcripts private
         chmod 660 "$INSTALL_DIR/pyircx.db" 2>/dev/null || true  # Database group writable
-        chmod 600 "$CONFIG_DIR/pyircx_config.json" 2>/dev/null || true  # Config owner-only (sensitive data)
+        chmod 640 "$CONFIG_DIR/pyircx_config.json" 2>/dev/null || true  # Config group-readable (needed for webadmin)
         chmod 755 "$INSTALL_DIR/pyircx.py" 2>/dev/null || true
         chmod 755 "$INSTALL_DIR/api.py" 2>/dev/null || true
         chmod 755 "$INSTALL_DIR/linking.py" 2>/dev/null || true
@@ -685,6 +685,12 @@ EOF
     echo "  1. Restart the service: systemctl restart pyircx"
     echo "  2. Check status: systemctl status pyircx"
     echo "  3. View logs: journalctl -u pyircx -f"
+    echo ""
+    echo -e "${YELLOW}⚠ Security Reminder:${NC}"
+    echo "  SSL authentication is currently DISABLED for easier initial setup."
+    echo "  After configuring SSL, enable it in /etc/pyircx/pyircx_config.json:"
+    echo "    \"auth_require_ssl\": true"
+    echo "  Run: sudo ./setup_ssl.sh to configure SSL/TLS"
     echo ""
 else
     echo "No repairs performed."

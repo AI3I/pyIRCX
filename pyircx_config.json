@@ -45,7 +45,7 @@
   },
 
   "security": {
-    "auth_require_ssl": true,
+    "auth_require_ssl": false,
     "pass_require_ssl": false,
     "cap_timeout": 60,
     "auth_max_attempts": 5,

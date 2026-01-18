@@ -87,6 +87,13 @@ change_staff_password() {
         echo ""
         echo "You can now authenticate with:"
         echo "  /QUOTE PASS $username:<newpassword>"
+        echo ""
+        echo -e "${YELLOW}⚠ Security Reminder:${NC}"
+        echo "  Ensure SSL/TLS is configured for secure authentication."
+        echo "  Enable 'auth_require_ssl' in $CONFIG_FILE after SSL setup:"
+        echo "    \"auth_require_ssl\": true"
+        echo ""
+        echo "  Configure SSL with: sudo ./setup_ssl.sh"
     else
         echo -e "${RED}✗ Failed to change password${NC}"
         exit 1
