@@ -441,6 +441,8 @@ set_permissions() {
     chmod 750 "$INSTALL_DIR/transcripts"  # Keep transcripts private
     chmod 660 "$INSTALL_DIR/pyircx.db" 2>/dev/null || true  # Database group writable
     chmod 660 "$CONFIG_DIR/pyircx_config.json" 2>/dev/null || true  # Config group-writable (needed for webadmin)
+    touch "$INSTALL_DIR/admin_commands.queue" 2>/dev/null || true  # Create admin command queue
+    chmod 660 "$INSTALL_DIR/admin_commands.queue" 2>/dev/null || true  # Queue group-writable (needed for webadmin)
     chmod 755 "$INSTALL_DIR/pyircx.py"
     chmod 755 "$INSTALL_DIR/api.py" 2>/dev/null || true
     chmod 755 "$INSTALL_DIR/linking.py" 2>/dev/null || true

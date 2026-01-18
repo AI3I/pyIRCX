@@ -464,6 +464,11 @@ if [ $NEEDS_APACHE_SETUP -eq 1 ]; then
             # Ensure config file is group writable for web admin MOTD editor
             chmod 660 /etc/pyircx/pyircx_config.json 2>/dev/null || true
             echo -e "${GREEN}✓ Set group write permissions on config file${NC}"
+
+            # Ensure admin commands queue exists and is group writable
+            touch /opt/pyircx/admin_commands.queue 2>/dev/null || true
+            chmod 660 /opt/pyircx/admin_commands.queue 2>/dev/null || true
+            echo -e "${GREEN}✓ Created admin commands queue${NC}"
         fi
 
         # Restart PHP-FPM and Apache
@@ -538,6 +543,8 @@ chmod 775 "$CONFIG_DIR"  # Group needs write for web admin config edits
 chmod 750 "$INSTALL_DIR/transcripts" 2>/dev/null || true
 chmod 660 "$INSTALL_DIR/pyircx.db" 2>/dev/null || true
 chmod 660 "$CONFIG_DIR/pyircx_config.json" 2>/dev/null || true  # Config group writable (for web admin)
+touch "$INSTALL_DIR/admin_commands.queue" 2>/dev/null || true  # Create admin command queue
+chmod 660 "$INSTALL_DIR/admin_commands.queue" 2>/dev/null || true  # Queue group-writable (needed for webadmin)
 chmod 755 "$INSTALL_DIR/pyircx.py"
 chmod 755 "$INSTALL_DIR/api.py" 2>/dev/null || true
 chmod 755 "$INSTALL_DIR/linking.py" 2>/dev/null || true

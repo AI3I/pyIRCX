@@ -1862,10 +1862,10 @@ console.log("=== admin.js LOADING ===");
             return;
         }
 
-        const reason = prompt('Enter reason for KILL (optional):', 'Killed by administrator');
+        const reason = prompt('Enter reason for KILL (optional):', 'KILLed by System');
         if (reason === null) return; // User cancelled
 
-        callAPI('kill-user', [nickname, reason || 'Killed by administrator']).then(res => {
+        callAPI('kill-user', [nickname, reason || 'KILLed by System']).then(res => {
             if (res.error) {
                 showToast('Error', res.error, 'error');
             } else {

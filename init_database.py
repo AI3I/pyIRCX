@@ -89,6 +89,7 @@ def create_database(db_path, admin_username=None, admin_password=None):
         onpart TEXT DEFAULT '',
         account_data TEXT DEFAULT '{}',
         ownerkey TEXT,
+        description TEXT DEFAULT '',
         properties TEXT DEFAULT '{}'
     )""")
     print("✓ registered_channels table")
@@ -120,9 +121,10 @@ def create_database(db_path, admin_username=None, admin_password=None):
     # NewsFlash announcements
     cursor.execute("""CREATE TABLE IF NOT EXISTS newsflash (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        author TEXT NOT NULL,
+        created_by TEXT NOT NULL,
         message TEXT NOT NULL,
-        timestamp INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        priority INTEGER DEFAULT 0,
         active INTEGER DEFAULT 1
     )""")
     print("✓ newsflash table")
