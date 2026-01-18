@@ -8,7 +8,7 @@ Tests consolidated from:
 - test_multi_branch.py (multi-server communication)
 - test_phase2_commands.py (cross-server command propagation)
 
-Copyright (C) 2026 pyIRCX Project
+Copyright (C) 2026 John D. Lewis
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by

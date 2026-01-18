@@ -5,7 +5,7 @@ pyIRCX - Python IRCX Server
 An async IRC/IRCX server implementation with database-backed authentication,
 channel persistence, flood protection, and staff management features.
 
-Copyright (C) 2026 pyIRCX Project
+Copyright (C) 2026 John D. Lewis
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by

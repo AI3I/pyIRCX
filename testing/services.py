@@ -8,7 +8,7 @@ Test Staff Accounts:
   - sysop/testpass (SYSOP) - Can invite ServiceBots
   - guide/testpass (GUIDE) - Cannot invite ServiceBots
 
-Copyright (C) 2026 pyIRCX Project
+Copyright (C) 2026 John D. Lewis
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by

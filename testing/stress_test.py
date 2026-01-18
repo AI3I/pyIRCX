@@ -9,7 +9,7 @@ Scenarios:
 - Service users: Register nicks, send offline messages
 - Network load: Cross-server operations
 
-Copyright (C) 2026 pyIRCX Project
+Copyright (C) 2026 John D. Lewis
 Licensed under AGPL v3
 """
 

@@ -85,25 +85,58 @@ All test harnesses have been updated and modernized for pyIRCX v1.1.5 release.
 - Messenger HELP - Still works
 - NewsFlash HELP - Still works
 
-### 5. run_tests.sh - Updated (330 lines)
-**Major rewrite for v1.1.5**
+### 5. testing/test_auth.py - Created (900 lines, 18 tests)
+**NEW v1.1.8: AUTH command for post-connection staff authentication with MFA**
+
+**Tests:**
+- AUTH - Basic Authentication (No MFA)
+- AUTH - Wrong Password
+- AUTH - Unknown User
+- DROP - De-authentication
+- DROP - Not Authenticated
+- AUTH ENABLE - Self-Service MFA Setup
+- AUTH ENABLE - Wrong Password
+- STAFF MFA STATUS - Check MFA Status (ADMIN)
+- STAFF MFA - Non-Admin Denied
+- AUTH - SSL Required (Non-SSL Blocked)
+- AUTH - SSL Connection Works
+- AUTH - Progressive Delays on Failures
+- AUTH - Account Lockout After 5 Failures
+- AUTH - Pending State No Modes Until Verify
+- HELP AUTH - Documentation Exists
+- HELP DROP - Documentation Exists
+
+**Coverage:**
+- ✅ Basic AUTH authentication (username/password)
+- ✅ DROP de-authentication
+- ✅ MFA self-service enrollment (AUTH ENABLE/VERIFY/DISABLE)
+- ✅ STAFF MFA management (ADMIN only - STATUS/ENABLE/DISABLE)
+- ✅ SSL/TLS requirements (auth_require_ssl, pass_require_ssl)
+- ✅ Progressive delays (0s, 0s, 2s, 5s, 10s)
+- ✅ Account lockout (5 failures → 15 min lockout)
+- ✅ Pending state (modes NOT applied until MFA verification)
+- ✅ HELP documentation (AUTH and DROP)
+
+### 6. run_tests.sh - Updated (330 lines)
+**Major rewrite for v1.1.8**
 
 **Changes:**
-- Updated to v1.1.5
+- Updated to v1.1.8
 - Changed from `pyIRCX_test_*.py` to `testing/*.py` directory structure
-- Added all 7 test suites (4 core + 3 v1.1.5)
-- Enhanced output with v1.1.5 feature separation
+- Added all 8 test suites (4 core + 3 v1.1.5 + 1 v1.1.8)
+- Enhanced output with version feature separation
 - Increased test timeout to 120 seconds
-- Total test count: ~215 tests across 7 suites
+- Total test count: ~230 tests across 8 suites
 
 **Test Execution Order:**
 1. testing/users.py - IRC/IRCX Protocol (115 tests)
-2. testing/staff.py - Staff Authentication (39 tests)
-3. testing/links.py - Server Linking (4 tests)
-4. testing/access.py - Access Control (10 tests)
-5. testing/stats.py - STATS System v1.1.5 (16 tests)
-6. testing/help.py - HELP System v1.1.5 (15 tests)
-7. testing/services.py - Service Improvements v1.1.5 (13 tests)
+2. testing/staff.py - Staff PASS Authentication (39 tests)
+3. testing/test_auth.py - AUTH Command v1.1.8 (18 tests)
+4. testing/links.py - Server Linking (4 tests)
+5. testing/access.py - Access Control (10 tests)
+6. testing/stats.py - STATS System v1.1.5 (16 tests)
+7. testing/help.py - HELP System v1.1.5 (15 tests)
+8. testing/services.py - Service Improvements v1.1.5 (13 tests)
 
 ## Test Pattern
 
@@ -167,23 +200,24 @@ if __name__ == "__main__":
 ### Run individual test file:
 ```bash
 cd testing
+python3 users.py
+python3 staff.py
+python3 test_auth.py
+python3 links.py
+python3 access.py
 python3 stats.py
 python3 help.py
 python3 services.py
-python3 access.py
-python3 users.py
-python3 staff.py
-python3 links.py
 ```
 
 ## Test Coverage Summary
 
-**Total Test Suites:** 7
-**Total Test Cases:** ~212
+**Total Test Suites:** 8
+**Total Test Cases:** ~230
 
 **Core IRC/IRCX:**
 - IRC Protocol: 115 tests
-- Staff Auth: 39 tests  
+- Staff PASS Auth: 39 tests
 - Server Linking: 4 tests
 - Access Control: 10 tests
 
@@ -191,6 +225,9 @@ python3 links.py
 - STATS System: 16 tests
 - HELP System: 15 tests
 - Service Improvements: 13 tests
+
+**v1.1.8 Features:**
+- AUTH Command & MFA: 18 tests
 
 ## Test Accounts
 

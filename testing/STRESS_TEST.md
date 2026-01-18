@@ -319,4 +319,4 @@ Stress test is part of pyIRCX and licensed under AGPL v3.
 
 **Use responsibly. Test only your own servers.**
 
-Copyright (C) 2026 pyIRCX Project
+Copyright (C) 2026 John D. Lewis

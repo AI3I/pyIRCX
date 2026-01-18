@@ -405,7 +405,7 @@ When adding new features to pyIRCX:
 
 All test code is licensed under AGPL v3.
 
-Copyright (C) 2026 pyIRCX Project
+Copyright (C) 2026 John D. Lewis
 
 ---
 

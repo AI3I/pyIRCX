@@ -3,7 +3,7 @@
 pyIRCX Server Linking Test Suite
 Tests server-to-server linking functionality
 
-Copyright (C) 2026 pyIRCX Project
+Copyright (C) 2026 John D. Lewis
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by

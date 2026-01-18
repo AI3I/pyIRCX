@@ -345,6 +345,65 @@ Authentication, flood protection, and access control.
 
 ---
 
+### security.auth_require_ssl
+**Type:** Boolean
+**Default:** `true`
+**Description:** Require SSL/TLS for AUTH command
+
+**Example:**
+```json
+"security": {
+    "auth_require_ssl": true
+}
+```
+
+**Notes:**
+- When enabled, AUTH command only works on SSL/TLS connections (port 6697)
+- Prevents staff credentials from being transmitted in plaintext
+- Recommended for production environments
+- Users will receive "AUTH command requires an SSL/TLS connection" error on non-SSL
+- Set to `false` only if you need to support AUTH over non-encrypted connections
+
+**Security Impact:**
+- ✅ Enabled (default): Maximum security - credentials always encrypted
+- ⚠️ Disabled: Credentials may be intercepted on non-SSL connections
+
+---
+
+### security.pass_require_ssl
+**Type:** Boolean
+**Default:** `true`
+**Description:** Require SSL/TLS for PASS-based staff authentication during connection
+
+**Example:**
+```json
+"security": {
+    "pass_require_ssl": true
+}
+```
+
+**Notes:**
+- When enabled, staff accounts cannot authenticate via PASS on non-SSL connections
+- Prevents staff credentials from being transmitted during initial connection
+- Recommended for production environments
+- Regular users can still connect without SSL (only staff PASS authentication is blocked)
+- Staff can still use AUTH command post-connection (see auth_require_ssl)
+
+**How it works:**
+- During connection, server checks if user is authenticating as staff via PASS
+- If staff PASS authentication AND non-SSL connection: authentication blocked
+- User connects as regular user instead of staff
+- Staff can then use AUTH command (which has its own SSL requirement)
+
+**Security Impact:**
+- ✅ Enabled (default): Staff credentials never sent during connection without SSL
+- ⚠️ Disabled: Staff can authenticate via PASS on plaintext connections (legacy support)
+
+**Recommendation:**
+Enable both `auth_require_ssl` and `pass_require_ssl` for maximum security. This ensures staff credentials are ONLY transmitted over encrypted connections, whether during initial connection (PASS) or post-connection (AUTH).
+
+---
+
 ## Services Section
 
 Built-in service bot configuration.

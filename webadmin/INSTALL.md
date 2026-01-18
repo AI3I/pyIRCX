@@ -282,4 +282,4 @@ The standalone version has these improvements:
 
 GNU General Public License v3.0
 
-Copyright (C) 2026 pyIRCX Project
+Copyright (C) 2026 John D. Lewis

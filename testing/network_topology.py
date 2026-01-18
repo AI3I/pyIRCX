@@ -12,7 +12,7 @@ Critical scenarios tested:
 - Channel merging
 - Services during divergence/convergence
 
-Copyright (C) 2026 pyIRCX Project
+Copyright (C) 2026 John D. Lewis
 Licensed under AGPL v3
 """
 

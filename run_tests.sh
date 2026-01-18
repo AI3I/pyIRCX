@@ -215,7 +215,7 @@ main() {
 
     echo ""
     echo "========================================"
-    echo "pyIRCX v1.1.5 TEST RUNNER"
+    echo "pyIRCX v1.1.8 TEST RUNNER"
     echo "========================================"
     echo ""
     echo "📝 Logging to: $LOG_FILE"
@@ -223,7 +223,7 @@ main() {
 
     # Log to markdown
     {
-        echo "**Test Runner**: pyIRCX v1.1.5"
+        echo "**Test Runner**: pyIRCX v1.1.8"
         echo ""
     } >> "$LOG_FILE"
 
@@ -254,6 +254,10 @@ main() {
     fi
     if [ -f "testing/staff.py" ]; then
         echo -e "${GREEN}✓ testing/staff.py (39 tests)${NC}"
+        TESTS_FOUND=$((TESTS_FOUND + 1))
+    fi
+    if [ -f "testing/test_auth.py" ]; then
+        echo -e "${GREEN}✓ testing/test_auth.py (18 tests - v1.1.8)${NC}"
         TESTS_FOUND=$((TESTS_FOUND + 1))
     fi
     if [ -f "testing/links.py" ]; then
@@ -341,7 +345,19 @@ main() {
     # Staff authentication tests
     if [ -f "testing/staff.py" ]; then
         TOTAL_SUITES=$((TOTAL_SUITES + 1))
-        if run_test_suite "testing/staff.py" "Staff Authentication Tests (39 tests)"; then
+        if run_test_suite "testing/staff.py" "Staff PASS Authentication Tests (39 tests)"; then
+            PASSED_SUITES=$((PASSED_SUITES + 1))
+        else
+            FAILED_SUITES=$((FAILED_SUITES + 1))
+        fi
+    fi
+
+    # AUTH command tests (v1.1.8)
+    if [ -f "testing/test_auth.py" ]; then
+        TOTAL_SUITES=$((TOTAL_SUITES + 1))
+        echo ""
+        echo -e "${BLUE}=== v1.1.8 Feature Tests ===${NC}"
+        if run_test_suite "testing/test_auth.py" "AUTH Command & MFA Tests (18 tests)"; then
             PASSED_SUITES=$((PASSED_SUITES + 1))
         else
             FAILED_SUITES=$((FAILED_SUITES + 1))

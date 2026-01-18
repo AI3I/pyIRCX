@@ -10,7 +10,7 @@ Creates staff accounts in the database for testing:
 Usage:
     python3 testing/setup_test_accounts.py [--db /path/to/pyircx.db]
 
-Copyright (C) 2026 pyIRCX Project
+Copyright (C) 2026 John D. Lewis
 Licensed under GPL v3+
 """
 

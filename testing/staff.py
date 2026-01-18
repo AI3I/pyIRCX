@@ -5,7 +5,7 @@ Tests ADMIN, SYSOP, and GUIDE staff features
 
 CONFIGURATION: Set your admin credentials below
 
-Copyright (C) 2026 pyIRCX Project
+Copyright (C) 2026 John D. Lewis
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
