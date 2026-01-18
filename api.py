@@ -128,6 +128,13 @@ def get_db_path():
         return db_path
     return DEFAULT_DB
 
+def get_admin_queue_path():
+    """Get admin command queue path based on installation type"""
+    if os.path.exists(SYSTEM_CONFIG):
+        return os.path.join(SYSTEM_INSTALL, "admin_commands.queue")
+    else:
+        return os.path.join(USER_INSTALL, "admin_commands.queue")
+
 
 def init_db_pool(pool_size=10):
     """Initialize the database connection pool
@@ -279,20 +286,20 @@ def get_services_list():
 
 def send_irc_kill_channel(channel_name):
     """Kill a channel by writing to pyircx admin command queue
-    
+
     Args:
         channel_name: Channel to kill (e.g. '#pyIRCX')
-        
+
     Returns:
         dict with success/error status
     """
     try:
-        cmd_file = '/opt/pyircx/admin_commands.queue'
-        
+        cmd_file = get_admin_queue_path()
+
         # Append command to queue file
         with open(cmd_file, 'a') as f:
             f.write(f"KILL_CHANNEL:{channel_name}\n")
-        
+
         return {"success": True, "message": f"Channel {channel_name} will be reset"}
 
     except Exception as e:
@@ -309,7 +316,7 @@ def send_irc_kill_user(nickname, reason="Killed by administrator"):
         dict with success/error status
     """
     try:
-        cmd_file = '/opt/pyircx/admin_commands.queue'
+        cmd_file = get_admin_queue_path()
 
         # Append command to queue file
         with open(cmd_file, 'a') as f:
@@ -332,7 +339,7 @@ def send_irc_ban_user(nickname, reason="Banned by administrator", duration=3600)
         dict with success/error status
     """
     try:
-        cmd_file = '/opt/pyircx/admin_commands.queue'
+        cmd_file = get_admin_queue_path()
 
         # Append command to queue file - format: BAN_USER:nickname:duration:reason
         with open(cmd_file, 'a') as f:
@@ -354,7 +361,7 @@ def send_irc_lock_channel(channel_name, owner="System"):
         dict with success/error status
     """
     try:
-        cmd_file = '/opt/pyircx/admin_commands.queue'
+        cmd_file = get_admin_queue_path()
 
         # Append command to queue file - format: LOCK_CHANNEL:channel:owner
         with open(cmd_file, 'a') as f:
@@ -367,36 +374,34 @@ def send_irc_lock_channel(channel_name, owner="System"):
 
 def set_channel_mode(channel_name, mode_string):
     """Set channel mode via admin command queue
-    
+
     Args:
         channel_name: Channel name (e.g., #channel)
         mode_string: Mode string (e.g., "+z" or "-z")
-    
+
     Returns:
         dict with success/error status
     """
     try:
-        cmd_file = '/opt/pyircx/admin_commands.queue'
+        cmd_file = get_admin_queue_path()
         with open(cmd_file, 'a') as f:
             f.write(f"SET_CHANNEL_MODE:{channel_name}:{mode_string}\n")
         return {"success": True, "message": f"Mode {mode_string} will be set on {channel_name}"}
     except Exception as e:
         return {"error": f"Failed to write admin command: {str(e)}"}
-    except Exception as e:
-        return {"error": f"Failed to write admin command: {str(e)}"}
 
 def set_channel_topic(channel_name, topic):
     """Set channel topic via admin command queue
-    
+
     Args:
         channel_name: Channel name (e.g., #channel)
         topic: New topic (empty string to clear)
-    
+
     Returns:
         dict with success/error status
     """
     try:
-        cmd_file = '/opt/pyircx/admin_commands.queue'
+        cmd_file = get_admin_queue_path()
         with open(cmd_file, 'a') as f:
             f.write(f"SET_CHANNEL_TOPIC:{channel_name}:{topic}\n")
         return {"success": True, "message": f"Topic will be set on {channel_name}"}
@@ -721,6 +726,46 @@ def get_mailbox_messages(limit=50):
             })
 
         return messages
+
+@api_error_handler
+def send_mailbox_message(sender_nick, recipient_nick, message):
+    """Send a mailbox message to a registered nickname
+
+    Args:
+        sender_nick: Sender's nickname
+        recipient_nick: Recipient's registered nickname
+        message: Message content
+
+    Returns:
+        dict with success/error status
+    """
+    # Validate inputs
+    if not sender_nick or len(sender_nick) > 30:
+        raise ValueError("Invalid sender nickname")
+    if not message or len(message) > 500:
+        raise ValueError("Message must be between 1 and 500 characters")
+    validate_nickname(recipient_nick)
+
+    with db_pool.get_connection() as conn:
+        cursor = conn.cursor()
+
+        # Look up recipient's UUID
+        cursor.execute("SELECT uuid FROM registered_nicks WHERE LOWER(nickname) = LOWER(?)", (recipient_nick,))
+        recipient_row = cursor.fetchone()
+
+        if not recipient_row:
+            return {"error": f"Recipient '{recipient_nick}' is not registered"}
+
+        recipient_uuid = recipient_row[0]
+        sent_at = int(time.time())
+
+        # Insert message
+        cursor.execute("""
+            INSERT INTO mailbox (sender_nick, recipient_uuid, message, sent_at, read)
+            VALUES (?, ?, ?, ?, 0)
+        """, (sender_nick, recipient_uuid, message, sent_at))
+
+        return {"success": True, "message": f"Message sent to {recipient_nick}"}
 
 # ============================================================================
 # SEARCH FUNCTIONS
