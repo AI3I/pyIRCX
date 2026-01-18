@@ -255,17 +255,17 @@ def get_services_list():
             with open(DEFAULT_STATUS, 'r') as f:
                 status = json.load(f)
 
-            # Update service channel lists based on active channels
+            # Update service channel lists from status file services data
             all_services = core_services + servicebots
-            for channel_data in status.get('active_channels', []):
-                channel_name = channel_data.get('name')
-                members = channel_data.get('members', [])
+            for service_status in status.get('services', []):
+                service_nick = service_status.get('nickname')
+                service_channels = service_status.get('channels', [])
 
-                # Check if any services are in this channel
+                # Find matching service in our list and update its channels
                 for service in all_services:
-                    # Note: status file only shows real users, not virtual ones
-                    # So we can't get actual service presence, only maintain the default lists
-                    pass
+                    if service['nickname'] == service_nick:
+                        service['channels'] = service_channels
+                        break
 
             # Add timestamp for freshness
             return {

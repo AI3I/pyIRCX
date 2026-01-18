@@ -12494,6 +12494,17 @@ class ServerManager:
                             }
                             status_data['active_channels'].append(channel_data)
 
+                    # Get virtual services (servicebots and core services)
+                    status_data['services'] = []
+                    for nick, user in self.server.users.items():
+                        if user.is_virtual:
+                            service_data = {
+                                'nickname': nick,
+                                'channels': list(user.channels),
+                                'is_service': user.has_mode('s')
+                            }
+                            status_data['services'].append(service_data)
+
                     # Get linked servers (if linking is enabled)
                     if hasattr(self, 'link_manager') and self.link_manager:
                         for server_name, linked_server in self.link_manager.linked_servers.items():
