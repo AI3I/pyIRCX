@@ -2750,6 +2750,7 @@ class pyIRCXServer:
             self.channels["#System"] = Channel("#System")
             self.channels["#System"].registered = True
             self.channels["#System"].account_uuid = str(uuid.uuid4())
+            self.channels["#System"].modes['s'] = True  # Secret channel - hidden from LIST/LISTX
 
             # Create System virtual user (omnipresent)
             sys_user = self._create_virtual_service('System', 'System', "System", omnipresent=True)
