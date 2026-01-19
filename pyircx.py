@@ -5649,25 +5649,21 @@ class pyIRCXServer:
 
         # System and God mystical entities - Auto-join like ServiceBots (silent observers)
         if target.nickname.lower() in ['system', 'god']:
-            # Normalize entity name to proper capitalization
-            entity_name = 'System' if target.nickname.lower() == 'system' else 'God'
-            entity_user = self.users.get(entity_name)
-
             # Only admins can invite mystical entities
             if not user.has_mode('a'):
-                await user.send(f":{self.servername} NOTICE {user.nickname} :Only IRC Administrators can invite {entity_name}")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Only IRC Administrators can invite {target.nickname}")
                 return
 
             # Auto-join the entity to the channel
-            channel.members[entity_name] = entity_user
-            entity_user.channels.add(chan_name)
+            channel.members[target.nickname] = target
+            target.channels.add(chan_name)
             # Mystical entities get +q (owner) but remain silent observers
-            channel.owners.add(entity_name)
-            await channel.broadcast(f":{entity_user.prefix()} JOIN {chan_name}")
-            await channel.broadcast(f":{self.servername} MODE {chan_name} +q {entity_name}")
-            await user.send(self.get_reply("341", user, target=entity_name, channel=chan_name))
-            logger.info(f"{entity_name} joined {chan_name} via INVITE from {user.nickname} (granted +q)")
-            await self._send_system_alert(f"SERVICE: {entity_name} invited to {chan_name} by {user.nickname}")
+            channel.owners.add(target.nickname)
+            await channel.broadcast(f":{target.prefix()} JOIN {chan_name}")
+            await channel.broadcast(f":{self.servername} MODE {chan_name} +q {target.nickname}")
+            await user.send(self.get_reply("341", user, target=target.nickname, channel=chan_name))
+            logger.info(f"{target.nickname} joined {chan_name} via INVITE from {user.nickname} (granted +q)")
+            await self._send_system_alert(f"SERVICE: {target.nickname} invited to {chan_name} by {user.nickname}")
             return
 
         target.invited_to.add(chan_name)
@@ -12371,6 +12367,14 @@ class pyIRCXServer:
             if target_member.is_service():
                 await user.send(self.get_reply("824", user, target=target_member.nickname))
                 return
+            # Cannot gag yourself
+            if target_member.nickname == user.nickname:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :You cannot gag yourself")
+                return
+            # Cannot gag staff members
+            if target_member.is_staff():
+                await user.send(f":{self.servername} NOTICE {user.nickname} :You cannot gag staff members")
+                return
             if is_gag:
                 channel.gagged.add(target_member.nickname)
                 await user.send(f":{self.servername} NOTICE {user.nickname} :{target_member.nickname} has been gagged in {chan_name}")
@@ -12393,6 +12397,14 @@ class pyIRCXServer:
             # Cannot gag services
             if target_user.is_service():
                 await user.send(self.get_reply("824", user, target=target_user.nickname))
+                return
+            # Cannot gag yourself
+            if target_user.nickname == user.nickname:
+                await user.send(f":{self.servername} NOTICE {user.nickname} :You cannot gag yourself")
+                return
+            # Cannot gag staff members
+            if target_user.is_staff():
+                await user.send(f":{self.servername} NOTICE {user.nickname} :You cannot gag staff members")
                 return
             if is_gag:
                 target_user.set_mode('z', True)

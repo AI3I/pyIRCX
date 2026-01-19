@@ -481,9 +481,8 @@ class IRCWebSocketGateway:
                             target = data.get('target', '')
                             text = data.get('text', '')
 
-                            # Debug: log what we received
-                            if 'ACTION' in text:
-                                logging.info(f"Received from webchat: repr={repr(text)}, has_x01={chr(1) in text}, bytes={text.encode('utf-8')[:50].hex()}")
+                            # Debug: log ALL messages to see what's happening
+                            logging.info(f"MESSAGE: target={target}, text_repr={repr(text)[:100]}, has_x01={chr(1) in text}, first_bytes={text.encode('utf-8')[:20].hex()}")
 
                             # Validate target (could be nick or channel)
                             if target.startswith('#'):
@@ -493,11 +492,11 @@ class IRCWebSocketGateway:
 
                             text = validate_message(text)
 
-                            # Debug: log ACTION messages
-                            if '\x01' in text:
-                                logging.info(f"Sending CTCP/ACTION: repr={repr(text)}, bytes={text.encode('utf-8').hex()}")
+                            # Debug: log what we're sending to IRC
+                            irc_msg = f"PRIVMSG {target} :{text}\r\n"
+                            logging.info(f"TO_IRC: {repr(irc_msg[:100])}, msg_bytes={irc_msg.encode('utf-8')[:50].hex()}")
 
-                            irc_writer.write(f"PRIVMSG {target} :{text}\r\n".encode('utf-8'))
+                            irc_writer.write(irc_msg.encode('utf-8'))
                             await irc_writer.drain()
 
                         except ValueError as e:
