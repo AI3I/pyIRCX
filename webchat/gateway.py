@@ -483,7 +483,7 @@ class IRCWebSocketGateway:
 
                             # Debug: log what we received
                             if 'ACTION' in text:
-                                logging.info(f"Received from webchat: repr={repr(text)}, has_x01={chr(1) in text}")
+                                logging.info(f"Received from webchat: repr={repr(text)}, has_x01={chr(1) in text}, bytes={text.encode('utf-8')[:50].hex()}")
 
                             # Validate target (could be nick or channel)
                             if target.startswith('#'):
