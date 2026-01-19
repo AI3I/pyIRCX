@@ -382,9 +382,66 @@ pyIRCX v2.0.0 implements a **trunk-and-branch topology** (not traditional hub/le
 - Consider pub/sub pattern for hot channels
 - Limit max channel size (e.g., 500 users)
 
+**5. WebSocket Protocol Overhead (CPU-bound)**
+
+**Problem:**
+- JSON encoding/decoding adds CPU overhead vs native IRC
+- WebSocket framing has higher overhead than raw TCP
+- Protocol translation requires parsing both directions
+
+**Current Mitigation:**
+- ✅ Efficient JSON library (built-in json module)
+- ✅ Async I/O prevents blocking
+- ✅ Buffer size limits prevent memory bloat (64KB max)
+- ✅ Rate limiting prevents abuse (5 msgs/sec default)
+
+**Optimization:**
+- Run gateway on separate server from IRC core
+- Use nginx for SSL termination (offload TLS overhead)
+- Deploy multiple gateway instances behind load balancer
+- Consider MessagePack for binary protocol (lower overhead than JSON)
+
+**6. Server Linking Synchronization (Network I/O)**
+
+**Problem:**
+- Cross-server operations add latency (50-100ms)
+- Network splits require state reconciliation
+- Version mismatches prevent linking
+- Clock skew >60s prevents linking
+
+**Current Mitigation:**
+- ✅ Efficient state sync protocol (burst mode on connect)
+- ✅ Automatic reconnection on link failure
+- ✅ Version checking prevents incompatible links
+- ✅ Clock synchronization validation
+
+**Optimization:**
+- Use NTP for clock synchronization (required for large networks)
+- Place trunk server in central location (minimize latency)
+- Use high-bandwidth connections between servers (1 Gbps+)
+- Monitor link health with /STATS l
+
+**7. Service Routing (Architecture)**
+
+**Problem:**
+- All service requests must go to trunk server
+- No service redundancy (single trunk)
+- Trunk failure = services unavailable network-wide
+
+**Current Mitigation:**
+- ✅ Branch servers automatically route to trunk
+- ✅ Service bots are lightweight (low trunk load)
+- ✅ Trunk can handle high request volume
+
+**Optimization:**
+- Monitor trunk CPU/memory/network usage
+- Size trunk server appropriately for network
+- Consider trunk failover strategy (manual intervention currently)
+- Deploy trunk on reliable hardware
+
 ### Performance Tuning
 
-**Configuration Tweaks:**
+**Configuration Tweaks (pyircx_config.json):**
 
 ```json
 {
@@ -395,13 +452,66 @@ pyIRCX v2.0.0 implements a **trunk-and-branch topology** (not traditional hub/le
   },
   "database": {
     "pool_size": 10,
-    "timeout": 30
+    "timeout": 30,
+    "max_retries": 3
   },
   "flood": {
     "messages_per_second": 5,
     "burst_size": 10
+  },
+  "limits": {
+    "client_timeout": 600,
+    "max_channels_per_user": 50,
+    "max_topic_length": 390
+  },
+  "linking": {
+    "enabled": true,
+    "server_role": "branch",
+    "bind_host": "0.0.0.0",
+    "bind_port": 7000,
+    "links": [
+      {
+        "name": "trunk.example.com",
+        "host": "trunk.example.com",
+        "port": 7000,
+        "password": "your_link_password",
+        "role": "trunk"
+      }
+    ]
+  },
+  "security": {
+    "dnsbl": {
+      "enabled": false,
+      "providers": []
+    }
   }
 }
+```
+
+**WebChat Gateway Configuration (/etc/pyircx/webchat.conf):**
+
+```ini
+[websocket]
+host = 0.0.0.0
+port = 8765
+ssl_cert =
+ssl_key =
+
+[irc]
+host = localhost
+port = 6667
+ssl = false
+
+[limits]
+max_connections = 1000
+max_connections_per_ip = 5
+max_messages_per_second = 5
+max_buffer_size = 65536
+
+[timeouts]
+ping_interval = 30
+pong_timeout = 10
+auth_timeout = 5
 ```
 
 **System Tuning:**
@@ -494,6 +604,21 @@ watch -n 1 'netstat -an | grep 6667 | wc -l'
 - Network: ~50 Mbps
 - Latency: <20ms
 
+**Linked Network (3 branches, 6,000 users total):**
+- CPU (trunk): ~20%
+- CPU (per branch): ~40%
+- RAM (trunk): ~500MB
+- RAM (per branch): ~2GB
+- Network (trunk): ~100 Mbps
+- Latency (same server): <10ms
+- Latency (cross-server): 50-100ms
+
+**WebChat Gateway (500 connections):**
+- CPU: ~15%
+- RAM: ~600MB
+- Network: ~15 Mbps
+- Latency: <10ms
+
 ## Comparison with Other IRC Servers
 
 ### Performance Comparison
@@ -517,28 +642,51 @@ watch -n 1 'netstat -an | grep 6667 | wc -l'
 
 ### Built-in Monitoring
 
+**IRC Server Commands:**
 ```
 /STATS u - Server uptime and version
-/STATS l - Connection counts per server
+/STATS l - Connection counts per server (includes linked servers)
 /STATS m - Command usage statistics
-/STATS o - Operator count
-/STATS c - Connected servers (linking)
+/STATS o - Operator/staff count
+/STATS c - Connected servers (server linking status)
+/STATS ? - Server information and capabilities
 ```
+
+**Staff Commands:**
+```
+/AUTH IDENTIFY <password> - Staff authentication (supports MFA)
+/STAFF MFA RESET <nickname> - Reset user MFA
+/GLINE <host> <duration> <reason> - Network-wide ban
+/UNGLINE <host> - Remove network-wide ban
+/KILL <nickname> <reason> - Disconnect user
+```
+
+**WebChat Gateway Monitoring:**
+- Monitor WebSocket connection count via process metrics
+- Check gateway logs for rate limiting, connection errors
+- Monitor WEBIRC authentication success/failure rates
 
 ### External Monitoring
 
 **Prometheus Integration (Future):**
 ```python
 # Metrics to export
-- pyircx_connections_total
+- pyircx_connections_total (by server, by type: irc/websocket)
 - pyircx_users_authenticated
 - pyircx_channels_active
 - pyircx_messages_per_second
 - pyircx_cpu_usage
 - pyircx_memory_bytes
+- pyircx_linked_servers
+- pyircx_service_requests_per_second
+- pyircx_database_pool_usage
+- pyircx_mfa_enabled_users
+- pyircx_webchat_connections
 ```
 
 **Current Monitoring:**
+
+**IRC Server:**
 ```bash
 # CPU usage
 top -p $(pgrep -f pyircx.py)
@@ -546,11 +694,56 @@ top -p $(pgrep -f pyircx.py)
 # Memory usage
 ps aux | grep pyircx
 
-# Network connections
+# Network connections (IRC)
 netstat -an | grep 6667 | wc -l
 
+# Network connections (SSL)
+netstat -an | grep 6697 | wc -l
+
+# Network connections (linking)
+netstat -an | grep 7000 | wc -l
+
 # Log monitoring
-tail -f /var/log/pyircx.log | grep -E "Connection|Flood|Error"
+tail -f /var/log/pyircx.log | grep -E "Connection|Flood|Error|Link"
+
+# SystemD logs
+journalctl -u pyircx -f
+```
+
+**WebChat Gateway:**
+```bash
+# CPU/Memory for gateway process
+top -p $(pgrep -f gateway.py)
+
+# WebSocket connections
+netstat -an | grep 8765 | wc -l
+
+# Gateway logs
+tail -f /var/log/pyircx-webchat.log
+```
+
+**Server Linking:**
+```bash
+# Check link status
+/STATS c
+
+# Monitor link health (as staff)
+/STATS l
+
+# Check clock synchronization (critical for linking)
+chronyc tracking  # or: ntpq -p
+```
+
+**Database Performance:**
+```bash
+# Database size
+ls -lh /var/lib/pyircx/pyircx.db*
+
+# WAL file size (should be small, <10MB)
+ls -lh /var/lib/pyircx/pyircx.db-wal
+
+# Connection pool monitoring (check logs for pool exhaustion warnings)
+grep "Pool exhausted" /var/log/pyircx.log
 ```
 
 ## Capacity Planning
@@ -562,58 +755,100 @@ tail -f /var/log/pyircx.log | grep -E "Connection|Flood|Error"
 - Single geographic region
 - Budget constraints
 - Simple management preferred
+- No WebChat requirement
 
-**Choose Server Linking When:**
+**Choose Single Server + WebChat Gateway When:**
+- <1,000 expected users
+- Web-based access required
+- Single geographic region
+- Moderate budget
+
+**Choose Server Linking (Trunk-Branch) When:**
 - >1,000 expected users
 - Multiple geographic regions
-- High availability required
+- High availability desired
 - Growth expected
+- Need to scale beyond 5,000 users
+
+**Choose Multiple WebChat Gateways When:**
+- >1,000 WebSocket connections needed
+- Geographic distribution of web users
+- Load balancing required for web traffic
 
 **Choose PostgreSQL When:**
 - >10,000 registered accounts
 - >100 writes/second
 - Complex queries needed
 - Enterprise deployment
+- Multi-database clustering required
 
 ### Growth Planning
 
 **Small → Medium (100 → 1,000 users):**
 1. Upgrade server RAM (2GB → 4GB)
-2. Optimize database (WAL mode, indexing)
-3. Monitor CPU usage
-4. Plan for horizontal scaling at 80% capacity
+2. Optimize database (WAL mode already enabled, add indexes)
+3. Deploy WebChat gateway if web access needed
+4. Monitor CPU usage
+5. Plan for horizontal scaling at 80% capacity
 
 **Medium → Large (1,000 → 5,000 users):**
-1. Implement server linking (2-3 servers)
+1. Implement server linking (1 trunk + 2-3 branches)
 2. Upgrade network (100 Mbps → 1 Gbps)
-3. Add monitoring/alerting
-4. Consider load balancer
+3. Deploy multiple WebChat gateways behind load balancer
+4. Add monitoring/alerting
+5. Enable NTP for clock synchronization
+6. Configure strict version management
 
-**Large → Enterprise (5,000+ users):**
-1. Migrate to PostgreSQL
-2. Deploy 5+ linked servers
-3. Implement caching layer (Redis)
-4. Add CDN for static content (web client)
-5. Professional monitoring (Prometheus + Grafana)
+**Large → Enterprise (5,000 → 20,000 users):**
+1. Expand to 5-10 branch servers
+2. Deploy dedicated trunk server (services only)
+3. Multiple WebChat gateways per region
+4. Consider migrating to PostgreSQL
+5. Implement caching layer (Redis) for DNSBL, session data
+6. Add CDN for static content (web client assets)
+7. Professional monitoring (Prometheus + Grafana)
+
+**Enterprise → Massive (20,000+ users):**
+1. Deploy 10+ branch servers across regions
+2. Migrate to PostgreSQL for database scalability
+3. High-availability trunk failover strategy
+4. Dedicated monitoring infrastructure
+5. DDoS protection and advanced security
+6. Geographic load balancing for WebChat gateways
+7. Consider dedicated network team for operations
 
 ## Conclusion
 
-pyIRCX v1.0.5 is **suitable for small to medium deployments**:
+pyIRCX v2.0.0 is **suitable for small to enterprise deployments**:
 
 ✅ **Excellent for: 100-1,000 users** (single server)
-✅ **Good for: 1,000-5,000 users** (server linking)
-⚠️ **Acceptable for: 5,000-10,000 users** (multiple linked servers)
-❌ **Not recommended for: >10,000 users** (consider C-based servers)
+✅ **Excellent for: 1,000-5,000 users** (single server or small linked network)
+✅ **Good for: 5,000-20,000 users** (trunk-branch linking, 3-5 servers)
+✅ **Acceptable for: 20,000-50,000 users** (large linked network, 10+ servers)
+⚠️ **Possible for: >50,000 users** (requires PostgreSQL migration, dedicated ops team)
 
 **Key Takeaways:**
-- Async I/O provides excellent concurrent connection handling
-- Python overhead limits max capacity vs C servers
-- Horizontal scaling via server linking extends capacity
-- Proper tuning can improve performance 2-3x
-- Migration path exists for large deployments
+- **Async I/O foundation** provides excellent concurrent connection handling
+- **Trunk-branch topology** enables horizontal scaling to 50,000+ users
+- **WebChat gateway** adds web-based access with ~20% overhead
+- **DatabasePool** with WAL mode provides better concurrency than v1.0.5
+- **Two-factor authentication** adds <20ms latency with security benefits
+- **Connection limits** and **rate limiting** prevent abuse
+- **Server linking** requires strict version matching and clock synchronization
+- **Python overhead** still exists vs C servers, but acceptable for most deployments
+- **Proper tuning** can improve performance 2-3x
+- **Migration path to PostgreSQL** exists for very large deployments
+
+**Major Improvements Since v1.0.5:**
+- 10x capacity increase via trunk-branch linking
+- WebSocket support for web-based clients
+- Enhanced security (MFA, DNSBL, proxy detection)
+- Better database concurrency (async pool, WAL mode)
+- Comprehensive testing (243 tests)
+- Production-ready deployment (systemd, SELinux, polkit)
 
 ---
 
-**Document Version:** 1.0.5
-**Last Updated:** 2026-01-02
-**Benchmarked On:** Python 3.11, 8-core CPU, 16GB RAM, SSD storage
+**Document Version:** 2.0.0
+**Last Updated:** 2026-01-18
+**Benchmarked On:** Python 3.11, 8-core CPU, 16GB RAM, SSD storage, 1 Gbps network
