@@ -1334,7 +1334,8 @@ function handleMessage(data) {
                 if (isIgnored(nick)) break;
 
                 let target = p[0], text = p[1];
-                const action = text.startsWith('\x01ACTION ') && text.endsWith('\x01');
+                const ctcp = String.fromCharCode(1);
+                const action = text.startsWith(ctcp + 'ACTION ') && text.endsWith(ctcp);
                 const isPM = !isChannel(target);
 
                 if (isPM) {
@@ -1500,7 +1501,8 @@ function sendMessage() {
             case 'me':
                 if (currentChannel && args.length) {
                     const t = args.join(' ');
-                    ws.send(JSON.stringify({ type: 'message', target: currentChannel, text: '\x01ACTION ' + t + '\x01' }));
+                    const ctcp = String.fromCharCode(1);
+                    ws.send(JSON.stringify({ type: 'message', target: currentChannel, text: ctcp + 'ACTION ' + t + ctcp }));
                     const myStaff = staffUsers.get(currentNick);
                     const myEmoji = myStaff ? staffEmoji[myStaff] + ' ' : '';
                     addMsg(currentChannel, `<span class="nick ${nickColor(currentNick)}">${myEmoji}${escapeHtml(currentNick)}</span> ${escapeHtml(t)}`, 'action');

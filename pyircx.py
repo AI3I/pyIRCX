@@ -5567,15 +5567,6 @@ class pyIRCXServer:
         # Case-insensitive nickname lookup
         target = self.get_user(target_nick)
         if not target:
-            # Try case-insensitive search
-            target_lower = target_nick.lower()
-            for nick, usr in self.users.items():
-                if nick.lower() == target_lower:
-                    target = usr
-                    target_nick = nick  # Use the actual nickname for subsequent checks
-                    break
-
-        if not target:
             await user.send(self.get_reply("401", user, target=target_nick))
             return
 
@@ -5606,12 +5597,12 @@ class pyIRCXServer:
                 await user.send(self.get_reply("482", user, target=chan_name))
                 return
 
-        if channel.has_member(target_nick):
-            await user.send(f":{self.servername} 443 {user.nickname} {target_nick} {chan_name} :is already on channel")
+        if channel.has_member(target.nickname):
+            await user.send(f":{self.servername} 443 {user.nickname} {target.nickname} {chan_name} :is already on channel")
             return
 
         # ServiceBot dispatcher - pick available bot from pool
-        if target_nick == "ServiceBot":
+        if target.nickname == "ServiceBot":
             if not user.is_staff():
                 await user.send(self.get_reply("848", user))
                 return
@@ -5688,10 +5679,10 @@ class pyIRCXServer:
             return
 
         target.invited_to.add(chan_name)
-        await user.send(self.get_reply("341", user, target=target_nick, channel=chan_name))
+        await user.send(self.get_reply("341", user, target=target.nickname, channel=chan_name))
 
         # Send INVITE to target (local or route to remote server)
-        invite_msg = f":{user.prefix()} INVITE {target_nick} :{chan_name}"
+        invite_msg = f":{user.prefix()} INVITE {target.nickname} :{chan_name}"
         if hasattr(target, 'is_remote') and target.is_remote:
             # Target is on a remote server, route through link manager
             if self.link_manager and self.link_manager.enabled:

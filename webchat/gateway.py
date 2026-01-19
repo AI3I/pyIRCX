@@ -481,6 +481,10 @@ class IRCWebSocketGateway:
                             target = data.get('target', '')
                             text = data.get('text', '')
 
+                            # Debug: log what we received
+                            if 'ACTION' in text:
+                                logging.info(f"Received from webchat: repr={repr(text)}, has_x01={chr(1) in text}")
+
                             # Validate target (could be nick or channel)
                             if target.startswith('#'):
                                 target = validate_channel(target)
@@ -488,6 +492,10 @@ class IRCWebSocketGateway:
                                 target = validate_nickname(target)
 
                             text = validate_message(text)
+
+                            # Debug: log ACTION messages
+                            if '\x01' in text:
+                                logging.info(f"Sending CTCP/ACTION: repr={repr(text)}, bytes={text.encode('utf-8').hex()}")
 
                             irc_writer.write(f"PRIVMSG {target} :{text}\r\n".encode('utf-8'))
                             await irc_writer.drain()
