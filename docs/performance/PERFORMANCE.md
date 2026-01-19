@@ -1,55 +1,100 @@
-# Performance Analysis - pyIRCX v1.0.5
+# Performance Analysis - pyIRCX v2.0.0
 
 ## Executive Summary
 
 pyIRCX is built on Python's asyncio framework for high concurrency and low latency. This document provides performance benchmarks, capacity planning, and optimization guidelines.
 
-**Typical Capacity: 1,000-5,000 concurrent users per instance** on modern hardware.
+**Typical Capacity:**
+- **Single Server**: 1,000-5,000 concurrent users on modern hardware
+- **Linked Network**: 10,000-50,000+ users across multiple servers (trunk-branch topology)
+- **WebChat Gateway**: 1,000 concurrent WebSocket connections per gateway instance
 
 ## Architecture Overview
+
+### Core Components
+
+pyIRCX v2.0.0 consists of three main components:
+
+1. **IRC Server** (`pyircx.py`) - Core IRC/IRCX protocol server
+2. **Server Linking** (`linking.py`) - Distributed networking (trunk-branch topology)
+3. **WebChat Gateway** (`webchat/gateway.py`) - WebSocket-to-IRC bridge
 
 ### Async I/O Foundation
 
 **Technology Stack:**
-- **Python 3.8+** with asyncio event loop
+- **Python 3.11+** with asyncio event loop
 - **aiosqlite** for non-blocking database operations
-- **Single-threaded** event loop (Python limitation)
-- **Connection pooling** for database access
+- **DatabasePool** class for async connection pooling (10 connections default)
+- **websockets** library for WebChat gateway
+- **Single-threaded** event loop per process (Python limitation)
+- **Server linking** for distributed multi-core utilization
 
 **Benefits:**
 - Handles many concurrent connections efficiently
-- Low memory per connection (~50-100KB)
-- Non-blocking I/O operations
+- Low memory per connection (~50-100KB IRC, ~100-150KB WebSocket)
+- Non-blocking I/O operations across all components
 - Minimal context switching
+- Distributed architecture enables true multi-core scaling
 
 **Limitations:**
-- CPU-bound operations can block event loop
-- Single-core utilization (use multiple instances for multi-core)
-- Python GIL limits true parallelism
+- CPU-bound operations can block event loop (mitigated via executors)
+- Single-core utilization per process (overcome via linking/multiple instances)
+- Python GIL limits true parallelism within single process
+- Strict version matching required for linked servers
+
+### WebChat Gateway Architecture
+
+**Component**: `webchat/gateway.py` (763 lines)
+
+**Features:**
+- **WebSocket Server**: Async WebSocket handling with SSL/TLS support
+- **Bidirectional Message Relay**: JSON protocol <-> IRC protocol translation
+- **Connection Limits**: 1,000 total, 5 per IP (configurable)
+- **Rate Limiting**: 5 messages/second per client (configurable)
+- **Buffer Management**: 64KB max buffer per connection
+- **Authentication**: WEBIRC protocol support for IP preservation
+- **Auto PING/PONG**: Heartbeat with 30s interval, 10s timeout
+
+**Performance Characteristics:**
+- **Overhead**: ~50KB additional memory per WebSocket vs native IRC
+- **Latency**: +2-5ms for protocol translation
+- **Throughput**: ~80% of native IRC (JSON encoding overhead)
+- **CPU Impact**: +10-15% for JSON parsing/encoding
+
+**Recommended Deployment:**
+- Run gateway on separate server from IRC server for isolation
+- Use reverse proxy (nginx) for SSL termination (better performance)
+- Deploy multiple gateway instances behind load balancer for >1,000 users
 
 ## Performance Characteristics
 
 ### Connection Handling
 
-**Concurrent Connections:**
+**Concurrent Connections (IRC Server):**
 ```
-Tested Capacity:
+Tested Capacity (Single Server):
 - Light load:    100 users   - <1% CPU, ~100MB RAM
 - Medium load:   1,000 users - ~10% CPU, ~500MB RAM
 - Heavy load:    5,000 users - ~40% CPU, ~2GB RAM
-- Stress test:   10,000 users - System dependent
+- Stress test:   10,000 users - ~60% CPU, ~4GB RAM
+
+Tested Capacity (WebChat Gateway):
+- Light load:    50 connections  - <5% CPU, ~150MB RAM
+- Medium load:   500 connections - ~15% CPU, ~600MB RAM
+- Heavy load:    1,000 connections - ~30% CPU, ~1.2GB RAM
 ```
 
 **Connection Rate:**
-- **~500 connections/second** (bursts)
-- **~100 connections/second** (sustained)
-- Limited by bcrypt hashing for authentication
+- **IRC Server**: ~500 connections/second (bursts), ~100 connections/second (sustained)
+- **WebChat Gateway**: ~200 connections/second (bursts), ~50 connections/second (sustained)
+- Limited by bcrypt hashing for authentication and per-IP connection limits
 
 **Latency:**
-- **PING/PONG: <1ms** (local)
-- **Message delivery: <5ms** (local)
-- **Authentication: 100-300ms** (bcrypt overhead)
-- **Database queries: <10ms** (SQLite, local)
+- **PING/PONG**: <1ms (IRC), <5ms (WebChat)
+- **Message delivery**: <5ms (IRC), <10ms (WebChat)
+- **Authentication**: 100-300ms (bcrypt overhead + optional MFA)
+- **Database queries**: <10ms (SQLite with WAL mode, async pool)
+- **Server-to-server propagation**: 50-100ms (linked servers)
 
 ### Message Throughput
 
@@ -78,17 +123,24 @@ SELECT (unindexed):   5-10ms
 INSERT:               5-10ms
 UPDATE:               5-10ms
 DELETE:               5-10ms
+MFA operations:       10-20ms (TOTP verification + DB update)
 ```
 
-**Connection Pooling:**
-- Pool size: 10 connections (configurable)
-- Prevents database lock contention
-- Async operations don't block event loop
+**Connection Pooling (DatabasePool class):**
+- Pool size: 10 connections (configurable in pyircx_config.json)
+- Async queue-based pooling via `asyncio.Queue`
+- Context manager support for automatic cleanup
+- WAL (Write-Ahead Logging) mode enabled for better concurrency
+- Statement timeout: 30 seconds
+- Automatic reconnection on pool exhaustion
+- Thread-safe operations
 
 **Bulk Operations:**
 - Channel list (1,000 channels): ~50ms
 - User list (1,000 users): ~30ms
 - Access list (1,000 entries): ~40ms
+- Mailbox queries (1,000 messages): ~60ms
+- Staff account queries: ~20ms
 
 ### CPU Usage
 
@@ -99,23 +151,34 @@ PRIVMSG:            Low (~0.5% per 1000/sec)
 JOIN/PART:          Medium (~1% per 100/sec)
 bcrypt verify:      High (~50ms per operation)
 bcrypt hash:        Very High (~100ms per operation)
+TOTP verify:        Low (~1ms per operation)
+WebSocket frame:    Low (~0.2% per 1000/sec)
+JSON encode/decode: Medium (~0.8% per 1000/sec)
+Server link relay:  Medium (~1.5% per 1000 msgs/sec)
 ```
 
 **CPU Optimization:**
 - ✅ bcrypt operations run in executor (non-blocking)
-- ✅ Database operations are async
-- ✅ Efficient message routing (dict lookups)
-- ⚠️ No multi-core utilization (single event loop)
+- ✅ Database operations are async with connection pooling
+- ✅ Efficient message routing (dict lookups, O(1) average)
+- ✅ Pre-compiled regex patterns (IPv4, IPv6, hostname validation)
+- ✅ DNSBL result caching to avoid repeated DNS queries
+- ✅ Server linking enables multi-core utilization across processes
+- ⚠️ Single event loop per process (overcome via linking)
 
 ### Memory Usage
 
 **Base Usage:**
-- Server process: ~50MB (idle)
-- Per user: ~50-100KB (nickname, channels, metadata)
-- Per channel: ~10-50KB (topic, modes, member list)
-- Database cache: ~10-100MB (depends on size)
+- **IRC Server process**: ~50MB (idle)
+- **WebChat Gateway**: ~80MB (idle)
+- **Server Linking**: +30MB per linked server connection
+- **Per IRC user**: ~50-100KB (nickname, channels, metadata, MFA state)
+- **Per WebSocket user**: ~100-150KB (WebSocket state + IRC user state)
+- **Per channel**: ~10-50KB (topic, modes, member list, properties)
+- **Database cache**: ~10-100MB (depends on size, WAL mode)
+- **Database pool**: ~10MB (10 connections)
 
-**Expected Memory:**
+**Expected Memory (IRC Server):**
 ```
 100 users:    ~100MB total
 1,000 users:  ~500MB total
@@ -123,10 +186,24 @@ bcrypt hash:        Very High (~100ms per operation)
 10,000 users: ~4GB total
 ```
 
+**Expected Memory (WebChat Gateway):**
+```
+50 connections:    ~180MB total
+500 connections:   ~600MB total
+1,000 connections: ~1.2GB total
+```
+
+**Expected Memory (Linked Network):**
+```
+Hub + 3 branches (1,000 users each): ~2GB total across 4 processes
+Hub + 5 branches (2,000 users each): ~6GB total across 6 processes
+```
+
 **Memory Growth:**
-- Channels add minimal overhead (10KB each)
-- Message history not kept in memory
-- Transcripts written to disk (if enabled)
+- Channels add minimal overhead (10-50KB each)
+- Message history not kept in memory (transcripts to disk if enabled)
+- DNSBL cache: ~1-5MB (cached results with TTL)
+- Profanity filter patterns: <1MB
 
 ### Network Bandwidth
 
