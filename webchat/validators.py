@@ -196,9 +196,9 @@ def validate_message(text):
     if len(text) > MAX_MESSAGE_LENGTH:
         raise ValueError(f"Message is too long - please keep it under {MAX_MESSAGE_LENGTH} characters")
 
-    # Remove control characters except common IRC formatting codes
-    # Keep: 0x02 (bold), 0x03 (color), 0x0F (reset), 0x1D (italic), 0x1F (underline)
-    text = re.sub(r'[\x00-\x01\x04-\x08\x0B-\x0E\x10-\x1C\x1E\x7F]', '', text)
+    # Remove control characters except common IRC formatting codes and CTCP
+    # Keep: 0x01 (CTCP), 0x02 (bold), 0x03 (color), 0x0F (reset), 0x1D (italic), 0x1F (underline)
+    text = re.sub(r'[\x00\x04-\x08\x0B-\x0E\x10-\x1C\x1E\x7F]', '', text)
 
     if not text.strip():
         raise ValueError("Please provide a valid message")
