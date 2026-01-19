@@ -250,34 +250,56 @@ Hub + 5 branches (2,000 users each): ~6GB total across 6 processes
 
 ### Horizontal Scaling (Server Linking)
 
-**Distributed Network Architecture:**
+**Trunk-and-Branch Network Architecture:**
+
+pyIRCX v2.0.0 implements a **trunk-and-branch topology** (not traditional hub/leaf):
 
 ```
-                    [Hub Server]
-                   /      |      \
-                  /       |       \
-         [Leaf 1]    [Leaf 2]    [Leaf 3]
-         500 users   500 users   500 users
+                [Trunk Server]
+                (Services Host)
+               /       |       \
+              /        |        \
+     [Branch 1]   [Branch 2]   [Branch 3]
+     2,000 users  2,000 users  2,000 users
 
-         Total: 1,500 users across 3 servers
+     Total: 6,000 users + services across 4 servers
 ```
+
+**Trunk Server Role:**
+- Hosts all centralized services (Registrar, Messenger, NewsFlash, ServiceBots)
+- Routes service requests from branch servers
+- Handles global state (registered nicknames, channels, staff auth)
+- Lower user load (primarily service operations)
+- Recommended: 4 cores, 8GB RAM, 1 Gbps network
+
+**Branch Server Role:**
+- User-facing servers (IRC + WebChat connections)
+- Automatically route service requests to trunk
+- Handle local channel operations
+- Synchronize state with trunk and other branches
+- Recommended: 8 cores, 16GB RAM, 1 Gbps network
+- Each branch: 1,000-5,000 users
 
 **Benefits:**
-- Distribute load across multiple machines
-- Geographic distribution (lower latency)
-- Redundancy (network divergence recovery)
-- True multi-core utilization (multiple processes)
+- **True multi-core scaling**: Each server is a separate process
+- **Geographic distribution**: Place branches near users (lower latency)
+- **Service centralization**: No service duplication or conflicts
+- **Load distribution**: 10,000-50,000+ users across network
+- **Network-wide operations**: KICK, MODE, TOPIC propagate automatically
 
 **Limitations:**
-- Message routing overhead (~10-20%)
-- State synchronization latency (~50-100ms)
-- Network divergence handling complexity
+- **Strict version matching**: All servers must run identical versions
+- **Clock synchronization**: 60-second max skew required (NTP recommended)
+- **Single trunk**: No trunk redundancy (design trade-off for simplicity)
+- **Message routing overhead**: ~10-20% CPU increase for cross-server traffic
+- **State sync latency**: 50-100ms for cross-server operations
+- **Flat topology only**: No multi-tier (branch-to-branch) linking
 
 **Recommended Topology:**
-- 1 hub server (high bandwidth)
-- 2-5 leaf servers (user connections)
-- Each leaf: 500-2,000 users
-- Total network: 5,000-10,000 users
+- **Small Network**: 1 trunk + 2 branches (2,000-6,000 users)
+- **Medium Network**: 1 trunk + 3-5 branches (3,000-15,000 users)
+- **Large Network**: 1 trunk + 5-10 branches (5,000-30,000 users)
+- **Enterprise Network**: 1 trunk + 10+ branches (10,000-50,000+ users)
 
 ### Database Scaling
 
