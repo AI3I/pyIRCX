@@ -1958,7 +1958,7 @@ RESPONSES = {
     "473": "{target} :You cannot join channel (invite-only - you must be invited)",
     "474": "{target} :You cannot join channel (you are banned from this channel)",
     "475": "{target} :You cannot join channel (incorrect channel key/password)",
-    "481": "You do not have permission - IRC administrator or operator privileges are required",
+    "481": "You do not have permission - IRC operator or administrator privileges are required",
     "482": "{target} :You're not a channel owner or host (+q or +o required)",
     "696": "{target} {mode} :You must specify a parameter for the {mode} mode",
     "710": "{channel} {nick} {host} :has asked for an invite",
@@ -3130,7 +3130,7 @@ class pyIRCXServer:
         ip_port = f"{user.ip}:{user.port}"
 
         for admin in self.users.values():
-            # Only send to IRC operators and administrators
+            # Only send to IRC guides, operators, and administrators
             if admin.is_high_staff():
                 for t_cls, t_mask in admin.traps:
                     # Skip SOCKET traps (they never match)
@@ -3884,7 +3884,7 @@ class pyIRCXServer:
             # Apply forced realname if set
             if hasattr(user, 'force_staff_realname') and user.force_staff_realname and hasattr(user, 'staff_realname') and user.staff_realname:
                 user.realname = user.staff_realname
-            # ADMIN gets +a (admin) mode, SYSOP gets +o (oper), GUIDE gets +g (guide)
+            # ADMIN gets +a (administrator) mode, SYSOP gets +o (operator), GUIDE gets +g (guide)
             if level == "ADMIN":
                 user.set_mode('a', True)
             elif level == "SYSOP":
@@ -5445,7 +5445,7 @@ class pyIRCXServer:
             await user.send(self.get_reply("403", user, target=channel_name))
             return
 
-        # Check permissions - must be channel owner or high staff (operator/admin)
+        # Check permissions - must be channel owner or high staff (operator/administrator)
         is_owner = user.nickname in channel.owners
         is_high_staff = user.is_high_staff()
         if not (is_owner or is_high_staff):
@@ -5787,7 +5787,7 @@ class pyIRCXServer:
             logger.info(f"ServiceBot dispatcher assigned {bot_name} to {chan_name} via INVITE from {user.nickname}")
             return
 
-        # ServiceBot invitation - Staff only (guide/operator/admin)
+        # ServiceBot invitation - Staff only (guide/operator/administrator)
         if target_nick in self.servicebots:
             if not user.is_staff():
                 await user.send(self.get_reply("848", user))
@@ -6171,7 +6171,7 @@ class pyIRCXServer:
                 await user.send(f":{self.servername} NOTICE {user.nickname} :  b - ServiceBot statistics")
                 await user.send(f":{self.servername} NOTICE {user.nickname} :  z - Gagged users listing")
 
-            # Show operator/admin flags only if user is operator or admin
+            # Show operator/administrator flags only if user is operator or administrator
             if user.is_high_staff():
                 await user.send(f":{self.servername} NOTICE {user.nickname} :IRC operator or administrator flags:")
                 await user.send(f":{self.servername} NOTICE {user.nickname} :  d - Database statistics")
@@ -6243,9 +6243,9 @@ class pyIRCXServer:
             # Staff counts (already collected above)
 
             await user.send(f":{self.servername} NOTICE {user.nickname} :--- Staff Online ---")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  IRC Administrators: {user_stats['admins']}")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  IRC Operators: {user_stats['sysops']}")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  IRC Guides: {user_stats['guides']}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  IRC administrators: {user_stats['admins']}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  IRC operators: {user_stats['sysops']}")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  IRC guides: {user_stats['guides']}")
 
             # Channel stats - Single iteration for performance
             chan_stats = {'global': 0, 'local': 0, 'registered': 0}
@@ -6488,10 +6488,10 @@ class pyIRCXServer:
                 if u.is_virtual:
                     continue
                 if u.has_mode('a'):
-                    await user.send(f":{self.servername} NOTICE {user.nickname} :{u.nickname} (IRC Administrator)")
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :{u.nickname} (IRC administrator)")
                     staff_found = True
                 elif u.has_mode('o'):
-                    await user.send(f":{self.servername} NOTICE {user.nickname} :{u.nickname} (IRC Operator)")
+                    await user.send(f":{self.servername} NOTICE {user.nickname} :{u.nickname} (IRC operator)")
                     staff_found = True
                 elif u.has_mode('g'):
                     await user.send(f":{self.servername} NOTICE {user.nickname} :{u.nickname} (IRC Guide)")
@@ -6503,9 +6503,9 @@ class pyIRCXServer:
             return
 
         if flag == 'a':
-            # Online IRC Administrators
+            # Online IRC administrators
             admins = [u for u in self.users.values() if u.has_mode('a') and not u.is_virtual]
-            await user.send(f":{self.servername} NOTICE {user.nickname} :=== Online IRC Administrators ({len(admins)}) ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== Online IRC administrators ({len(admins)}) ===")
             if not admins:
                 await user.send(f":{self.servername} NOTICE {user.nickname} :No IRC administrators currently online")
             else:
@@ -6513,12 +6513,12 @@ class pyIRCXServer:
                     idle_time = int(time.time() - u.last_activity)
                     idle_str = f"{idle_time // 60}m" if idle_time > 60 else f"{idle_time}s"
                     await user.send(f":{self.servername} NOTICE {user.nickname} :  {u.nickname}!{u.username}@{u.host} (idle: {idle_str})")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :=== End of IRC Administrators ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== End of IRC administrators ===")
 
         elif flag == 'o':
-            # Online IRC Operators
+            # Online IRC operators
             sysops = [u for u in self.users.values() if u.has_mode('o') and not u.has_mode('a') and not u.is_virtual]
-            await user.send(f":{self.servername} NOTICE {user.nickname} :=== Online IRC Operators ({len(sysops)}) ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== Online IRC operators ({len(sysops)}) ===")
             if not sysops:
                 await user.send(f":{self.servername} NOTICE {user.nickname} :No IRC operators currently online")
             else:
@@ -6526,7 +6526,7 @@ class pyIRCXServer:
                     idle_time = int(time.time() - u.last_activity)
                     idle_str = f"{idle_time // 60}m" if idle_time > 60 else f"{idle_time}s"
                     await user.send(f":{self.servername} NOTICE {user.nickname} :  {u.nickname}!{u.username}@{u.host} (idle: {idle_str})")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :=== End of IRC Operators ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== End of IRC operators ===")
 
         elif flag == 'g':
             # Online IRC Guides
@@ -8048,7 +8048,7 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :  /NOTICE alice Important: Server maintenance at 10 PM")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  /NOTICE #lobby Server will restart in 5 minutes")
             if user.is_high_staff():
-                await user.send(f":{self.servername} NOTICE {user.nickname} :  /NOTICE $ <message> - Server-wide notice (operator/admin only)")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  /NOTICE $ <message> - Server-wide notice (operator/administrator only)")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Note: NOTICE is typically used for automated responses and shouldn't trigger auto-replies")
 
         elif topic in ["REGISTER", "IDENTIFY", "UNREGISTER"]:
@@ -8080,8 +8080,8 @@ class pyIRCXServer:
 
         elif topic in ["AUTH", "AUTHENTICATE"]:
             if is_staff:
-                await user.send(f":{self.servername} NOTICE {user.nickname} :=== AUTH Command (IRC administrator/operator/guide only) ===")
-                await user.send(f":{self.servername} NOTICE {user.nickname} :Securely elevate to IRC administrator, operator, or guide privileges after connecting.")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :=== AUTH Command (IRC guide/operator/administrator only) ===")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Securely elevate to IRC guide, operator, or administrator privileges after connecting.")
                 await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /AUTH <username> <password>")
                 await user.send(f":{self.servername} NOTICE {user.nickname} :Credentials are never transmitted until after connection established.")
                 await user.send(f":{self.servername} NOTICE {user.nickname} :If MFA is enabled, you will be prompted for verification code.")
@@ -8100,13 +8100,13 @@ class pyIRCXServer:
                 await user.send(f":{self.servername} NOTICE {user.nickname} :optional SSL/TLS requirement, all attempts logged to #System channel.")
                 await user.send(f":{self.servername} NOTICE {user.nickname} :See also: /HELP DROP, /HELP STAFF")
             else:
-                await user.send(f":{self.servername} NOTICE {user.nickname} :AUTH - Secure authentication for IRC administrators, operators, and guides")
-                await user.send(f":{self.servername} NOTICE {user.nickname} :This command is for IRC administrators, operators, and guides only.")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :AUTH - Secure authentication for IRC guides, operators, and administrators")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :This command is for IRC guides, operators, and administrators only.")
 
         elif topic in ["DROP", "DEAUTH"]:
             if is_staff:
-                await user.send(f":{self.servername} NOTICE {user.nickname} :=== DROP Command (IRC administrator/operator/guide only) ===")
-                await user.send(f":{self.servername} NOTICE {user.nickname} :Voluntarily drop IRC administrator, operator, or guide privileges.")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :=== DROP Command (IRC guide/operator/administrator only) ===")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :Voluntarily drop IRC guide, operator, or administrator privileges.")
                 await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /DROP")
                 await user.send(f":{self.servername} NOTICE {user.nickname} :Removes your +a, +o, or +g mode and reverts to regular user.")
                 await user.send(f":{self.servername} NOTICE {user.nickname} :You can re-authenticate with /AUTH command when needed.")
@@ -8117,8 +8117,8 @@ class pyIRCXServer:
                 await user.send(f":{self.servername} NOTICE {user.nickname} :  - Temporarily reducing privileges for security")
                 await user.send(f":{self.servername} NOTICE {user.nickname} :See also: /HELP AUTH")
             else:
-                await user.send(f":{self.servername} NOTICE {user.nickname} :DROP - De-authentication for IRC administrators, operators, and guides")
-                await user.send(f":{self.servername} NOTICE {user.nickname} :This command is for IRC administrators, operators, and guides only.")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :DROP - De-authentication for IRC guides, operators, and administrators")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :This command is for IRC guides, operators, and administrators only.")
 
         elif topic in ["LIST", "LISTX"]:
             await user.send(f":{self.servername} NOTICE {user.nickname} :=== LIST / LISTX Commands ===")
@@ -8142,7 +8142,7 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :  /MSG Registrar HELP - Talk to a service")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  /MSG NickServ IDENTIFY password - Alternative syntax")
             if user.is_high_staff():
-                await user.send(f":{self.servername} NOTICE {user.nickname} :  /MSG $ <message> - Server-wide message (operator/admin only)")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :  /MSG $ <message> - Server-wide message (operator/administrator only)")
 
         elif topic in ["AWAY", "BACK"]:
             await user.send(f":{self.servername} NOTICE {user.nickname} :=== AWAY Command ===")
@@ -8157,7 +8157,7 @@ class pyIRCXServer:
         elif topic in ["KILL"] and is_staff:
             await user.send(f":{self.servername} NOTICE {user.nickname} :=== KILL Command (IRC administrator/operator only) ===")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /KILL <target> [reason]")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Disconnect users or destroy channels. Requires IRC administrator or operator privileges.")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Disconnect users or destroy channels. Requires IRC operator or administrator privileges.")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  /KILL alice Spamming - Disconnect user")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  /KILL #badchannel - Destroy channel and kick all users")
@@ -8221,7 +8221,7 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :  /STATS - Show general server statistics")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  /STATS u - Show server uptime")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Use /STATS ? for complete list of available queries")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Note: Many detailed stats require staff privileges (guide/operator/administrator)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Note: Many detailed stats require staff privileges (guide, operator, or administrator)")
 
         elif topic in ["PROFANITY"] and user.is_high_staff():
             await user.send(f":{self.servername} NOTICE {user.nickname} :=== PROFANITY Command (IRC operator/administrator only) ===")
@@ -8421,7 +8421,7 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :  /UNGAG <#channel> <nick> - Remove channel gag")
             await user.send(f":{self.servername} NOTICE {user.nickname} :")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Requirements:")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :  - Global gag: Staff members only (IRC administrators, operators, and guides)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :  - Global gag: Staff members only (IRC guides, operators, and administrators)")
             await user.send(f":{self.servername} NOTICE {user.nickname} :  - Channel gag: Channel host/owner or staff")
             await user.send(f":{self.servername} NOTICE {user.nickname} :")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
@@ -8460,8 +8460,8 @@ class pyIRCXServer:
 
         elif topic == "EVENT" and is_staff:
             await user.send(f":{self.servername} NOTICE {user.nickname} :=== EVENT Command (IRCX - Staff Only) ===")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Real-time server monitoring for IRC operators and administrators.")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Requires: IRCX mode (+x) and operator/admin privileges (+o or +a)")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Real-time server monitoring for IRC guides, operators, and administrators.")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Requires: IRCX mode (+x) and operator or administrator privileges (+o or +a)")
             await user.send(f":{self.servername} NOTICE {user.nickname} :")
             await user.send(f":{self.servername} NOTICE {user.nickname} :EVENT ADD <class> [<mask>] - Subscribe to events")
             await user.send(f":{self.servername} NOTICE {user.nickname} :EVENT DELETE <class> [<mask>] - Unsubscribe from events")
@@ -8652,7 +8652,7 @@ class pyIRCXServer:
             target = self.users.get(nick)
             if target and not target.is_virtual:
                 # Build userhost reply: nick*=+user@host
-                # * = oper, + = here, - = away
+                # * = operator, + = here, - = away
                 oper_flag = "*" if target.is_high_staff() else ""
                 away_flag = "-" if target.away_msg else "+"
                 userhost_info.append(f"{target.nickname}{oper_flag}={away_flag}{target.username}@{target.host}")
@@ -9630,11 +9630,11 @@ class pyIRCXServer:
         if level == "ADMIN":
             user.set_mode('a', True)
             mode_char = '+a'
-            mode_name = "IRC Administrator"
+            mode_name = "IRC administrator"
         elif level == "SYSOP":
             user.set_mode('o', True)
             mode_char = '+o'
-            mode_name = "IRC Operator"
+            mode_name = "IRC operator"
         elif level == "GUIDE":
             user.set_mode('g', True)
             mode_char = '+g'
@@ -10731,7 +10731,7 @@ class pyIRCXServer:
         await self._service_reply(entity_name, user, response)
 
     async def _handle_mystical_entity(self, admin, entity_name, text):
-        """Handle commands to System/God mystical entities (admin only)
+        """Handle commands to System/God mystical entities (administrator only)
 
         Admins can command these entities to perform actions:
         - PRIVMSG <target> <message> - Send message as the entity
