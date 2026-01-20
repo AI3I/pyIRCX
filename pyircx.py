@@ -3083,7 +3083,9 @@ class pyIRCXServer:
             return
 
         ts = int(time.time())
-        msg = f":{self.servername} EVENT {ts} {cls} {action} {channel_name or ''} {user.prefix()} {user.ip}:{user.port} 0.0.0.0:0"
+        # EVENTs go to staff only - show real unmasked host
+        unmasked_prefix = f"{user.nickname}!{user.username}@{user.host}"
+        msg = f":{self.servername} EVENT {ts} {cls} {action} {channel_name or ''} {unmasked_prefix} {user.ip}:{user.port} 0.0.0.0:0"
 
         for admin in self.users.values():
             # Only send to IRC operators and administrators
@@ -4375,16 +4377,20 @@ class pyIRCXServer:
                     continue
 
                 # Broadcast DATA/REQUEST/REPLY to channel members (IRCX clients only)
-                data_msg = f":{user.prefix()} {cmd} {chan_name} {tag} :{message}"
                 for member in channel.members.values():
                     # Only send to IRCX-enabled clients
                     if member != user and (member.has_mode('x') or member.is_ircx):
+                        # Each viewer sees appropriately masked host
+                        prefix = user.prefix(viewer=member)
+                        data_msg = f":{prefix} {cmd} {chan_name} {tag} :{message}"
                         await member.send(data_msg)
 
-                # Propagate to linked servers
+                # Propagate to linked servers (unmasked for server-to-server)
                 if self.link_manager and self.link_manager.enabled:
                     if not (hasattr(user, 'is_remote') and user.is_remote):
-                        await self.link_manager.broadcast_to_servers(data_msg)
+                        unmasked_prefix = f"{user.nickname}!{user.username}@{user.host}"
+                        server_msg = f":{unmasked_prefix} {cmd} {chan_name} {tag} :{message}"
+                        await self.link_manager.broadcast_to_servers(server_msg)
 
             else:
                 # Direct message to user
@@ -4398,7 +4404,9 @@ class pyIRCXServer:
                     await user.send(f":{self.servername} NOTICE {user.nickname} :{target} does not support IRCX")
                     continue
 
-                data_msg = f":{user.prefix()} {cmd} {target} {tag} :{message}"
+                # Target user sees appropriately masked host
+                prefix = user.prefix(viewer=target_user)
+                data_msg = f":{prefix} {cmd} {target} {tag} :{message}"
                 await target_user.send(data_msg)
 
     async def handle_who(self, user, params):
