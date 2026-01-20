@@ -8155,7 +8155,7 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :Note: People will see your away message when they WHOIS you or message you")
 
         elif topic in ["KILL"] and is_staff:
-            await user.send(f":{self.servername} NOTICE {user.nickname} :=== KILL Command (IRC administrator/operator only) ===")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== KILL Command (IRC operator/administrator only) ===")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /KILL <target> [reason]")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Disconnect users or destroy channels. Requires IRC operator or administrator privileges.")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
@@ -8240,8 +8240,8 @@ class pyIRCXServer:
             await user.send(f":{self.servername} NOTICE {user.nickname} :  /PROFANITY TEST Check this message - Test before adding")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Changes persist to config file automatically")
 
-        elif topic in ["CONFIG"] and user.is_admin():
-            await user.send(f":{self.servername} NOTICE {user.nickname} :=== CONFIG Command (IRC administrator only) ===")
+        elif topic in ["CONFIG"] and user.is_high_staff():
+            await user.send(f":{self.servername} NOTICE {user.nickname} :=== CONFIG Command (IRC operator/administrator) ===")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Usage: /CONFIG <GET|SET> <key> [value]")
             await user.send(f":{self.servername} NOTICE {user.nickname} :View or modify server configuration at runtime.")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Examples:")
