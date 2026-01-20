@@ -3130,7 +3130,7 @@ class pyIRCXServer:
         ip_port = f"{user.ip}:{user.port}"
 
         for admin in self.users.values():
-            # Only send to IRC guides, operators, and administrators
+            # Only send to IRC operators and administrators
             if admin.is_high_staff():
                 for t_cls, t_mask in admin.traps:
                     # Skip SOCKET traps (they never match)
@@ -8460,7 +8460,7 @@ class pyIRCXServer:
 
         elif topic == "EVENT" and is_staff:
             await user.send(f":{self.servername} NOTICE {user.nickname} :=== EVENT Command (IRCX - Staff Only) ===")
-            await user.send(f":{self.servername} NOTICE {user.nickname} :Real-time server monitoring for IRC guides, operators, and administrators.")
+            await user.send(f":{self.servername} NOTICE {user.nickname} :Real-time server monitoring for IRC operators and administrators.")
             await user.send(f":{self.servername} NOTICE {user.nickname} :Requires: IRCX mode (+x) and operator or administrator privileges (+o or +a)")
             await user.send(f":{self.servername} NOTICE {user.nickname} :")
             await user.send(f":{self.servername} NOTICE {user.nickname} :EVENT ADD <class> [<mask>] - Subscribe to events")
