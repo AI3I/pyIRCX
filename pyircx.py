@@ -2901,8 +2901,6 @@ class pyIRCXServer:
 
             # Create ServiceBot dispatcher - virtual user that routes to available bots
             servicebot_dispatcher = self._create_virtual_service('ServiceBot', 'ServiceBot', "ServiceBot Pool Dispatcher")
-            self.channels["#System"].members[servicebot_dispatcher.nickname] = servicebot_dispatcher
-            self.channels["#System"].owners.add(servicebot_dispatcher.nickname)
             logger.info("ServiceBot dispatcher created")
 
             logger.info(f"Services initialized in {services_mode} mode" +
@@ -4208,7 +4206,9 @@ class pyIRCXServer:
                 await user.send(self.get_reply("403", user, target=target))
                 return
             # Check +n (no external messages) - non-members cannot send
-            if not channel.has_member(user.nickname) and channel.modes.get('n', False):
+            # Exception: Service users (System, Messenger, Registrar, NewsFlash, ServiceBots) can always message
+            is_service = user.has_mode('s') or user.has_mode('S') or user.has_mode('G')
+            if not channel.has_member(user.nickname) and channel.modes.get('n', False) and not is_service:
                 await user.send(self.get_reply("404", user, channel=chan_name))
                 return
             # Check +m (moderated) - only voiced/host/owner can send
