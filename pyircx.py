@@ -11657,7 +11657,7 @@ class pyIRCXServer:
         """Handle messages to NewsFlash service"""
         parts = text.strip().split(None, 1)
         if not parts:
-            await self._service_reply("NewsFlash", user, "Commands: LIST, ADD <message> (staff), DEL <id> (staff), PUSH <message> (admin), HELP")
+            await self._service_reply("NewsFlash", user, "Commands: LIST, ADD <message> (staff), DELETE <id> (staff), PUSH <message> (admin), HELP")
             return
 
         cmd = parts[0].upper()
@@ -11674,8 +11674,8 @@ class pyIRCXServer:
             if is_staff:
                 await self._service_reply("NewsFlash", user, "  ADD <message> - (STAFF only) Post a network announcement")
                 await self._service_reply("NewsFlash", user, "    Example: ADD Server upgrade scheduled for Saturday 3am EST")
-                await self._service_reply("NewsFlash", user, "  DEL <id> - (STAFF only) Remove a news message")
-                await self._service_reply("NewsFlash", user, "    Example: DEL 7")
+                await self._service_reply("NewsFlash", user, "  DELETE <id> - (STAFF only) Remove a news message")
+                await self._service_reply("NewsFlash", user, "    Example: DELETE 7")
             if user.is_admin():
                 await self._service_reply("NewsFlash", user, "  PUSH <message> - (ADMIN only) Send immediate notice to all online users")
                 await self._service_reply("NewsFlash", user, "    Example: PUSH Emergency maintenance starting now!")
@@ -11691,9 +11691,9 @@ class pyIRCXServer:
                 return
             await self._newsflash_add(user, parts[1])
 
-        elif cmd == "DEL" and is_staff:
+        elif cmd == "DELETE" and is_staff:
             if len(parts) < 2:
-                await self._service_reply("NewsFlash", user, "Usage: DEL <id>")
+                await self._service_reply("NewsFlash", user, "Usage: DELETE <id>")
                 return
             try:
                 msg_id = int(parts[1])
@@ -11708,7 +11708,7 @@ class pyIRCXServer:
             await self._newsflash_push(user, parts[1])
 
         else:
-            if cmd in ["ADD", "DEL", "PUSH"] and not is_staff:
+            if cmd in ["ADD", "DELETE", "PUSH"] and not is_staff:
                 await self._service_reply("NewsFlash", user, "That command requires staff privileges")
             else:
                 await self._service_reply("NewsFlash", user, f"Unknown command: {cmd}")
