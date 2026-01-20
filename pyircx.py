@@ -1940,6 +1940,7 @@ RESPONSES = {
     "811": "Channel :Users Topic",
     "812": "{channel} {users} {modes} :{topic}",
     "813": "End of /LISTX",
+    "814": "{servername} {timestamp} {cls} {action} {channel} {user_prefix} {ip_port} {data}",
     "817": "{target} {prop} :{value}",
     "818": "{target} :End of properties",
     "819": "{target} {prop} :{value}",
@@ -3085,7 +3086,8 @@ class pyIRCXServer:
         ts = int(time.time())
         # EVENTs go to staff only - show real unmasked host
         unmasked_prefix = f"{user.nickname}!{user.username}@{user.host}"
-        msg = f":{self.servername} EVENT {ts} {cls} {action} {channel_name or ''} {unmasked_prefix} {user.ip}:{user.port} 0.0.0.0:0"
+        channel_part = channel_name if channel_name else ""
+        ip_port = f"{user.ip}:{user.port}"
 
         for admin in self.users.values():
             # Only send to IRC operators and administrators
@@ -3094,8 +3096,18 @@ class pyIRCXServer:
                     # Skip SOCKET traps (they never match)
                     if t_cls == 'SOCKET':
                         continue
-                    if t_cls == cls and fnmatch.fnmatch(user.prefix(), t_mask):
-                        await admin.send(msg)
+                    # Match against unmasked prefix (EVENTs always show real host)
+                    if t_cls == cls and fnmatch.fnmatch(unmasked_prefix, t_mask):
+                        # Send as numeric 814 for better client compatibility
+                        await admin.send(self.get_reply("814", admin,
+                            servername=self.servername,
+                            timestamp=ts,
+                            cls=cls,
+                            action=action,
+                            channel=channel_part,
+                            user_prefix=unmasked_prefix,
+                            ip_port=ip_port,
+                            data="0.0.0.0:0"))
                         break
 
     async def log_staff(self, staff_nick, action, target, details="None"):
