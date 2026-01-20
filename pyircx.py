@@ -396,6 +396,25 @@ class RateLimiter:
         'BROADCAST': 6.0,  # Wildcard broadcasts (min 6 seconds between broadcasts)
     }
 
+    # Relaxed limits for staff (ADMIN/SYSOP/GUIDE) - 10x faster for most commands
+    STAFF_COOLDOWNS = {
+        'PRIVMSG': 0.1,      # 5x faster (monitoring, EVENTs)
+        'NOTICE': 0.1,       # 5x faster
+        'WHISPER': 0.5,      # 10x faster
+        'WHO': 0.2,          # 10x faster (IP searches, monitoring)
+        'WHOIS': 0.1,        # 10x faster (investigations)
+        'LIST': 0.5,         # 10x faster
+        'MODE': 0.1,         # 5x faster
+        'PROP': 0.2,         # 5x faster
+        'INVITE': 0.5,       # 4x faster
+        'KICK': 0.2,         # 5x faster
+        'ACCESS': 0.5,       # 4x faster
+        'KNOCK': 1.0,        # 5x faster
+        'TOPIC': 0.2,        # 5x faster
+        'AUTHENTICATE': 2.0, # Keep auth protection
+        'BROADCAST': 3.0,    # 2x faster (still some protection)
+    }
+
     def __init__(self, cooldowns=None):
         self.cooldowns = cooldowns or self.DEFAULT_COOLDOWNS
         self.last_used = {}
@@ -2369,6 +2388,8 @@ class pyIRCXServer:
 
         if is_admin:
             service.set_mode('a', True)
+            # Apply relaxed rate limits for admin services
+            service.rate_limiter = RateLimiter(RateLimiter.STAFF_COOLDOWNS)
         if is_servicebot:
             service.max_channels = CONFIG.get('services', 'servicebot_max_channels', default=10)
             self.servicebots[nickname] = service  # Track servicebot
@@ -3839,6 +3860,8 @@ class pyIRCXServer:
             user.host = self.servername
             user.authenticated = True
             user.staff_level = level
+            # Apply relaxed rate limits for staff
+            user.rate_limiter = RateLimiter(RateLimiter.STAFF_COOLDOWNS)
             # Apply forced realname if set
             if hasattr(user, 'force_staff_realname') and user.force_staff_realname and hasattr(user, 'staff_realname') and user.staff_realname:
                 user.realname = user.staff_realname
@@ -9587,6 +9610,9 @@ class pyIRCXServer:
             user.set_mode('g', True)
             mode_char = '+g'
             mode_name = "IRC Guide"
+
+        # Apply relaxed rate limits for staff
+        user.rate_limiter = RateLimiter(RateLimiter.STAFF_COOLDOWNS)
 
         # Send mode change to user
         if mode_char:
