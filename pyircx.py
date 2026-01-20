@@ -289,6 +289,57 @@ def is_reserved_service(name: str) -> bool:
     return name.lower() in RESERVED_SERVICES
 
 
+def mask_host(host_or_ip: str, viewer_is_staff: bool) -> str:
+    """
+    Mask host/IP for privacy. Staff see real host, non-staff see masked.
+
+    IPv4: 192.168.100.45 → 192.168.100.XXX (mask last octet)
+    IPv6: 2001:db8:85a3:1234:5678:90ab:cdef:1234 → 2001:db8:85a3:1234:XXXX:XXXX:XXXX:XXXX
+    Hostname: user-pc.example.com → xxxxxxx.example.com (mask first component)
+    """
+    if viewer_is_staff:
+        return host_or_ip
+
+    # IPv4: mask last octet
+    if _IPV4_PATTERN.match(host_or_ip):
+        parts = host_or_ip.split('.')
+        if len(parts) == 4:
+            return f"{parts[0]}.{parts[1]}.{parts[2]}.XXX"
+
+    # IPv6: mask last 4 segments (interface identifier)
+    if ':' in host_or_ip:
+        try:
+            import ipaddress
+            ip = ipaddress.ip_address(host_or_ip)
+            if isinstance(ip, ipaddress.IPv6Address):
+                parts = host_or_ip.split(':')
+                # Handle compressed notation (::)
+                if '::' in host_or_ip:
+                    # Expand it first for simpler handling
+                    expanded = ip.exploded
+                    parts = expanded.split(':')
+                # Keep first 4 segments (network), mask last 4 (interface ID)
+                if len(parts) >= 8:
+                    return ':'.join(parts[:4]) + ':XXXX:XXXX:XXXX:XXXX'
+                elif len(parts) >= 4:
+                    return ':'.join(parts[:4]) + ':XXXX:XXXX:XXXX:XXXX'
+                else:
+                    # Short address, mask what we can
+                    return ':'.join(parts[:max(1, len(parts)//2)]) + '::XXXX'
+        except (ValueError, ImportError):
+            pass
+
+    # Hostname: mask first component with equal number of X's
+    if '.' in host_or_ip:
+        parts = host_or_ip.split('.')
+        first_component = parts[0]
+        masked_component = 'x' * len(first_component)
+        return masked_component + '.' + '.'.join(parts[1:])
+
+    # Single word hostname or unknown format - mask completely
+    return 'x' * len(host_or_ip) if host_or_ip else 'xxxx'
+
+
 # ==============================================================================
 # SECURITY CLASSES
 # ==============================================================================
@@ -652,8 +703,14 @@ class User:
         """Check if user is staff or service"""
         return self.has_mode('a') or self.has_mode('o') or self.has_mode('g') or self.has_mode('s')
 
-    def prefix(self):
-        return f"{self.nickname}!{self.username}@{self.host}"
+    def prefix(self, viewer=None):
+        """
+        Return user prefix with host masking based on viewer.
+        If viewer is provided and is staff, show real host. Otherwise mask.
+        """
+        viewer_is_staff = viewer.is_staff() if viewer else False
+        host = mask_host(self.host, viewer_is_staff)
+        return f"{self.nickname}!{self.username}@{host}"
 
     def check_flood(self):
         return self.flood_protection.check()
@@ -1640,6 +1697,26 @@ class Channel:
         tasks = []
         for member in self.members.values():
             if member != exclude:
+                tasks.append(member.send(msg))
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def broadcast_user_action(self, source_user, action, exclude=None):
+        """
+        Broadcast a user action (JOIN/PART/QUIT/etc) with host masking.
+        Each viewer sees an appropriately masked prefix based on their staff status.
+
+        Args:
+            source_user: The user performing the action
+            action: The IRC command and parameters (e.g., "JOIN #channel", "PART #channel :Bye")
+            exclude: Optional user to exclude from broadcast
+        """
+        tasks = []
+        for member in self.members.values():
+            if member != exclude:
+                # Generate message with prefix masked for this viewer
+                prefix = source_user.prefix(viewer=member)
+                msg = f":{prefix} {action}"
                 tasks.append(member.send(msg))
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
@@ -4355,7 +4432,11 @@ class pyIRCXServer:
                 if member.has_mode('r'):
                     flags += "r"
                 if user.is_ircx:
-                    if member.has_mode('s'):
+                    if member.has_mode('G'):  # God - divine watcher
+                        flags += "G"
+                    elif member.has_mode('S'):  # System - omnipresent
+                        flags += "S"
+                    elif member.has_mode('s'):
                         flags += "s"
                     elif member.has_mode('a'):
                         flags += "a"
@@ -4364,12 +4445,14 @@ class pyIRCXServer:
                     elif member.has_mode('g'):
                         flags += "g"
                 else:
-                    if member.has_mode('s'):
+                    if member.has_mode('G') or member.has_mode('S'):  # God/System
+                        flags += "*"
+                    elif member.has_mode('s'):
                         flags += "*"
                     elif member.is_high_staff():
                         flags += "*"
-                # Staff see IP address, others see hostname
-                display_host = member.ip if is_staff else member.host
+                # Staff see real IP, non-staff see masked host
+                display_host = member.ip if is_staff else mask_host(member.host, False)
                 await user.send(self.get_reply("352", user, channel="*", ident=member.username,
                                         host=display_host, target=member.nickname, flags=flags, real=member.realname))
             await user.send(self.get_reply("315", user, target=target))
@@ -4401,7 +4484,11 @@ class pyIRCXServer:
                 if member.has_mode('r'):
                     flags += "r"
                 if user.is_ircx:
-                    if member.has_mode('s'):
+                    if member.has_mode('G'):  # God - divine watcher
+                        flags += "G"
+                    elif member.has_mode('S'):  # System - omnipresent
+                        flags += "S"
+                    elif member.has_mode('s'):
                         flags += "s"
                     elif member.has_mode('a'):
                         flags += "a"
@@ -4410,12 +4497,65 @@ class pyIRCXServer:
                     elif member.has_mode('g'):
                         flags += "g"
                 else:
-                    if member.has_mode('s'):
+                    if member.has_mode('G') or member.has_mode('S'):  # God/System
+                        flags += "*"
+                    elif member.has_mode('s'):
                         flags += "*"
                     elif member.is_high_staff():
                         flags += "*"
-                # Staff see IP address, others see hostname
-                display_host = member.ip if is_staff else member.host
+                # Staff see real IP, non-staff see masked host
+                display_host = member.ip if is_staff else mask_host(member.host, False)
+                await user.send(self.get_reply("352", user, channel="*", ident=member.username,
+                                        host=display_host, target=member.nickname, flags=flags, real=member.realname))
+            await user.send(self.get_reply("315", user, target=target))
+            return
+
+        # IP search (staff only) - matches exact IP or IP patterns
+        # Examples: WHO 192.168.100.100 or WHO 192.168.100.* or WHO 2001:db8:*
+        if is_staff and ('.' in target or ':' in target):
+            pattern = target.replace('%', '*')
+            has_wildcard = '*' in pattern
+            match_count = 0
+            for member in self.users.values():
+                # Skip virtual users
+                if member.is_virtual:
+                    continue
+                # Match IP
+                if has_wildcard:
+                    if not fnmatch.fnmatch(member.ip, pattern):
+                        continue
+                elif member.ip != target:
+                    continue
+                match_count += 1
+                flags = "G" if member.away_msg else "H"
+                if member.has_mode('i'):
+                    flags += "i"
+                if member.has_mode('x') or member.is_ircx:
+                    flags += "x"
+                if member.has_mode('r'):
+                    flags += "r"
+                if user.is_ircx:
+                    if member.has_mode('G'):
+                        flags += "G"
+                    elif member.has_mode('S'):
+                        flags += "S"
+                    elif member.has_mode('s'):
+                        flags += "s"
+                    elif member.has_mode('a'):
+                        flags += "a"
+                    elif member.has_mode('o'):
+                        flags += "o"
+                    elif member.has_mode('g'):
+                        flags += "g"
+                else:
+                    if member.has_mode('G') or member.has_mode('S'):
+                        flags += "*"
+                    elif member.has_mode('s'):
+                        flags += "*"
+                    elif member.is_high_staff():
+                        flags += "*"
+                # Staff always see real IP in WHO results
+                display_host = member.ip
                 await user.send(self.get_reply("352", user, channel="*", ident=member.username,
                                         host=display_host, target=member.nickname, flags=flags, real=member.realname))
             await user.send(self.get_reply("315", user, target=target))
@@ -4446,7 +4586,11 @@ class pyIRCXServer:
                 # Staff/operator flags depend on IRCX mode
                 if user.is_ircx:
                     # IRCX mode - show specific staff/service letters
-                    if member.has_mode('s'):
+                    if member.has_mode('G'):  # God - divine watcher
+                        flags += "G"
+                    elif member.has_mode('S'):  # System - omnipresent
+                        flags += "S"
+                    elif member.has_mode('s'):
                         flags += "s"
                     elif member.has_mode('a'):
                         flags += "a"
@@ -4456,7 +4600,9 @@ class pyIRCXServer:
                         flags += "g"
                 else:
                     # Non-IRCX mode - show * for any IRC operator/service
-                    if member.has_mode('s'):
+                    if member.has_mode('G') or member.has_mode('S'):  # God/System
+                        flags += "*"
+                    elif member.has_mode('s'):
                         flags += "*"
                     elif member.is_high_staff():
                         flags += "*"
@@ -4471,8 +4617,8 @@ class pyIRCXServer:
 
                 # NOTE: Never expose 'z' (gagged) to non-staff users
 
-                # Staff see IP address, others see hostname
-                display_host = member.ip if is_staff else member.host
+                # Staff see real IP, non-staff see masked host
+                display_host = member.ip if is_staff else mask_host(member.host, False)
                 await user.send(self.get_reply("352", user, channel=chan_name, ident=member.username,
                                         host=display_host, target=nick, flags=flags, real=member.realname))
             await user.send(self.get_reply("315", user, target=chan_name))
@@ -4499,7 +4645,11 @@ class pyIRCXServer:
                     if member.has_mode('x') or member.is_ircx:
                         flags += "x"
                     if user.is_ircx:
-                        if member.has_mode('s'):
+                        if member.has_mode('G'):  # God - divine watcher
+                            flags += "G"
+                        elif member.has_mode('S'):  # System - omnipresent
+                            flags += "S"
+                        elif member.has_mode('s'):
                             flags += "s"
                         elif member.has_mode('a'):
                             flags += "a"
@@ -4508,12 +4658,14 @@ class pyIRCXServer:
                         elif member.has_mode('g'):
                             flags += "g"
                     else:
-                        if member.has_mode('s'):
+                        if member.has_mode('G') or member.has_mode('S'):  # God/System
+                            flags += "*"
+                        elif member.has_mode('s'):
                             flags += "*"
                         elif member.is_high_staff():
                             flags += "*"
-                    # Staff see IP address, others see hostname
-                    display_host = member.ip if is_staff else member.host
+                    # Staff see real IP/host, non-staff see masked
+                    display_host = mask_host(member.host, is_staff)
                     await user.send(self.get_reply("352", user, channel="*", ident=member.username,
                                             host=display_host, target=member.nickname, flags=flags, real=member.realname))
 
@@ -4553,8 +4705,10 @@ class pyIRCXServer:
                 # Still send error to user (remote server will send replies directly if found)
                 await user.send(self.get_reply("401", user, target=target_nick))
                 continue
+            # Apply host masking (staff see real, non-staff see masked)
+            display_host = mask_host(target.host, user.is_staff())
             await user.send(self.get_reply("311", user, target=target.nickname, ident=target.username,
-                                     host=target.host, real=target.realname))
+                                     host=display_host, real=target.realname))
             if target.channels:
                 chan_list = " ".join(target.channels)
                 await user.send(self.get_reply(
@@ -4593,8 +4747,24 @@ class pyIRCXServer:
                       idle=idle, signon=target.signon_time))
 
             if user.is_staff():
+                # Staff see IP with optional DNS lookup
+                ip_info = target.ip
+                try:
+                    # Attempt reverse DNS lookup (2 second timeout)
+                    import socket
+                    hostname = await asyncio.wait_for(
+                        asyncio.get_event_loop().run_in_executor(
+                            None, socket.gethostbyaddr, target.ip
+                        ),
+                        timeout=2.0
+                    )
+                    hostname = hostname[0]  # Primary hostname
+                    ip_info = f"{target.ip} ({hostname})"
+                except:
+                    # DNS failed/timeout - just show IP
+                    pass
                 await user.send(self.get_reply(
-                    "320", user, target=target.nickname, ip=target.ip))
+                    "320", user, target=target.nickname, ip=ip_info))
 
             await user.send(self.get_reply("318", user, target=target.nickname))
 
@@ -4758,7 +4928,8 @@ class pyIRCXServer:
         elif grant_voice:
             channel.voices.add(user.nickname)
 
-        await user.send(f":{user.prefix()} JOIN {chan_name}")
+        # User sees their own unmasked host
+        await user.send(f":{user.prefix(viewer=user)} JOIN {chan_name}")
         if channel.topic:
             await user.send(self.get_reply(
                 "332", user, channel=chan_name, topic=channel.topic))
@@ -4797,17 +4968,24 @@ class pyIRCXServer:
         param_str = " " + " ".join(mode_params) if mode_params else ""
         await user.send(f":{self.servername} 324 {user.nickname} {chan_name} +{modes}{param_str}")
         
-        msg = f":{user.prefix()} JOIN {chan_name}"
-        # Broadcast to LOCAL channel members only (exclude remote users to avoid routing loops)
+        # Broadcast JOIN to LOCAL channel members with host masking
+        # (exclude remote users to avoid routing loops)
+        tasks = []
         for member in channel.members.values():
             if member != user and not (hasattr(member, 'is_remote') and member.is_remote):
-                await member.send(msg)
+                # Each viewer sees appropriately masked host
+                prefix = user.prefix(viewer=member)
+                msg = f":{prefix} JOIN {chan_name}"
+                tasks.append(member.send(msg))
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
 
-        # Propagate JOIN to linked servers (if not a remote user)
+        # Propagate JOIN to linked servers (if not a remote user) - use unmasked prefix
         if self.link_manager and self.link_manager.enabled:
             if not (hasattr(user, 'is_remote') and user.is_remote):
-                logger.info(f"Propagating JOIN to linked servers: {msg}")
-                await self.link_manager.broadcast_to_servers(msg)
+                server_msg = f":{user.prefix()} JOIN {chan_name}"
+                logger.info(f"Propagating JOIN to linked servers: {server_msg}")
+                await self.link_manager.broadcast_to_servers(server_msg)
                 logger.info(f"JOIN propagated for {user.nickname} to {chan_name}")
 
         # Fire MEMBER/JOIN event for monitoring
@@ -5046,15 +5224,22 @@ class pyIRCXServer:
         if chan_name not in user.channels:
             await user.send(self.get_reply("442", user, target=chan_name))
             return
-        msg = f":{user.prefix()} PART {chan_name}"
-        # Broadcast to LOCAL channel members only (exclude remote users to avoid routing loops)
+        # Broadcast PART to LOCAL channel members with host masking
+        # (exclude remote users to avoid routing loops)
+        tasks = []
         for member in channel.members.values():
             if not (hasattr(member, 'is_remote') and member.is_remote):
-                await member.send(msg)
-        # Propagate PART to linked servers (if not a remote user)
+                # Each viewer sees appropriately masked host
+                prefix = user.prefix(viewer=member)
+                msg = f":{prefix} PART {chan_name}"
+                tasks.append(member.send(msg))
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        # Propagate PART to linked servers (if not a remote user) - use unmasked prefix
         if self.link_manager and self.link_manager.enabled:
             if not (hasattr(user, 'is_remote') and user.is_remote):
-                await self.link_manager.broadcast_to_servers(msg)
+                server_msg = f":{user.prefix()} PART {chan_name}"
+                await self.link_manager.broadcast_to_servers(server_msg)
 
         # Fire MEMBER/PART event for monitoring
         await self.fire_trap("MEMBER", "PART", user, chan_name)
@@ -12189,8 +12374,16 @@ class pyIRCXServer:
             if cn in self.channels:
                 c = self.channels[cn]
                 if user.registered:
-                    msg = f":{user.prefix()} QUIT :Client exited"
-                    await c.broadcast(msg, exclude=user)
+                    # Broadcast QUIT with per-viewer host masking
+                    tasks = []
+                    for member in c.members.values():
+                        if member != user:
+                            # Each viewer sees appropriately masked host
+                            prefix = user.prefix(viewer=member)
+                            msg = f":{prefix} QUIT :Client exited"
+                            tasks.append(member.send(msg))
+                    if tasks:
+                        await asyncio.gather(*tasks, return_exceptions=True)
                 c.members.pop(nick, None)
                 c.owners.discard(nick)
                 c.hosts.discard(nick)
