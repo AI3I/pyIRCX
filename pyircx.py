@@ -384,7 +384,10 @@ class RateLimiter:
         'WHISPER': 5.0,
         'WHO': 2.0,
         'WHOIS': 1.0,
+        'WHOWAS': 2.0,
         'LIST': 5.0,
+        'LISTX': 5.0,
+        'NAMES': 1.0,
         'MODE': 0.5,
         'PROP': 1.0,
         'INVITE': 2.0,
@@ -393,26 +396,42 @@ class RateLimiter:
         'KNOCK': 5.0,
         'TOPIC': 1.0,
         'AUTHENTICATE': 2.0,  # Rate limit SASL auth attempts
-        'BROADCAST': 6.0,  # Wildcard broadcasts (min 6 seconds between broadcasts)
+        'BROADCAST': 6.0,     # Wildcard broadcasts
+        'EVENT': 1.0,         # Staff monitoring
+        'TRANSCRIPT': 2.0,    # Log access
+        'STATS': 2.0,         # Server statistics
+        'WATCH': 1.0,         # Watch list
+        'SILENCE': 1.0,       # Silence list
+        'KILL': 2.0,          # Administrative kill
     }
 
-    # Relaxed limits for staff (ADMIN/SYSOP/GUIDE) - 10x faster for most commands
+    # Relaxed limits for staff (ADMIN/SYSOP/GUIDE) - minimal delays for efficiency
+    # Staff need to move quickly for monitoring, investigations, and rapid response
     STAFF_COOLDOWNS = {
-        'PRIVMSG': 0.1,      # 5x faster (monitoring, EVENTs)
-        'NOTICE': 0.1,       # 5x faster
+        'PRIVMSG': 0.05,     # 10x faster (monitoring, EVENTs)
+        'NOTICE': 0.05,      # 10x faster
         'WHISPER': 0.5,      # 10x faster
-        'WHO': 0.2,          # 10x faster (IP searches, monitoring)
-        'WHOIS': 0.1,        # 10x faster (investigations)
-        'LIST': 0.5,         # 10x faster
-        'MODE': 0.1,         # 5x faster
-        'PROP': 0.2,         # 5x faster
-        'INVITE': 0.5,       # 4x faster
-        'KICK': 0.2,         # 5x faster
-        'ACCESS': 0.5,       # 4x faster
-        'KNOCK': 1.0,        # 5x faster
-        'TOPIC': 0.2,        # 5x faster
+        'WHO': 0.1,          # 20x faster (IP searches, monitoring)
+        'WHOIS': 0.05,       # 20x faster (investigations)
+        'WHOWAS': 0.1,       # 20x faster (investigations)
+        'LIST': 0.25,        # 20x faster
+        'LISTX': 0.25,       # 20x faster
+        'NAMES': 0.05,       # 20x faster
+        'MODE': 0.05,        # 10x faster
+        'PROP': 0.1,         # 10x faster
+        'INVITE': 0.1,       # 20x faster
+        'KICK': 0.05,        # 20x faster (rapid moderation)
+        'ACCESS': 0.1,       # 20x faster
+        'KNOCK': 0.25,       # 20x faster
+        'TOPIC': 0.05,       # 10x faster
         'AUTHENTICATE': 2.0, # Keep auth protection
-        'BROADCAST': 3.0,    # 2x faster (still some protection)
+        'BROADCAST': 0.5,    # 12x faster
+        'EVENT': 0.1,        # 10x faster (monitoring tool)
+        'TRANSCRIPT': 0.1,   # 20x faster (log access)
+        'STATS': 0.1,        # 20x faster (investigations)
+        'WATCH': 0.05,       # 20x faster
+        'SILENCE': 0.05,     # 20x faster
+        'KILL': 0.1,         # 20x faster (rapid response)
     }
 
     def __init__(self, cooldowns=None):
@@ -4812,6 +4831,11 @@ class pyIRCXServer:
             await user.send(self.get_reply("318", user, target=target.nickname))
 
     async def handle_whowas(self, user, params):
+        # Rate limit WHOWAS lookups
+        if not user.rate_limiter.check('WHOWAS'):
+            await user.send(f":{self.servername} NOTICE {user.nickname} :WHOWAS rate limited")
+            await user.send(self.get_reply("369", user, target=params[0] if params else "*"))
+            return
         if not params:
             return
         target_nick = params[0]
@@ -6111,6 +6135,11 @@ class pyIRCXServer:
           x: IRCX users count
           w: authenticated users count
         """
+        # Rate limit STATS queries
+        if not user.rate_limiter.check('STATS'):
+            await user.send(f":{self.servername} NOTICE {user.nickname} :STATS rate limited")
+            await user.send(self.get_reply("219", user, flag="*"))
+            return
         if not params:
             await user.send(self.get_reply("219", user, flag="*"))
             return
