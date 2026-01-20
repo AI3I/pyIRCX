@@ -4236,17 +4236,17 @@ class pyIRCXServer:
                     await user.send(self.get_reply("461", user, command="WHISPER"))
                     return
                 target_nick = params[1]
-                # Check if target is in channel
-                if not channel.has_member(target_nick):
-                    await user.send(self.get_reply("441", user, target=target_nick, channel=chan_name))
-                    return
-                # Find the target user
-                target_user = self.users.get(target_nick)
+                # Find the target user (case-insensitive)
+                target_user = self.get_user(target_nick)
                 if not target_user:
                     await user.send(self.get_reply("401", user, target=target_nick))
                     return
+                # Check if target is in channel
+                if not channel.has_member(target_user.nickname):
+                    await user.send(self.get_reply("441", user, target=target_user.nickname, channel=chan_name))
+                    return
                 # Send to target (local or route to remote server)
-                whisper_out = f"{source} WHISPER {chan_name} {target_nick} :{text}"
+                whisper_out = f"{source} WHISPER {chan_name} {target_user.nickname} :{text}"
                 if hasattr(target_user, 'is_remote') and target_user.is_remote:
                     # Target is on a remote server, route through link manager
                     if self.link_manager and self.link_manager.enabled:
@@ -4730,22 +4730,14 @@ class pyIRCXServer:
             return
         for target_nick in params[0].split(','):
             # Case-insensitive user lookup
-            target = self.users.get(target_nick)
-            if not target:
-                # Try case-insensitive search
-                target_lower = target_nick.lower()
-                for nick, usr in self.users.items():
-                    if nick.lower() == target_lower:
-                        target = usr
-                        target_nick = nick  # Use actual nickname for display
-                        break
+            target = self.get_user(target_nick)
 
             # Reserved service names that don't exist redirect to System
             if not target and is_reserved_service(target_nick):
-                target = self.users.get('System')
-                if target:
+                system_user = self.users.get('System')
+                if system_user:
                     await user.send(self.get_reply("311", user, target=target_nick, ident='Services',
-                                             host=self.servername, real=f"Alias for {target.nickname}"))
+                                             host=self.servername, real=f"Alias for {system_user.nickname}"))
                     await user.send(self.get_reply("312", user, target=target_nick))
                     await user.send(self.get_reply("313", user, target=target_nick, role="is a network service"))
                     await user.send(self.get_reply("318", user, target=target_nick))
@@ -5703,16 +5695,7 @@ class pyIRCXServer:
         channel_name = params[1]
 
         # Case-insensitive nickname lookup
-        target = self.users.get(target_nick)
-        if not target:
-            # Try case-insensitive search
-            target_lower = target_nick.lower()
-            for nick, usr in self.users.items():
-                if nick.lower() == target_lower:
-                    target = usr
-                    target_nick = nick  # Use the actual nickname for subsequent checks
-                    break
-
+        target = self.get_user(target_nick)
         if not target:
             await user.send(self.get_reply("401", user, target=target_nick))
             return
@@ -5744,12 +5727,12 @@ class pyIRCXServer:
                 await user.send(self.get_reply("482", user, target=chan_name))
                 return
 
-        if target_nick in channel.members:
-            await user.send(f":{self.servername} 443 {user.nickname} {target_nick} {chan_name} :is already on channel")
+        if target.nickname in channel.members:
+            await user.send(f":{self.servername} 443 {user.nickname} {target.nickname} {chan_name} :is already on channel")
             return
 
         # ServiceBot dispatcher - pick available bot from pool
-        if target_nick == "ServiceBot":
+        if target.nickname == "ServiceBot":
             if not user.is_staff():
                 await user.send(self.get_reply("848", user))
                 return
@@ -5780,31 +5763,31 @@ class pyIRCXServer:
             return
 
         # ServiceBot invitation - Staff only (guide/operator/administrator)
-        if target_nick in self.servicebots:
+        if target.nickname in self.servicebots:
             if not user.is_staff():
                 await user.send(self.get_reply("848", user))
                 return
-            bot = self.servicebots[target_nick]
+            bot = self.servicebots[target.nickname]
             max_chans = getattr(bot, 'max_channels', 10)
             if len(bot.channels) >= max_chans:
-                await user.send(f":{self.servername} NOTICE {user.nickname} :{target_nick} has reached max channels ({max_chans})")
+                await user.send(f":{self.servername} NOTICE {user.nickname} :{target.nickname} has reached max channels ({max_chans})")
                 return
             # ServiceBot joins the channel automatically
-            channel.members[target_nick] = bot
+            channel.members[target.nickname] = bot
             bot.channels.add(chan_name)
             # Services always get +q (owner)
-            channel.owners.add(target_nick)
+            channel.owners.add(target.nickname)
             await channel.broadcast(f":{bot.prefix()} JOIN {chan_name}")
-            await channel.broadcast(f":{self.servername} MODE {chan_name} +q {target_nick}")
-            await user.send(self.get_reply("341", user, target=target_nick, channel=chan_name))
-            logger.info(f"ServiceBot {target_nick} joined {chan_name} via INVITE from {user.nickname} (granted +q)")
+            await channel.broadcast(f":{self.servername} MODE {chan_name} +q {target.nickname}")
+            await user.send(self.get_reply("341", user, target=target.nickname, channel=chan_name))
+            logger.info(f"ServiceBot {target.nickname} joined {chan_name} via INVITE from {user.nickname} (granted +q)")
             return
 
         # System and God mystical entities - Auto-join like ServiceBots (silent observers)
-        if target_nick.lower() in ['system', 'god']:
+        if target.nickname.lower() in ['system', 'god']:
             # Normalize entity name to proper capitalization
-            entity_name = 'System' if target_nick.lower() == 'system' else 'God'
-            target = self.users.get(entity_name)
+            entity_name = 'System' if target.nickname.lower() == 'system' else 'God'
+            entity_user = self.users.get(entity_name)
 
             # Only admins can invite mystical entities
             if not user.has_mode('a'):
@@ -5812,21 +5795,21 @@ class pyIRCXServer:
                 return
 
             # Auto-join the entity to the channel
-            channel.members[entity_name] = target
-            target.channels.add(chan_name)
+            channel.members[entity_name] = entity_user
+            entity_user.channels.add(chan_name)
             # Mystical entities get +q (owner) but remain silent observers
             channel.owners.add(entity_name)
-            await channel.broadcast(f":{target.prefix()} JOIN {chan_name}")
+            await channel.broadcast(f":{entity_user.prefix()} JOIN {chan_name}")
             await channel.broadcast(f":{self.servername} MODE {chan_name} +q {entity_name}")
             await user.send(self.get_reply("341", user, target=entity_name, channel=chan_name))
             logger.info(f"{entity_name} joined {chan_name} via INVITE from {user.nickname} (granted +q)")
             return
 
         target.invited_to.add(chan_name)
-        await user.send(self.get_reply("341", user, target=target_nick, channel=chan_name))
+        await user.send(self.get_reply("341", user, target=target.nickname, channel=chan_name))
 
         # Send INVITE to target (local or route to remote server)
-        invite_msg = f":{user.prefix()} INVITE {target_nick} :{chan_name}"
+        invite_msg = f":{user.prefix()} INVITE {target.nickname} :{chan_name}"
         if hasattr(target, 'is_remote') and target.is_remote:
             # Target is on a remote server, route through link manager
             if self.link_manager and self.link_manager.enabled:
