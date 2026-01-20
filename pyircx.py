@@ -2871,8 +2871,6 @@ class pyIRCXServer:
 
             # Create System virtual user (omnipresent)
             sys_user = self._create_virtual_service('System', 'System', "System", omnipresent=True)
-            self.channels["#System"].members[sys_user.nickname] = sys_user
-            self.channels["#System"].owners.add(sys_user.nickname)
             logger.info("#System channel created")
 
             # Create God virtual user (omniscient watcher)
@@ -2882,20 +2880,14 @@ class pyIRCXServer:
 
             # Create Registrar service - handles nick/channel registration
             registrar = self._create_virtual_service('Registrar', 'Registrar', "Registration Services")
-            self.channels["#System"].members[registrar.nickname] = registrar
-            self.channels["#System"].owners.add(registrar.nickname)
             logger.info("Registrar service created")
 
             # Create Messenger service - handles mailbox and global messages
             messenger = self._create_virtual_service('Messenger', 'Messenger', "Message Services")
-            self.channels["#System"].members[messenger.nickname] = messenger
-            self.channels["#System"].owners.add(messenger.nickname)
             logger.info("Messenger service created")
 
             # Create NewsFlash alias - part of Messenger for rotating/push messages
             newsflash = self._create_virtual_service('NewsFlash', 'NewsFlash', "News Broadcast Services")
-            self.channels["#System"].members[newsflash.nickname] = newsflash
-            self.channels["#System"].owners.add(newsflash.nickname)
             logger.info("NewsFlash service created")
 
             # Create ServiceBots - configurable count
