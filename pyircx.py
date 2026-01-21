@@ -44,6 +44,8 @@ import os
 import ssl
 from pathlib import Path
 from collections import defaultdict, deque, OrderedDict
+import validation
+import user as user_module
 import linking
 from linking import ServerLinkManager
 
@@ -170,195 +172,36 @@ class ServerConfig:
 
 CONFIG = ServerConfig()
 linking.CONFIG = CONFIG  # Share CONFIG with linking module
+validation.CONFIG = CONFIG  # Share CONFIG with validation module
+user_module.CONFIG = CONFIG  # Share CONFIG with user module
 
 # ==============================================================================
-# VALIDATION FUNCTIONS
+# VALIDATION FUNCTIONS - imported from validation module
 # ==============================================================================
 
-FORBIDDEN_CHARS = set('.+=#!@%&^$~:')
+# Import validation functions and constants
+from validation import (
+    validate_nickname,
+    validate_username,
+    validate_channel_name,
+    is_channel,
+    is_local_channel,
+    is_reserved_service,
+    mask_host,
+    FORBIDDEN_CHARS,
+    CHANNEL_FORBIDDEN_CHARS,
+    CHANNEL_PREFIXES,
+    RESERVED_SERVICES
+)
 
-
-def validate_nickname(nick: str, check_reserved=True) -> tuple:
-    """
-    Validate nickname format. Returns (valid, error_message).
-    Called in handle_nick BEFORE assignment - blocks sign-on if invalid.
-    """
-    max_len = CONFIG.get('limits', 'max_nick_length', default=30)
-
-    if not nick or len(nick) > max_len:
-        return False, "Erroneous nickname"
-    if nick[0].isdigit():
-        return False, "Erroneous nickname"
-    if any(c in FORBIDDEN_CHARS for c in nick):
-        return False, "Erroneous nickname"
-    if _looks_like_ip_or_host(nick):
-        return False, "Erroneous nickname"
-    # Check reserved service names (can be disabled for internal use)
-    if check_reserved and is_reserved_service(nick):
-        return False, "Nickname is reserved for services"
-    return True, ""
-
-
-def validate_username(username: str) -> tuple:
-    """
-    Validate username format. Returns (valid, error_message).
-    Called in handle_user BEFORE assignment - blocks sign-on if invalid.
-    """
-    max_len = CONFIG.get('limits', 'max_user_length', default=30)
-
-    if not username or len(username) > max_len:
-        return False, "Invalid username"
-    if any(c in FORBIDDEN_CHARS for c in username):
-        return False, "Invalid username"
-    if _looks_like_ip_or_host(username):
-        return False, "Invalid username"
-    return True, ""
-
-
-def _looks_like_ip_or_host(s: str) -> bool:
-    """Check if string looks like IP address or hostname (IPv4 or IPv6)"""
-    # Also check using ipaddress module for robust IPv6 detection
-    if ':' in s:
-        try:
-            import ipaddress
-            ipaddress.ip_address(s)
-            return True
-        except ValueError:
-            pass
-    return bool(_IPV4_PATTERN.match(s) or _IPV6_PATTERN.match(s) or _HOSTNAME_PATTERN.match(s))
-
-
-# Reserved service names - these are virtual aliases pointing to System
-RESERVED_SERVICES = {
-    'operserv', 'helpserv', 'infoserv', 'nickserv', 'chanserv', 'memoserv',
-    'botserv', 'hostserv', 'statserv', 'global', 'alis', 'services',
-    'system', 'registrar', 'messenger', 'newsflash'
-}
-
-# Channel name forbidden characters (similar to nicknames but allows # and &)
-CHANNEL_FORBIDDEN_CHARS = set('+=#!@%^$~, ')  # Note: & removed to allow local channels
-CHANNEL_PREFIXES = ('#', '&')  # # = global, & = local
-
-
-def is_channel(name: str) -> bool:
-    """Check if a name is a channel (starts with # or &)"""
-    return bool(name) and name[0] in CHANNEL_PREFIXES
-
-
-def is_local_channel(name: str) -> bool:
-    """Check if a channel is local (starts with &)"""
-    return bool(name) and name.startswith('&')
-
-
-def validate_channel_name(name: str) -> tuple:
-    """
-    Validate channel name format. Returns (valid, error_message).
-    Called in handle_join BEFORE creating channel.
-
-    Channel types:
-    - # (global): Network-wide channels, persisted across restarts
-    - & (local): Server-local channels, not persisted
-    """
-    max_len = CONFIG.get('limits', 'max_channel_length', default=50)
-
-    if not name:
-        return False, "No channel name specified"
-    if not is_channel(name):
-        return False, "Channel name must start with # or &"
-    if len(name) > max_len:
-        return False, f"Channel name too long (max {max_len})"
-
-    # Check the part after prefix
-    channel_part = name[1:]
-    if not channel_part:
-        return False, "Channel name cannot be just a prefix"
-    if channel_part[0].isdigit():
-        return False, "Channel name cannot start with a digit"
-    # Check for forbidden chars (excluding the prefix)
-    for c in channel_part:
-        if c in CHANNEL_FORBIDDEN_CHARS or ord(c) < 32:
-            return False, "Channel name contains invalid characters"
-    if _looks_like_ip_or_host(channel_part):
-        return False, "Channel name cannot look like IP/hostname"
-
-    return True, ""
-
-
-def is_reserved_service(name: str) -> bool:
-    """Check if a nickname is a reserved service name"""
-    return name.lower() in RESERVED_SERVICES
-
-
-def mask_host(host_or_ip: str, viewer_is_staff: bool) -> str:
-    """
-    Mask host/IP for privacy. Staff see real host, non-staff see masked.
-
-    IPv4: 192.168.100.45 → 192.168.100.XXX (mask last octet)
-    IPv6: 2001:db8:85a3:1234:5678:90ab:cdef:1234 → 2001:db8:85a3:1234:XXXX:XXXX:XXXX:XXXX
-    Hostname: user-pc.example.com → xxxxxxx.example.com (mask first component)
-    """
-    if viewer_is_staff:
-        return host_or_ip
-
-    # IPv4: mask last octet
-    if _IPV4_PATTERN.match(host_or_ip):
-        parts = host_or_ip.split('.')
-        if len(parts) == 4:
-            return f"{parts[0]}.{parts[1]}.{parts[2]}.XXX"
-
-    # IPv6: mask last 4 segments (interface identifier)
-    if ':' in host_or_ip:
-        try:
-            import ipaddress
-            ip = ipaddress.ip_address(host_or_ip)
-            if isinstance(ip, ipaddress.IPv6Address):
-                parts = host_or_ip.split(':')
-                # Handle compressed notation (::)
-                if '::' in host_or_ip:
-                    # Expand it first for simpler handling
-                    expanded = ip.exploded
-                    parts = expanded.split(':')
-                # Keep first 4 segments (network), mask last 4 (interface ID)
-                if len(parts) >= 8:
-                    return ':'.join(parts[:4]) + ':XXXX:XXXX:XXXX:XXXX'
-                elif len(parts) >= 4:
-                    return ':'.join(parts[:4]) + ':XXXX:XXXX:XXXX:XXXX'
-                else:
-                    # Short address, mask what we can
-                    return ':'.join(parts[:max(1, len(parts)//2)]) + '::XXXX'
-        except (ValueError, ImportError):
-            pass
-
-    # Hostname: mask first component with equal number of X's
-    if '.' in host_or_ip:
-        parts = host_or_ip.split('.')
-        first_component = parts[0]
-        masked_component = 'x' * len(first_component)
-        return masked_component + '.' + '.'.join(parts[1:])
-
-    # Single word hostname or unknown format - mask completely
-    return 'x' * len(host_or_ip) if host_or_ip else 'xxxx'
+# Import user-related classes
+from user import User, FloodProtection, RateLimiter
 
 
 # ==============================================================================
 # SECURITY CLASSES
 # ==============================================================================
-
-
-class FloodProtection:
-    def __init__(self, max_messages=5, window=2.0):
-        self.max_messages = max_messages
-        self.window = window
-        self.messages = deque()
-
-    def check(self):
-        now = time.time()
-        while self.messages and self.messages[0] < now - self.window:
-            self.messages.popleft()
-        if len(self.messages) >= self.max_messages:
-            return False
-        self.messages.append(now)
-        return True
+# Note: FloodProtection and RateLimiter moved to user.py
 
 
 class ConnectionThrottle:
@@ -374,79 +217,6 @@ class ConnectionThrottle:
         if len(self.connections[ip]) >= self.max_connections:
             return False
         self.connections[ip].append(now)
-        return True
-
-
-class RateLimiter:
-    DEFAULT_COOLDOWNS = {
-        'PRIVMSG': 0.5,
-        'NOTICE': 0.5,
-        'WHISPER': 5.0,
-        'WHO': 2.0,
-        'WHOIS': 1.0,
-        'WHOWAS': 2.0,
-        'LIST': 5.0,
-        'LISTX': 5.0,
-        'NAMES': 1.0,
-        'MODE': 0.5,
-        'PROP': 1.0,
-        'INVITE': 2.0,
-        'KICK': 1.0,
-        'ACCESS': 2.0,
-        'KNOCK': 5.0,
-        'TOPIC': 1.0,
-        'AUTHENTICATE': 2.0,  # Rate limit SASL auth attempts
-        'BROADCAST': 6.0,     # Wildcard broadcasts
-        'EVENT': 1.0,         # Staff monitoring
-        'TRANSCRIPT': 2.0,    # Log access
-        'STATS': 2.0,         # Server statistics
-        'WATCH': 1.0,         # Watch list
-        'SILENCE': 1.0,       # Silence list
-        'KILL': 2.0,          # Administrative kill
-    }
-
-    # Relaxed limits for staff (ADMIN/SYSOP/GUIDE) - minimal delays for efficiency
-    # Staff need to move quickly for monitoring, investigations, and rapid response
-    STAFF_COOLDOWNS = {
-        'PRIVMSG': 0.05,     # 10x faster (monitoring, EVENTs)
-        'NOTICE': 0.05,      # 10x faster
-        'WHISPER': 0.5,      # 10x faster
-        'WHO': 0.1,          # 20x faster (IP searches, monitoring)
-        'WHOIS': 0.05,       # 20x faster (investigations)
-        'WHOWAS': 0.1,       # 20x faster (investigations)
-        'LIST': 0.25,        # 20x faster
-        'LISTX': 0.25,       # 20x faster
-        'NAMES': 0.05,       # 20x faster
-        'MODE': 0.05,        # 10x faster
-        'PROP': 0.1,         # 10x faster
-        'INVITE': 0.1,       # 20x faster
-        'KICK': 0.05,        # 20x faster (rapid moderation)
-        'ACCESS': 0.1,       # 20x faster
-        'KNOCK': 0.25,       # 20x faster
-        'TOPIC': 0.05,       # 10x faster
-        'AUTHENTICATE': 2.0, # Keep auth protection
-        'BROADCAST': 0.5,    # 12x faster
-        'EVENT': 0.1,        # 10x faster (monitoring tool)
-        'TRANSCRIPT': 0.1,   # 20x faster (log access)
-        'STATS': 0.1,        # 20x faster (investigations)
-        'WATCH': 0.05,       # 20x faster
-        'SILENCE': 0.05,     # 20x faster
-        'KILL': 0.1,         # 20x faster (rapid response)
-    }
-
-    def __init__(self, cooldowns=None):
-        self.cooldowns = cooldowns or self.DEFAULT_COOLDOWNS
-        self.last_used = {}
-
-    def check(self, command):
-        if command not in self.cooldowns:
-            return True
-        now = time.time()
-        cooldown = self.cooldowns[command]
-        last_time = self.last_used.get(command, 0)
-        if now - last_time < cooldown:
-            return False
-        self.last_used[command] = now
         return True
 
 
@@ -637,155 +407,9 @@ async def hash_password_async(password: str) -> str:
 
 
 # ==============================================================================
-# USER CLASS
+# USER CLASS - moved to user.py
 # ==============================================================================
 
-
-class User:
-    def __init__(self, reader, writer, is_virtual=False):
-        self.reader = reader
-        self.writer = writer
-        self.nickname = "*"
-        self.username = "unknown"
-        self.realname = "unknown"
-        self.host = "CHAT"
-        self.ip = "127.0.0.1"
-        self.port = 0
-
-        if not is_virtual and writer:
-            peername = writer.get_extra_info('peername')
-            if peername:
-                self.ip, self.port = peername[0], peername[1]
-            # Detect SSL/TLS connection
-            self.using_ssl = writer.get_extra_info('ssl_object') is not None
-        else:
-            self.using_ssl = False
-
-        self.is_virtual = is_virtual
-        # User modes: a=ADMIN, g=GUIDE, i=invisible, o=SYSOP, r=registered, s=service, x=IRCX, z=gagged
-        self.modes = {m: False for m in CONFIG.get(
-            'modes', 'user', default='agiorsxz')}
-        self.registered = False
-        self.authenticated = False
-        self.is_ircx = False
-        self.cap_negotiating = False  # True during CAP negotiation
-        self.cap_start_time = None  # When CAP negotiation started (for timeout)
-        self.enabled_caps = set()  # Enabled IRCv3 capabilities
-        self.sasl_mechanism = None  # Current SASL mechanism being used
-        self.sasl_buffer = ""  # Buffer for multi-chunk SASL data
-        self.sasl_authenticated = False  # True if SASL auth succeeded
-        self.sasl_account = None  # Account name from SASL auth
-        self.away_msg = None
-        self.provided_pass = None
-        self.channels = set()
-        self.traps = []
-        self.invited_to = set()
-        self.signon_time = int(time.time())
-        self.last_activity = int(time.time())
-        self.staff_level = "USER"
-        self.last_nick_change = 0  # Timestamp of last nick change
-        self.pending_mfa = None  # UUID of nick awaiting MFA verification
-        self.pending_staff_auth = None  # Dict with username, level, timestamp for AUTH MFA
-        self.watch_list = set()  # Nicknames this user is watching
-        self.silence_list = set()  # Hostmask patterns to ignore
-        self.disconnected = False  # Flag set when user is being disconnected
-
-        # DNSBL and connection security
-        self.dnsbl_listed = []  # List of DNSBLs this IP is on (if any)
-        self.connection_score = 0  # Risk score for this connection
-        self.connection_factors = {}  # Factors contributing to score
-        self.webirc_gateway = None  # Name of WEBIRC gateway if used
-
-        # Enhanced: Flood protection and rate limiting
-        self.flood_protection = FloodProtection(
-            max_messages=CONFIG.get('security', 'flood_messages', default=5),
-            window=CONFIG.get('security', 'flood_window', default=2.0)
-        )
-        self.rate_limiter = RateLimiter()
-
-    def set_mode(self, m, state):
-        self.modes[m] = state
-
-    def has_mode(self, m):
-        return self.modes.get(m, False)
-
-    def get_mode_str(self):
-        return "".join([k for k, v in self.modes.items() if v])
-
-    # Privilege helper methods
-    def is_admin(self):
-        """Check if user is ADMIN (+a)"""
-        return self.has_mode('a')
-
-    def is_sysop(self):
-        """Check if user is SYSOP (+o)"""
-        return self.has_mode('o')
-
-    def is_guide(self):
-        """Check if user is GUIDE (+g)"""
-        return self.has_mode('g')
-
-    def is_service(self):
-        """Check if user is service (+s)"""
-        return self.has_mode('s')
-
-    def is_high_staff(self):
-        """Check if user is ADMIN or SYSOP"""
-        return self.has_mode('a') or self.has_mode('o')
-
-    def is_staff(self):
-        """Check if user is any staff (ADMIN/SYSOP/GUIDE)"""
-        return self.has_mode('a') or self.has_mode('o') or self.has_mode('g')
-
-    def is_privileged(self):
-        """Check if user is staff or service"""
-        return self.has_mode('a') or self.has_mode('o') or self.has_mode('g') or self.has_mode('s')
-
-    def prefix(self, viewer=None):
-        """
-        Return user prefix with host masking based on viewer.
-        If viewer is provided and is staff, show real host. Otherwise mask.
-        """
-        viewer_is_staff = viewer.is_staff() if viewer else False
-        host = mask_host(self.host, viewer_is_staff)
-        return f"{self.nickname}!{self.username}@{host}"
-
-    def check_flood(self):
-        return self.flood_protection.check()
-
-    def check_rate_limit(self, cmd):
-        return self.rate_limiter.check(cmd)
-
-    async def send(self, msg):
-        """Send message to client with backpressure control"""
-        # Handle remote users (from linked servers) - route back through link
-        if hasattr(self, 'is_remote') and self.is_remote and hasattr(self, 'from_server'):
-            # This is a user from a remote server - route message back through link
-            if hasattr(self, 'server') and self.server and hasattr(self.server, 'link_manager'):
-                link_manager = self.server.link_manager
-                if link_manager and link_manager.enabled:
-                    # Find the server this user is from
-                    for server_name, linked_server in link_manager.servers.items():
-                        if self.from_server == server_name and linked_server.is_direct:
-                            # Route message to that server
-                            await linked_server.send(msg.rstrip('\r\n'))
-                            return
-            return
-
-        if self.is_virtual or not self.writer:
-            return
-        max_len = CONFIG.get('limits', 'msg_length', default=512)
-        if len(msg) > max_len:
-            msg = msg[:max_len]
-        out = msg if msg.endswith("\r\n") else msg + "\r\n"
-        try:
-            self.writer.write(out.encode('utf-8', errors='replace'))
-            await self.writer.drain()  # Apply backpressure
-        except (ConnectionResetError, BrokenPipeError):
-            # Client disconnected, mark for cleanup
-            self.writer = None
-        except Exception as e:
-            logger.error(f"Send error {self.nickname}: {e}")
 
 # ==============================================================================
 # DNSBL (DNS BLACKLIST) CHECKER
@@ -2180,6 +1804,55 @@ SERVER_MESSAGES = {
 
 
 class pyIRCXServer:
+    # Command routing table - maps IRC commands to their handler methods
+    # This replaces the long elif chain in dispatch() for better maintainability
+    COMMAND_HANDLERS = {
+        # Channel operations
+        'CREATE': 'handle_create',
+        'WHOIS': 'handle_whois',
+        'WHO': 'handle_who',
+        'WHOWAS': 'handle_whowas',
+        'AWAY': 'handle_away',
+        'TOPIC': 'handle_topic',
+        'TRANSCRIPT': 'handle_transcript',
+        'KNOCK': 'handle_knock',
+        'PROP': 'handle_prop',
+        'ACCESS': 'handle_access',
+        'EVENT': 'handle_event',
+        'KILL': 'handle_kill',
+        'KICK': 'handle_kick',
+        'INVITE': 'handle_invite',
+        'MODE': 'handle_mode',
+        'NAMES': 'handle_names',
+
+        # Server/network commands
+        'STATS': 'handle_stats',
+        'CONFIG': 'handle_config',
+        'STAFF': 'handle_staff',
+        'PROFANITY': 'handle_profanity',
+        'CONNECT': 'handle_connect',
+        'SQUIT': 'handle_squit',
+        'LINKS': 'handle_links',
+        'MAP': 'handle_map',
+        'INFO': 'handle_info',
+        'MOTD': 'handle_motd',
+        'LUSERS': 'handle_lusers',
+
+        # User commands
+        'ISON': 'handle_ison',
+        'USERHOST': 'handle_userhost',
+        'REGISTER': 'handle_register',
+        'UNREGISTER': 'handle_unregister',
+        'AUTH': 'handle_auth',
+        'DROP': 'handle_drop',
+        'IDENTIFY': 'handle_identify',
+        'MFA': 'handle_mfa',
+        'WATCH': 'handle_watch',
+        'SILENCE': 'handle_silence',
+        'CHGPASS': 'handle_chgpass',
+        'MEMO': 'handle_memo',
+    }
+
     def __init__(self):
         self.servername = CONFIG.get('server', 'name', default='irc.local')
         self.users = {}
@@ -3267,6 +2940,12 @@ class pyIRCXServer:
             await self.quit_user(user)
 
     async def dispatch(self, user, raw):
+        """
+        Route IRC commands to their appropriate handlers.
+
+        This method parses incoming IRC commands and dispatches them to the
+        appropriate handler methods using a routing table for maintainability.
+        """
         parts = raw.split(' :', 1)
         args = parts[0].split()
         if not args:
@@ -3335,8 +3014,9 @@ class pyIRCXServer:
                     logger.warning(f"Flood: {user.nickname}")
                     return
 
-        # Rate limiting is handled in individual command handlers
-        # with appropriate error messages, not silently at dispatch level
+        # ====================================================================
+        # PRE-REGISTRATION COMMANDS (processed before registration check)
+        # ====================================================================
 
         if cmd == "CAP":
             await self.handle_cap(user, params)
@@ -3373,12 +3053,19 @@ class pyIRCXServer:
             await self.handle_user(user, params)
             return
 
+        # ====================================================================
+        # REGISTRATION CHECK - all commands below require registered user
+        # ====================================================================
+
         if not user.registered:
             if cmd not in ["NICK", "USER", "PASS", "IRCX", "ISIRCX", "PING", "WEBIRC"]:
                 await user.send(self.get_reply("451", user))
             return
 
-        # MFA pending - restrict commands until MFA verification is complete
+        # ====================================================================
+        # MFA CHECK - restrict commands until MFA verification is complete
+        # ====================================================================
+
         if user.pending_mfa:
             allowed_during_mfa = ["PING", "PONG", "QUIT"]
             # Allow PRIVMSG only to Registrar for MFA VERIFY command
@@ -3387,6 +3074,10 @@ class pyIRCXServer:
             elif cmd not in allowed_during_mfa:
                 await user.send(f":{self.servername} NOTICE {user.nickname} :MFA verification pending. Use: PRIVMSG Registrar :MFA VERIFY <code>")
                 return
+
+        # ====================================================================
+        # COMMANDS WITH SPECIAL HANDLING (need custom logic before routing)
+        # ====================================================================
 
         if cmd == "JOIN":
             if not params:
@@ -3399,8 +3090,8 @@ class pyIRCXServer:
                 if channel_name:
                     key = keys[idx].strip() if idx < len(keys) else None
                     await self.handle_join(user, channel_name, key)
-        elif cmd == "CREATE":
-            await self.handle_create(user, params)
+            return
+
         elif cmd == "PART":
             if not params:
                 await user.send(self.get_reply("461", user, command=cmd))
@@ -3409,27 +3100,33 @@ class pyIRCXServer:
                 t = t.strip()
                 if t:
                     await self.handle_part(user, t)
-        elif cmd == "WHOIS":
-            await self.handle_whois(user, params)
-        elif cmd == "WHO":
-            await self.handle_who(user, params)
-        elif cmd == "WHOWAS":
-            await self.handle_whowas(user, params)
+            return
+
         elif cmd in ["LIST", "LISTX"]:
             pattern = params[0] if params else None
             await self.handle_list(user, cmd == "LISTX", pattern)
+            return
+
         elif cmd == "TIME":
             await user.send(self.get_reply("391", user, time=time.ctime()))
+            return
+
         elif cmd == "VERSION":
             await user.send(self.get_reply("351", user))
+            return
+
         elif cmd == "JEDI":
             # Undocumented easter egg - God's response
             if "God" in self.users:
                 await user.send(f":God!God@{self.servername} NOTICE {user.nickname} :That is not the command you're looking for.")
+            return
+
         elif cmd == "WALLOPS":
             # Undocumented easter egg - System complains about violence
             if "System" in self.users:
                 await user.send(f":System!System@{self.servername} NOTICE {user.nickname} :Ouch, that hurts! Violence is not the answer.")
+            return
+
         elif cmd == "JOKE":
             # Undocumented easter egg - Random clean jokes
             import random
@@ -3487,94 +3184,51 @@ class pyIRCXServer:
             ]
             joke = random.choice(jokes)
             await user.send(f":{self.servername} NOTICE {user.nickname} :{joke}")
-        elif cmd == "AWAY":
-            await self.handle_away(user, params)
-        elif cmd == "TOPIC":
-            await self.handle_topic(user, params)
-        elif cmd == "TRANSCRIPT":
-            await self.handle_transcript(user, params)
-        elif cmd == "KNOCK":
-            await self.handle_knock(user, params)
-        elif cmd == "PROP":
-            await self.handle_prop(user, params)
-        elif cmd == "ACCESS":
-            await self.handle_access(user, params)
-        elif cmd == "EVENT":
-            await self.handle_event(user, params)
+            return
+
         elif cmd in ["DATA", "REQUEST", "REPLY"]:
             await self.handle_data(user, params, cmd)
+            return
+
         elif cmd in ["PRIVMSG", "WHISPER", "NOTICE"]:
             await self.handle_msg(user, params, cmd)
-        elif cmd == "KILL":
-            await self.handle_kill(user, params)
-        elif cmd == "KICK":
-            await self.handle_kick(user, params)
-        elif cmd == "INVITE":
-            await self.handle_invite(user, params)
-        elif cmd == "MODE":
-            await self.handle_mode(user, params)
+            return
+
         elif cmd in ["GAG", "UNGAG"]:
             await self.handle_gag_alias(user, params, cmd == "GAG")
+            return
+
         elif cmd == "QUIT":
             await self.quit_user(user)
             return  # Exit dispatch to break the read loop
-        elif cmd == "STATS":
-            await self.handle_stats(user, params)
-        elif cmd == "CONFIG":
-            await self.handle_config(user, params)
-        elif cmd == "STAFF":
-            await self.handle_staff(user, params)
-        elif cmd == "PROFANITY":
-            await self.handle_profanity(user, params)
-        elif cmd == "CONNECT":
-            await self.handle_connect(user, params)
-        elif cmd == "SQUIT":
-            await self.handle_squit(user, params)
-        elif cmd == "LINKS":
-            await self.handle_links(user, params)
-        elif cmd == "MAP":
-            await self.handle_map(user, params)
+
         elif cmd == "ADMIN":
             await user.send(self.get_reply("256", user))
             await user.send(self.get_reply("257", user))
             await user.send(self.get_reply("258", user))
             await user.send(self.get_reply("259", user))
-        elif cmd == "INFO":
-            await self.handle_info(user)
+            return
+
         elif cmd in ["HELP", "H"]:
             await self.handle_help(user, params)
-        elif cmd == "MOTD":
-            await self.handle_motd(user)
-        elif cmd == "LUSERS":
-            await self.handle_lusers(user)
-        elif cmd == "ISON":
-            await self.handle_ison(user, params)
-        elif cmd == "USERHOST":
-            await self.handle_userhost(user, params)
-        elif cmd == "NAMES":
-            await self.handle_names(user, params)
-        elif cmd == "REGISTER":
-            await self.handle_register(user, params)
-        elif cmd == "UNREGISTER":
-            await self.handle_unregister(user, params)
-        elif cmd == "AUTH":
-            await self.handle_auth(user, params)
-        elif cmd == "DROP":
-            await self.handle_drop(user, params)
-        elif cmd == "IDENTIFY":
-            await self.handle_identify(user, params)
-        elif cmd == "MFA":
-            await self.handle_mfa(user, params)
-        elif cmd == "WATCH":
-            await self.handle_watch(user, params)
-        elif cmd == "SILENCE":
-            await self.handle_silence(user, params)
-        elif cmd == "CHGPASS":
-            await self.handle_chgpass(user, params)
-        elif cmd == "MEMO":
-            await self.handle_memo(user, params)
-        else:
-            await user.send(self.get_reply("421", user, command=cmd))
+            return
+
+        # ====================================================================
+        # COMMAND ROUTING TABLE - standard commands routed to handlers
+        # ====================================================================
+
+        # Check if command has a handler in the routing table
+        if cmd in self.COMMAND_HANDLERS:
+            handler_name = self.COMMAND_HANDLERS[cmd]
+            handler = getattr(self, handler_name)
+            await handler(user, params)
+            return
+
+        # ====================================================================
+        # UNKNOWN COMMAND
+        # ====================================================================
+
+        await user.send(self.get_reply("421", user, command=cmd))
 
     async def handle_nick(self, user, params):
         if not params:

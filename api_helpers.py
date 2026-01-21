@@ -269,29 +269,12 @@ def validate_timeout(timeout):
         raise ValueError("Timeout cannot be negative")
 
 
-def validate_nickname(nickname):
-    """Validate IRC nickname
-
-    Args:
-        nickname: IRC nickname string
-
-    Raises:
-        ValueError: If nickname is invalid
-    """
-    if not nickname:
-        raise ValueError("Please provide a nickname")
-
-    if not isinstance(nickname, str):
-        raise ValueError("Nickname must be a text string")
-
-    if len(nickname) > 30:
-        raise ValueError("Nickname must not exceed 30 characters")
-
-    # IRC nickname rules: must start with letter, can contain letters, numbers, -, [, ], \, `, ^, {, }, |
-    if not re.match(r'^[a-zA-Z][a-zA-Z0-9\-\[\]\\`^{}|]*$', nickname):
-        raise ValueError(
-            "Nickname must start with a letter and contain only letters, numbers, and special characters: - [ ] \\ ` ^ { } |"
-        )
+# Import validation functions from centralized validation module
+from validation import (
+    validate_nickname_strict as validate_nickname,
+    validate_channel_strict,
+    validate_staff_level_strict
+)
 
 
 def validate_channel_name(channel):
@@ -306,24 +289,8 @@ def validate_channel_name(channel):
     Raises:
         ValueError: If channel name is invalid
     """
-    if not channel:
-        raise ValueError("Please provide a channel name")
-
-    if not isinstance(channel, str):
-        raise ValueError("Channel name must be a text string")
-
-    # Add # if not present
-    if not channel.startswith('#'):
-        channel = '#' + channel
-
-    if len(channel) > 50:
-        raise ValueError("Channel name must not exceed 50 characters")
-
-    # Channel names can't contain spaces, commas, or control characters
-    if re.search(r'[\s,\x00-\x1F]', channel):
-        raise ValueError("Channel name cannot contain spaces, commas, or control characters")
-
-    return channel
+    # Use the strict validator with auto_prefix enabled
+    return validate_channel_strict(channel, auto_prefix=True)
 
 
 def validate_staff_level(level):
@@ -335,12 +302,7 @@ def validate_staff_level(level):
     Raises:
         ValueError: If level is invalid
     """
-    valid_levels = ['ADMIN', 'SYSOP', 'GUIDE', 'USER']
-    if level not in valid_levels:
-        raise ValueError(
-            f"Invalid staff level: '{level}'. "
-            f"Must be one of: {', '.join(valid_levels)}"
-        )
+    validate_staff_level_strict(level)
 
 
 # =============================================================================
