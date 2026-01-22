@@ -32,6 +32,16 @@ except ImportError:
     print("Error: validators.py not found. Ensure it's in the same directory as gateway.py")
     exit(1)
 
+# Import log message helper
+try:
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from responses import get_log_message
+except ImportError:
+    # Fallback if responses.py not available - return key as message
+    def get_log_message(key, **kwargs):
+        return key
+
 
 # =============================================================================
 # CONSTANTS
@@ -287,7 +297,7 @@ class IRCWebSocketGateway:
 
         # Check connection limits
         if len(self.connections) >= self.max_connections:
-            self.logger.warning(f"Connection refused from {client_ip} - server at capacity ({self.max_connections} connections)")
+            self.logger.warning(get_log_message("webchat_at_capacity", ip=client_ip, max=self.max_connections))
             try:
                 await websocket.send(json.dumps({
                     'type': 'error',
@@ -300,7 +310,7 @@ class IRCWebSocketGateway:
 
         # Check per-IP connection limits
         if self.ip_connection_count[client_ip] >= self.max_connections_per_ip:
-            self.logger.warning(f"Connection refused from {client_ip} - too many connections from this IP")
+            self.logger.warning(get_log_message("webchat_too_many_ip", ip=client_ip))
             try:
                 await websocket.send(json.dumps({
                     'type': 'error',
@@ -311,7 +321,7 @@ class IRCWebSocketGateway:
                 pass
             return
 
-        self.logger.info(f"New connection: {client_id} from {client_ip}")
+        self.logger.info(get_log_message("webchat_new_connection", client_id=client_id, ip=client_ip))
 
         irc_reader = None
         irc_writer = None
@@ -331,7 +341,7 @@ class IRCWebSocketGateway:
                     self.irc_host, self.irc_port
                 )
 
-            self.logger.info(f"Connected to IRC for client {client_id}")
+            self.logger.info(get_log_message("webchat_irc_connected", client_id=client_id))
 
             # Track connection
             self.connections[client_id] = {
@@ -360,7 +370,7 @@ class IRCWebSocketGateway:
                     pass
 
         except ConnectionRefusedError:
-            self.logger.error(f"IRC server refused connection for client {client_id}")
+            self.logger.error(get_log_message("webchat_irc_refused", client_id=client_id))
             try:
                 await websocket.send(json.dumps({
                     'type': 'error',
@@ -369,7 +379,7 @@ class IRCWebSocketGateway:
             except Exception:
                 pass
         except asyncio.TimeoutError:
-            self.logger.error(f"IRC connection timeout for client {client_id}")
+            self.logger.error(get_log_message("webchat_irc_timeout", client_id=client_id))
             try:
                 await websocket.send(json.dumps({
                     'type': 'error',
@@ -378,7 +388,7 @@ class IRCWebSocketGateway:
             except Exception:
                 pass
         except Exception as e:
-            self.logger.error(f"Error for client {client_id}: {type(e).__name__}")
+            self.logger.error(get_log_message("webchat_error", client_id=client_id, error_type=type(e).__name__))
             try:
                 await websocket.send(json.dumps({
                     'type': 'error',
@@ -406,7 +416,7 @@ class IRCWebSocketGateway:
                     del self.ip_connection_count[client_ip]
             self.rate_limiter.cleanup(client_id)
 
-            self.logger.info(f"Connection closed: {client_id}")
+            self.logger.info(get_log_message("webchat_closed", client_id=client_id))
 
     async def ws_to_irc(self, websocket, irc_writer, client_id):
         """Forward messages from WebSocket to IRC
@@ -420,7 +430,7 @@ class IRCWebSocketGateway:
             async for message in websocket:
                 # Rate limiting check
                 if not self.rate_limiter.check(client_id):
-                    self.logger.warning(f"[{client_id}] Rate limit exceeded")
+                    self.logger.warning(get_log_message("webchat_rate_limit", client_id=client_id))
                     await websocket.send(json.dumps({
                         'type': 'error',
                         'message': 'Sending messages too fast - please slow down'
@@ -459,7 +469,7 @@ class IRCWebSocketGateway:
                                 webirc_cmd = f"WEBIRC {self.webirc_pass} {self.webirc_gateway} {client_ip} {client_ip}"
                                 irc_writer.write(f"{webirc_cmd}\r\n".encode('utf-8'))
                                 conn['webirc_sent'] = True
-                                self.logger.info(f"[{client_id}] Sent WEBIRC for {client_ip}")
+                                self.logger.info(get_log_message("webchat_webirc_sent", client_id=client_id, ip=client_ip))
 
                             # Send connection commands
                             if password:
@@ -566,7 +576,7 @@ class IRCWebSocketGateway:
         except websockets.exceptions.ConnectionClosed:
             pass
         except Exception as e:
-            self.logger.error(f"[{client_id}] WS->IRC error: {type(e).__name__}")
+            self.logger.error(get_log_message("webchat_ws_irc_error", client_id=client_id, error_type=type(e).__name__))
 
     async def irc_to_ws(self, irc_reader, websocket, client_id):
         """Forward messages from IRC to WebSocket
@@ -588,7 +598,7 @@ class IRCWebSocketGateway:
 
                 # Buffer overflow protection
                 if len(buffer) > self.max_buffer_size:
-                    self.logger.warning(f"[{client_id}] Buffer overflow - disconnecting")
+                    self.logger.warning(get_log_message("webchat_buffer_overflow", client_id=client_id))
                     await websocket.send(json.dumps({
                         'type': 'error',
                         'message': 'Connection error - please reconnect'
@@ -618,7 +628,7 @@ class IRCWebSocketGateway:
         except websockets.exceptions.ConnectionClosed:
             pass
         except Exception as e:
-            self.logger.error(f"[{client_id}] IRC->WS error: {type(e).__name__}")
+            self.logger.error(get_log_message("webchat_irc_ws_error", client_id=client_id, error_type=type(e).__name__))
 
     def parse_irc_message(self, line):
         """Parse IRC message into structured format
@@ -744,9 +754,9 @@ async def main():
         config['ws_port'],
         ssl=ssl_context
     ):
-        gateway.logger.info(f"WebSocket gateway started: {config['ws_host']}:{config['ws_port']} -> IRC {config['irc_host']}:{config['irc_port']}")
-        gateway.logger.info(f"Max connections: {config['max_connections']} total, {config['max_connections_per_ip']} per IP")
-        gateway.logger.info(f"Rate limit: {config['max_messages_per_second']} messages/second")
+        gateway.logger.info(get_log_message("webchat_started", ws_host=config['ws_host'], ws_port=config['ws_port'], irc_host=config['irc_host'], irc_port=config['irc_port']))
+        gateway.logger.info(get_log_message("webchat_max_connections", total=config['max_connections'], per_ip=config['max_connections_per_ip']))
+        gateway.logger.info(get_log_message("webchat_rate_limit_config", rate=config['max_messages_per_second']))
         await stop.wait()
 
     gateway.logger.info("Gateway shutting down")

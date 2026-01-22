@@ -18,8 +18,8 @@ _IPV4_PATTERN = re.compile(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$')
 _IPV6_PATTERN = re.compile(r'^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}$|^::$|^::1$|^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$')
 _HOSTNAME_PATTERN = re.compile(r'^[\w-]+\.[\w.-]+$')
 
-# Nickname/username forbidden characters
-FORBIDDEN_CHARS = set('.+=#!@%&^$~:')
+# Nickname/username forbidden characters (includes space)
+FORBIDDEN_CHARS = set('.+=#!@%&^$~: ')
 
 # Channel name forbidden characters (similar to nicknames but allows # and &)
 CHANNEL_FORBIDDEN_CHARS = set('+=#!@%^$~, ')  # Note: & removed to allow local channels
@@ -524,6 +524,64 @@ def validate_key(key: str) -> str:
         return ""
 
     return key
+
+
+def validate_regex_pattern(pattern: str, max_length: int = 200) -> tuple:
+    """
+    Validate a regex pattern for safety (ReDoS protection).
+    Returns (valid, error_message).
+
+    Checks for:
+    - Maximum length
+    - Basic syntax validity
+    - Potentially dangerous patterns (excessive backtracking)
+
+    Args:
+        pattern: Regex pattern to validate
+        max_length: Maximum allowed pattern length
+
+    Returns:
+        tuple: (bool, str) - (is_valid, error_message or None)
+    """
+    if not pattern:
+        return False, "Pattern cannot be empty"
+
+    if len(pattern) > max_length:
+        return False, f"Pattern too long (max {max_length} characters)"
+
+    # Check for basic syntax validity
+    try:
+        re.compile(pattern)
+    except re.error as e:
+        return False, f"Invalid regex syntax: {e}"
+
+    # Check for potentially dangerous patterns that could cause ReDoS
+    # These are patterns with nested quantifiers or long repetitions
+    dangerous_patterns = [
+        r'\(\?[^)]*\+[^)]*\+',  # Nested + quantifiers
+        r'\(\?[^)]*\*[^)]*\*',  # Nested * quantifiers
+        r'\(\?[^)]*\{[^}]*\}[^)]*\{',  # Nested {} quantifiers
+        r'(\.\*){3,}',  # Too many .* in sequence
+        r'(\.\+){3,}',  # Too many .+ in sequence
+        r'\([^)]*\)\{[0-9]{3,}',  # Large repetition counts
+        r'\([^)]*\)\{[0-9]+,[0-9]{4,}\}',  # Very large max repetition
+    ]
+
+    for dangerous in dangerous_patterns:
+        if re.search(dangerous, pattern, re.IGNORECASE):
+            return False, "Pattern contains potentially dangerous constructs (could cause slow matching)"
+
+    # Count quantifiers - too many could be problematic
+    quantifier_count = len(re.findall(r'[\*\+\?]|\{[0-9,]+\}', pattern))
+    if quantifier_count > 10:
+        return False, "Pattern has too many quantifiers (max 10)"
+
+    # Check for excessive alternation
+    alternation_count = pattern.count('|')
+    if alternation_count > 20:
+        return False, "Pattern has too many alternations (max 20)"
+
+    return True, None
 
 
 def validate_raw_command(command: str) -> tuple:

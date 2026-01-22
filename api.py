@@ -30,6 +30,7 @@ from api_helpers import (
     validate_channel_name,
     validate_staff_level
 )
+from responses import get_log_message
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -161,10 +162,10 @@ def init_db_pool(pool_size=10):
     try:
         db_path = get_db_path()
         db_pool.init_pool(db_path, pool_size=pool_size)
-        logger.info(f"Database connection pool initialized: {db_path} (pool_size={pool_size})")
+        logger.info(get_log_message("api_pool_initialized", path=db_path, pool_size=pool_size))
         return True
     except Exception as e:
-        logger.error(f"Failed to initialize database pool: {e}")
+        logger.error(get_log_message("api_pool_init_failed", error=e))
         return False
 
 
@@ -173,7 +174,72 @@ try:
     init_db_pool()
 except Exception as e:
     # If pool init fails, log but don't crash - will fall back to direct connections
-    logger.warning(f"Connection pool initialization failed: {e}")
+    logger.warning(get_log_message("api_pool_init_warning", error=e))
+
+
+# ============================================================================
+# HEALTH CHECK
+# ============================================================================
+
+@api_error_handler
+def health_check():
+    """Health check endpoint for monitoring systems
+
+    Returns:
+        dict: Health status including database, status file, and pool stats
+    """
+    health = {
+        'healthy': True,
+        'checks': {},
+        'timestamp': int(time.time())
+    }
+
+    # Check 1: Database connectivity
+    try:
+        with db_pool.get_connection(timeout=2.0) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1")
+            cursor.fetchone()
+        health['checks']['database'] = {'status': 'ok', 'message': 'Connected'}
+    except Exception as e:
+        health['checks']['database'] = {'status': 'error', 'message': str(e)}
+        health['healthy'] = False
+
+    # Check 2: Status file freshness
+    try:
+        if os.path.exists(DEFAULT_STATUS):
+            with open(DEFAULT_STATUS, 'r') as f:
+                status = json.load(f)
+            age = time.time() - status.get('timestamp', 0)
+            if age < 60:
+                health['checks']['status_file'] = {'status': 'ok', 'message': f'Fresh ({int(age)}s old)'}
+            elif age < 300:
+                health['checks']['status_file'] = {'status': 'warning', 'message': f'Stale ({int(age)}s old)'}
+            else:
+                health['checks']['status_file'] = {'status': 'error', 'message': f'Very stale ({int(age)}s old)'}
+                health['healthy'] = False
+        else:
+            health['checks']['status_file'] = {'status': 'warning', 'message': 'Not found - server may not be running'}
+    except Exception as e:
+        health['checks']['status_file'] = {'status': 'error', 'message': str(e)}
+
+    # Check 3: Connection pool stats
+    try:
+        pool_stats = db_pool.get_pool_stats()
+        if pool_stats:
+            health['checks']['connection_pool'] = {
+                'status': 'ok',
+                'pool_size': pool_stats['pool_size'],
+                'available': pool_stats['available'],
+                'in_use': pool_stats['in_use']
+            }
+        else:
+            health['checks']['connection_pool'] = {'status': 'error', 'message': 'Pool not initialized'}
+            health['healthy'] = False
+    except Exception as e:
+        health['checks']['connection_pool'] = {'status': 'error', 'message': str(e)}
+
+    return health
 
 
 # ============================================================================
@@ -765,6 +831,7 @@ def send_mailbox_message(sender_nick, recipient_nick, message):
                 INSERT INTO registered_nicks (uuid, nickname, password_hash, registered_at, last_seen, registered_by)
                 VALUES (?, ?, ?, ?, ?, ?)
             """, (recipient_uuid, recipient_nick, "", now, now, "AUTO (mailbox)"))
+            logger.info(get_log_message("api_auto_nick_mailbox", nickname=recipient_nick, sender=sender_nick))
         else:
             recipient_uuid = recipient_row[0]
         sent_at = int(time.time())
@@ -907,10 +974,11 @@ def get_registered_channels(limit=50):
 
 @api_error_handler
 def get_staff_list():
-    """Get list of staff users"""
+    """Get list of staff users (optimized: 2 queries instead of N+1)"""
     with db_pool.get_connection() as conn:
         cursor = conn.cursor()
 
+        # Query 1: Get all staff members
         cursor.execute("""
             SELECT username, level, created_at, last_login, registered_nick, email, realname, force_realname
             FROM users
@@ -926,24 +994,34 @@ def get_staff_list():
                 END,
                 username
         """)
+        staff_rows = cursor.fetchall()
 
-        staff = []
+        # Query 2: Get all owned nicknames in one query
+        cursor.execute("""
+            SELECT registered_by, nickname
+            FROM registered_nicks
+            WHERE registered_by IS NOT NULL
+            ORDER BY registered_by, registered_at DESC
+        """)
+
+        # Build lookup dict: username -> [nicknames]
+        owned_nicks_map = {}
         for row in cursor.fetchall():
+            registered_by = row['registered_by']
+            if registered_by not in owned_nicks_map:
+                owned_nicks_map[registered_by] = []
+            owned_nicks_map[registered_by].append(row['nickname'])
+
+        # Combine results
+        staff = []
+        for row in staff_rows:
             username = row['username']
-
-            # Get all nicknames owned by this staff member
-            cursor.execute(
-                "SELECT nickname FROM registered_nicks WHERE registered_by = ? ORDER BY registered_at DESC",
-                (username,)
-            )
-            owned_nicknames = [r['nickname'] for r in cursor.fetchall()]
-
             staff.append({
                 'username': username,
                 'level': row['level'],
                 'created_at': row['created_at'],
                 'last_login': row['last_login'],
-                'owned_nicknames': owned_nicknames,
+                'owned_nicknames': owned_nicks_map.get(username, []),
                 'email': row['email'],
                 'realname': row['realname'],
                 'force_realname': bool(row['force_realname'])
@@ -1286,6 +1364,7 @@ def register_channel(channel_name, owner_nickname, topic=None, modes=None, onjoi
                     INSERT INTO registered_nicks (uuid, nickname, password_hash, registered_at, last_seen, registered_by)
                     VALUES (?, ?, ?, ?, ?, ?)
                 """, (service_uuid, proper_name, "", now_temp, now_temp, "AUTO (service account)"))
+                logger.info(get_log_message("api_auto_service_account", name=proper_name, channel=channel_name))
 
                 owner_uuid = service_uuid
             else:
@@ -1848,8 +1927,12 @@ def main():
     command = sys.argv[1]
     result = None
 
+    # Health check
+    if command == "health" or command == "health-check":
+        result = health_check()
+
     # Real-time status
-    if command == "realtime-status":
+    elif command == "realtime-status":
         result = get_realtime_status()
 
     # Statistics

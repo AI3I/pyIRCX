@@ -10,6 +10,8 @@ import logging
 from contextlib import contextmanager
 from queue import Queue, Empty
 
+from responses import get_log_message
+
 logger = logging.getLogger(__name__)
 
 
@@ -41,20 +43,20 @@ class ConnectionPool:
         self.lock = threading.Lock()
         self._initialized = False
 
-        logger.info(f"Initializing connection pool: {db_path} (size: {pool_size})")
+        logger.info(get_log_message("db_pool_init", path=db_path, size=pool_size))
 
         # Create initial pool of connections
         for i in range(pool_size):
             try:
                 conn = self._create_connection()
                 self.pool.put(conn)
-                logger.debug(f"Created connection {i+1}/{pool_size}")
+                logger.debug(get_log_message("db_pool_conn_created", num=i+1, total=pool_size))
             except Exception as e:
-                logger.error(f"Failed to create connection {i+1}: {e}")
+                logger.error(get_log_message("db_pool_conn_failed", num=i+1, error=e))
                 raise
 
         self._initialized = True
-        logger.info(f"Connection pool initialized with {pool_size} connections")
+        logger.info(get_log_message("db_pool_ready", size=pool_size))
 
     def _create_connection(self):
         """Create a new database connection with standard settings"""
@@ -100,7 +102,7 @@ class ConnectionPool:
             try:
                 conn = self.pool.get(timeout=timeout)
             except Empty:
-                logger.error(f"Connection pool exhausted (timeout={timeout}s)")
+                logger.error(get_log_message("db_pool_exhausted", timeout=timeout))
                 raise RuntimeError(f"No database connection available (pool size: {self.pool_size})")
 
             # Yield connection to caller
@@ -116,7 +118,7 @@ class ConnectionPool:
                     conn.rollback()
                     logger.debug("Transaction rolled back due to error")
                 except Exception as rollback_error:
-                    logger.error(f"Rollback failed: {rollback_error}")
+                    logger.error(get_log_message("db_pool_rollback_failed", error=rollback_error))
             raise
 
         finally:
@@ -125,14 +127,14 @@ class ConnectionPool:
                 try:
                     self.pool.put(conn, block=False)
                 except Exception as e:
-                    logger.error(f"Failed to return connection to pool: {e}")
+                    logger.error(get_log_message("db_pool_return_failed", error=e))
                     # Try to create a replacement connection
                     try:
                         new_conn = self._create_connection()
                         self.pool.put(new_conn, block=False)
                         logger.info("Created replacement connection")
                     except Exception as create_error:
-                        logger.error(f"Failed to create replacement connection: {create_error}")
+                        logger.error(get_log_message("db_pool_replacement_failed", error=create_error))
 
     def close_all(self):
         """Close all connections in the pool
@@ -150,9 +152,9 @@ class ConnectionPool:
             except Empty:
                 break
             except Exception as e:
-                logger.error(f"Error closing connection: {e}")
+                logger.error(get_log_message("db_pool_close_error", error=e))
 
-        logger.info(f"Closed {closed_count} connections")
+        logger.info(get_log_message("db_pool_closed", count=closed_count))
         self._initialized = False
 
     def get_stats(self):

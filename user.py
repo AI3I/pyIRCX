@@ -9,6 +9,9 @@ along with FloodProtection and RateLimiter utilities.
 import time
 import logging
 from collections import deque
+from datetime import datetime, timezone
+
+from responses import get_log_message
 
 # Will be set by pyircx.py after CONFIG is initialized
 CONFIG = None
@@ -63,7 +66,7 @@ class RateLimiter:
         'EVENT': 1.0,         # Staff monitoring
         'TRANSCRIPT': 2.0,    # Log access
         'STATS': 2.0,         # Server statistics
-        'WATCH': 1.0,         # Watch list
+        'MONITOR': 1.0,       # Monitor/Watch list
         'SILENCE': 1.0,       # Silence list
         'KILL': 2.0,          # Administrative kill
     }
@@ -92,7 +95,7 @@ class RateLimiter:
         'EVENT': 0.1,        # 10x faster (monitoring tool)
         'TRANSCRIPT': 0.1,   # 20x faster (log access)
         'STATS': 0.1,        # 20x faster (investigations)
-        'WATCH': 0.05,       # 20x faster
+        'MONITOR': 0.05,     # 20x faster
         'SILENCE': 0.05,     # 20x faster
         'KILL': 0.1,         # 20x faster (rapid response)
     }
@@ -160,11 +163,15 @@ class User:
         self.last_activity = int(time.time())
         self.staff_level = "USER"
         self.last_nick_change = 0  # Timestamp of last nick change
+        self.last_setname_change = 0  # Timestamp of last SETNAME change
         self.pending_mfa = None  # UUID of nick awaiting MFA verification
         self.pending_staff_auth = None  # Dict with username, level, timestamp for AUTH MFA
         self.watch_list = set()  # Nicknames this user is watching
         self.silence_list = set()  # Hostmask patterns to ignore
         self.disconnected = False  # Flag set when user is being disconnected
+        self.is_remote = False  # Set True for users from linked servers (avoids hasattr checks)
+        self.from_server = None  # Server name for remote users (set by linking.py)
+        self.server = None  # Server reference for routing (set by linking.py)
 
         # DNSBL and connection security
         self.dnsbl_listed = []  # List of DNSBLs this IP is on (if any)
@@ -189,6 +196,13 @@ class User:
 
     def get_mode_str(self):
         return "".join([k for k, v in self.modes.items() if v])
+
+    @property
+    def username_clean(self):
+        """Return username without leading ~ (cached on first access)."""
+        if not hasattr(self, '_username_clean'):
+            self._username_clean = self.username.lstrip('~')
+        return self._username_clean
 
     # Privilege helper methods
     def is_admin(self):
@@ -237,11 +251,14 @@ class User:
         return self.rate_limiter.check(cmd)
 
     async def send(self, msg):
-        """Send message to client with backpressure control"""
+        """Send message to client with backpressure control
+
+        IRCv3 server-time: If enabled, prepends @time tag to messages
+        """
         # Handle remote users (from linked servers) - route back through link
-        if hasattr(self, 'is_remote') and self.is_remote and hasattr(self, 'from_server'):
+        if self.is_remote and self.from_server:
             # This is a user from a remote server - route message back through link
-            if hasattr(self, 'server') and self.server and hasattr(self.server, 'link_manager'):
+            if self.server and hasattr(self.server, 'link_manager'):
                 link_manager = self.server.link_manager
                 if link_manager and link_manager.enabled:
                     # Find the server this user is from
@@ -254,6 +271,12 @@ class User:
 
         if self.is_virtual or not self.writer:
             return
+
+        # IRCv3 server-time: prepend timestamp to messages (not to CAP/numeric responses)
+        if 'server-time' in self.enabled_caps and not msg.startswith('@'):
+            timestamp = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
+            msg = f"@time={timestamp} {msg}"
+
         max_len = CONFIG.get('limits', 'msg_length', default=512) if CONFIG else 512
         if len(msg) > max_len:
             msg = msg[:max_len]
@@ -265,4 +288,4 @@ class User:
             # Client disconnected, mark for cleanup
             self.writer = None
         except Exception as e:
-            logger.error(f"Send error {self.nickname}: {e}")
+            logger.error(get_log_message("user_send_error", nickname=self.nickname, error=e))

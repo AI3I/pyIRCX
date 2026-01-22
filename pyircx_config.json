@@ -188,5 +188,18 @@
   "persistence": {
     "auto_save": true,
     "save_interval": 300
+  },
+
+  "messages": {
+    "default_type": "NOTICE",
+    "category_overrides": {
+      "help": "NOTICE",
+      "stats": "NOTICE",
+      "errors": "NOTICE",
+      "services": "PRIVMSG",
+      "staff": "NOTICE",
+      "config": "NOTICE",
+      "mfa": "NOTICE"
+    }
   }
 }

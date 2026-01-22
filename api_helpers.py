@@ -13,6 +13,8 @@ import time
 from collections import defaultdict
 from datetime import datetime, timedelta
 
+from responses import get_log_message
+
 logger = logging.getLogger(__name__)
 
 
@@ -57,7 +59,7 @@ def rate_limit(calls_per_minute=10):
 
             # Check if rate limit exceeded
             if len(_rate_limits[key]) >= calls_per_minute:
-                logger.warning(f"Rate limit exceeded for {key}")
+                logger.warning(get_log_message("rate_limit_exceeded", key=key))
                 raise ValueError(f"Too many attempts - please try again in a moment")
 
             # Record this call
@@ -108,11 +110,11 @@ def timed_cache(seconds=60):
             if cache_key in cache:
                 result, timestamp = cache[cache_key]
                 if now - timestamp < seconds:
-                    logger.debug(f"Cache hit for {func.__name__}")
+                    logger.debug(get_log_message("cache_hit", func=func.__name__))
                     return result
 
             # Cache miss or expired - call function
-            logger.debug(f"Cache miss for {func.__name__}")
+            logger.debug(get_log_message("cache_miss", func=func.__name__))
             result = func(*args, **kwargs)
             cache[cache_key] = (result, now)
 
@@ -158,7 +160,7 @@ def api_error_handler(func):
             return result
 
         except sqlite3.IntegrityError as e:
-            logger.error(f"{func.__name__} IntegrityError: {e}")
+            logger.error(get_log_message("api_integrity_error", func=func.__name__, error=e))
             return {
                 'success': False,
                 'error': f"Database integrity error: {str(e)}",
@@ -166,7 +168,7 @@ def api_error_handler(func):
             }
 
         except sqlite3.OperationalError as e:
-            logger.error(f"{func.__name__} OperationalError: {e}")
+            logger.error(get_log_message("api_operational_error", func=func.__name__, error=e))
             return {
                 'success': False,
                 'error': f"Database operational error: {str(e)}",
@@ -174,7 +176,7 @@ def api_error_handler(func):
             }
 
         except ValueError as e:
-            logger.error(f"{func.__name__} ValueError: {e}")
+            logger.error(get_log_message("api_value_error", func=func.__name__, error=e))
             return {
                 'success': False,
                 'error': str(e),
@@ -182,7 +184,7 @@ def api_error_handler(func):
             }
 
         except socket.timeout:
-            logger.error(f"{func.__name__} socket timeout")
+            logger.error(get_log_message("api_socket_timeout", func=func.__name__))
             return {
                 'success': False,
                 'error': 'Connection timeout',
@@ -190,7 +192,7 @@ def api_error_handler(func):
             }
 
         except ConnectionRefusedError:
-            logger.error(f"{func.__name__} connection refused")
+            logger.error(get_log_message("api_connection_refused", func=func.__name__))
             return {
                 'success': False,
                 'error': 'Connection refused - server may not be running',
@@ -198,7 +200,7 @@ def api_error_handler(func):
             }
 
         except Exception as e:
-            logger.error(f"{func.__name__} error: {e}", exc_info=True)
+            logger.error(get_log_message("api_generic_error", func=func.__name__, error=e), exc_info=True)
             return {
                 'success': False,
                 'error': str(e),
@@ -358,12 +360,12 @@ def send_irc_command(command, description="IRC command", server_status_func=None
 
         # Connect to IRC server
         sock.connect((host, port))
-        logger.debug(f"Connected to IRC server {host}:{port}")
+        logger.debug(get_log_message("api_connected", host=host, port=port))
 
         # Send command
         command_bytes = f"{command}\r\n".encode('utf-8')
         sock.send(command_bytes)
-        logger.info(f"{description}: {command}")
+        logger.info(get_log_message("api_command", description=description, command=command))
 
         # Receive response
         response = sock.recv(4096).decode('utf-8', errors='ignore')
@@ -378,7 +380,7 @@ def send_irc_command(command, description="IRC command", server_status_func=None
         }
 
     except socket.timeout:
-        logger.error(f"{description} - socket timeout")
+        logger.error(get_log_message("api_socket_timeout_cmd", description=description))
         return {
             'success': False,
             'error': 'Connection timeout',
@@ -386,7 +388,7 @@ def send_irc_command(command, description="IRC command", server_status_func=None
         }
 
     except ConnectionRefusedError:
-        logger.error(f"{description} - connection refused")
+        logger.error(get_log_message("api_connection_refused_cmd", description=description))
         return {
             'success': False,
             'error': 'Connection refused - server may not be running',
@@ -394,7 +396,7 @@ def send_irc_command(command, description="IRC command", server_status_func=None
         }
 
     except Exception as e:
-        logger.error(f"{description} error: {e}", exc_info=True)
+        logger.error(get_log_message("api_error_cmd", description=description, error=e), exc_info=True)
         return {
             'success': False,
             'error': str(e),
