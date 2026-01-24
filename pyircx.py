@@ -2435,7 +2435,7 @@ class pyIRCXServer:
             return
 
         # Case-insensitive user lookup for private messages
-        recipient = self.users.get(target)
+        recipient = self.get_user(target)
         if not recipient:
             # Try case-insensitive search
             target_lower = target.lower()
@@ -2792,7 +2792,7 @@ class pyIRCXServer:
 
             else:
                 # Direct message to user
-                target_user = self.users.get(target)
+                target_user = self.get_user(target)
                 if not target_user:
                     await user.send(self.get_reply("401", user, target=target))
                     continue
@@ -2928,7 +2928,7 @@ class pyIRCXServer:
             return
 
         # Check if target is a specific user (case-insensitive nickname match)
-        member = self.users.get(target)
+        member = self.get_user(target)
         if not member:
             # Try case-insensitive search
             target_lower = target.lower()
@@ -7837,7 +7837,7 @@ class pyIRCXServer:
                 self.watchers[nick_lower].add(user)
 
                 # Check if nick is currently online
-                online_user = self.users.get(nick_lower)
+                online_user = self.get_user(nick_lower)
                 if online_user and online_user.registered:
                     await user.send(self.get_reply("604", user, target=online_user.nickname, ident=online_user.username, host=online_user.host, signon=online_user.signon_time))
                 else:
@@ -7877,7 +7877,7 @@ class pyIRCXServer:
             elif target.upper() == 'S':
                 # Show status of all watched nicks
                 for nick_lower in user.watch_list:
-                    online_user = self.users.get(nick_lower)
+                    online_user = self.get_user(nick_lower)
                     if online_user and online_user.registered:
                         await user.send(self.get_reply("604", user, target=online_user.nickname, ident=online_user.username, host=online_user.host, signon=online_user.signon_time))
                     else:
@@ -8148,7 +8148,7 @@ class pyIRCXServer:
                 await user.send(self.get_reply("915", user, target=target_nick))
 
                 # If recipient is online and identified, notify them
-                target_user = self.users.get(target_nick.lower())
+                target_user = self.get_user(target_nick)
                 if target_user and target_user.has_mode('r'):
                     await target_user.send(self.get_reply("914", target_user, count=1))
 
@@ -8776,7 +8776,7 @@ class pyIRCXServer:
                 channel.broadcast(msg)
             else:
                 # Send to user
-                target_user = self.users.get(target)
+                target_user = self.get_user(target)
                 if not target_user:
                     await self._send_service_msg(entity_name, admin, "entity_user_not_found", target=target)
                     return
@@ -8806,7 +8806,7 @@ class pyIRCXServer:
                 channel.broadcast(msg)
             else:
                 # Send to user
-                target_user = self.users.get(target)
+                target_user = self.get_user(target)
                 if not target_user:
                     await self._send_service_msg(entity_name, admin, "entity_user_not_found", target=target)
                     return
@@ -8856,7 +8856,7 @@ class pyIRCXServer:
             nick = parts[1]
             reason = parts[2] if len(parts) > 2 else SERVER_MESSAGES['entity_kill_reason'].format(entity_name=entity_name)
 
-            target_user = self.users.get(nick)
+            target_user = self.get_user(nick)
             if not target_user:
                 await self._send_service_msg(entity_name, admin, "entity_user_not_found", target=nick)
                 return
@@ -9534,7 +9534,7 @@ class pyIRCXServer:
                 await self._send_service_msg("Messenger", user, "messenger_sent", target=target_nick)
 
                 # Notify if online, inform sender of delivery status
-                target = self.users.get(target_nick)
+                target = self.get_user(target_nick)
                 if target and not target.is_virtual:
                     await self._send_service_msg("Messenger", target, "messenger_new_message", sender=user.nickname)
                     await self._send_service_msg("Messenger", user, "messenger_user_online", target=target_nick)
@@ -9988,7 +9988,7 @@ class pyIRCXServer:
 
     async def _kill_user(self, staff, target_nick, reason):
         """Kill a single user by nickname"""
-        target = self.users.get(target_nick)
+        target = self.get_user(target_nick)
         if not target:
             await staff.send(self.get_reply("401", staff, target=target_nick))
             return
@@ -10513,7 +10513,7 @@ class pyIRCXServer:
             if not (user.is_staff()):
                 await user.send(self.get_reply("481", user, message=SERVER_MESSAGES['requires_staff'].format(command="GAG")))
                 return
-            target_user = self.users.get(target_nick)
+            target_user = self.get_user(target_nick)
             if not target_user:
                 await user.send(self.get_reply("401", user, target=target_nick))
                 return
