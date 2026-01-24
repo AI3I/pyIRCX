@@ -404,8 +404,8 @@ class pyIRCXServer:
     def _cache_config_values(self):
         """Cache frequently-accessed CONFIG values for performance."""
         self.db_path = CONFIG.get('database', 'path', default='pyircx.db')
-        self.is_services_hub = self.is_services_hub
-        self.services_mode = self.services_mode
+        self.services_mode = CONFIG.get('services', 'mode', default='local')
+        self.is_services_hub = CONFIG.get('services', 'is_services_hub', default=False)
         self.network_name = CONFIG.get('server', 'network', default='pyIRCX')
         self.system_nick = CONFIG.get('system', 'nick', default='System')
         self.servicebot_enabled = CONFIG.get('servicebot', 'enabled', default=True)
