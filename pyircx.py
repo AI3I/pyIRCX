@@ -3713,9 +3713,9 @@ class pyIRCXServer:
 
     def _generate_batch_id(self):
         """Generate a unique batch reference tag"""
-        IRCServer._batch_counter += 1
+        pyIRCXServer._batch_counter += 1
         # Use a simple incrementing counter with server name hash for uniqueness
-        return f"{IRCServer._batch_counter:x}"
+        return f"{pyIRCXServer._batch_counter:x}"
 
     async def start_batch(self, user, batch_type, *params):
         """Start a batch for a user if they support the batch capability
@@ -10143,11 +10143,11 @@ class pyIRCXServer:
                     elif char == 'z':
                         # +z cannot be set or unset manually (staff-controlled via GAG/UNGAG)
                         await user.send(self.get_reply("481", user, message=SERVER_MESSAGES['mode_z_staff_controlled']))
-                    elif char == 'i':
-                        # +i can be toggled by user
-                        user.set_mode('i', adding)
+                    elif char in ('i', 'b'):
+                        # +i (invisible) and +b (bot) can be toggled by user
+                        user.set_mode(char, adding)
                         sign = '+' if adding else '-'
-                        mode_msg = f":{user.nickname} MODE {user.nickname} :{sign}i"
+                        mode_msg = f":{user.nickname} MODE {user.nickname} :{sign}{char}"
                         await user.send(mode_msg)
                         # Propagate user MODE change to linked servers
                         if self.link_manager and self.link_manager.enabled:
