@@ -1591,7 +1591,12 @@ function sendMessage() {
                 if (args.length) queueCmd(args.join(' '));
                 break;
             case 'help': case 'h':
-                sysMsg('Commands: /join /part /msg /nick /me /topic /kick /ban /mode /owner /host /voice /invite /knock /whois /who /list /prop /access /whisper /away /quit /clear /raw', 'system');
+                // Send HELP to server (with optional topic argument)
+                queueCmd(args.length ? `HELP ${args.join(' ')}` : 'HELP');
+                break;
+            case 'commands':
+                // Local client commands list
+                sysMsg('Client commands: /join /part /msg /nick /me /topic /kick /ban /mode /owner /host /voice /invite /knock /whois /who /list /prop /access /whisper /away /quit /clear /raw /help /commands', 'system');
                 break;
             default:
                 queueCmd(text.slice(1));
