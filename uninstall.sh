@@ -175,35 +175,55 @@ else
     echo "Configuration directory not found"
 fi
 
-# Remove Cockpit module
+# Remove Web Admin Panel
 echo ""
-echo -e "${BLUE}Checking for Cockpit module...${NC}"
-COCKPIT_REMOVED=0
-
-# Check system-wide installation
-if [ -d /usr/share/cockpit/pyircx ]; then
-    read -p "Remove Cockpit web admin module (system-wide)? [y/N] " -n 1 -r
+echo -e "${BLUE}Checking for Web Admin Panel...${NC}"
+if [ -d /var/www/html/webadmin ]; then
+    read -p "Remove Web Admin Panel (/var/www/html/webadmin)? [y/N] " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        rm -rf /usr/share/cockpit/pyircx
-        echo -e "${GREEN}✓ Cockpit module removed (system-wide)${NC}"
-        COCKPIT_REMOVED=1
+        rm -rf /var/www/html/webadmin
+        echo -e "${GREEN}✓ Web Admin Panel removed${NC}"
+    else
+        echo "Keeping Web Admin Panel"
     fi
+else
+    echo "Web Admin Panel not found"
 fi
 
-# Check user installation (old location)
-if [ -d ~/.local/share/cockpit/pyircx ]; then
-    read -p "Remove Cockpit web admin module (user directory)? [y/N] " -n 1 -r
+# Remove WebChat frontend
+echo ""
+echo -e "${BLUE}Checking for WebChat frontend...${NC}"
+if [ -d /var/www/html/webchat ]; then
+    read -p "Remove WebChat frontend (/var/www/html/webchat)? [y/N] " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        rm -rf ~/.local/share/cockpit/pyircx
-        echo -e "${GREEN}✓ Cockpit module removed (user directory)${NC}"
-        COCKPIT_REMOVED=1
+        rm -rf /var/www/html/webchat
+        echo -e "${GREEN}✓ WebChat frontend removed${NC}"
+    else
+        echo "Keeping WebChat frontend"
     fi
+else
+    echo "WebChat frontend not found"
 fi
 
-if [ $COCKPIT_REMOVED -eq 0 ]; then
-    echo "Cockpit module not found"
+# Remove Polkit rules
+if [ -f /etc/polkit-1/rules.d/10-pyircx-admin.rules ]; then
+    echo ""
+    echo -e "${BLUE}Removing Polkit rules...${NC}"
+    rm -f /etc/polkit-1/rules.d/10-pyircx-admin.rules
+    systemctl reload polkit 2>/dev/null || true
+    echo -e "${GREEN}✓ Polkit rules removed${NC}"
+fi
+
+# Remove SELinux policy modules
+if command -v semodule &> /dev/null; then
+    echo ""
+    echo -e "${BLUE}Removing SELinux policy modules...${NC}"
+    semodule -r pyircx-httpd-systemd 2>/dev/null || true
+    semodule -r pyircx-httpd-journal-v3 2>/dev/null || true
+    semodule -r pyircx-httpd-reload 2>/dev/null || true
+    echo -e "${GREEN}✓ SELinux policy modules removed${NC}"
 fi
 
 # Remove service user and group
@@ -280,12 +300,13 @@ echo "  - aiosqlite"
 echo "  - bcrypt"
 echo "  - pyotp"
 echo "  - cryptography"
+echo "  - websockets (WebChat gateway)"
 echo ""
 echo -e "${YELLOW}Note: These packages may be used by other applications.${NC}"
 read -p "Remove Python packages? [y/N] " -n 1 -r
 echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
-    pip3 uninstall -y aiosqlite bcrypt pyotp cryptography 2>/dev/null || true
+    pip3 uninstall -y aiosqlite bcrypt pyotp cryptography websockets 2>/dev/null || true
     echo -e "${GREEN}✓ Python packages removed${NC}"
 else
     echo "Keeping Python packages"

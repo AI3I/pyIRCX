@@ -108,6 +108,23 @@ if [ -f "$INSTALL_DIR/pyircx.py" ]; then
 fi
 echo ""
 
+# Check for core modules
+NEEDS_CORE_MODULES=0
+CORE_MODULES=(channel.py config.py database.py help_text.py modes.py responses.py security.py service_bot.py ssl_manager.py user.py validation.py)
+MISSING_MODULES=()
+for module in "${CORE_MODULES[@]}"; do
+    if [ ! -f "$INSTALL_DIR/$module" ]; then
+        MISSING_MODULES+=("$module")
+    fi
+done
+
+if [ ${#MISSING_MODULES[@]} -gt 0 ]; then
+    echo -e "${YELLOW}✗ Missing core modules: ${MISSING_MODULES[*]}${NC}"
+    NEEDS_CORE_MODULES=1
+else
+    echo -e "${GREEN}✓ All core modules present${NC}"
+fi
+
 # Check for linking.py
 if [ ! -f "$INSTALL_DIR/linking.py" ]; then
     echo -e "${YELLOW}✗ Missing linking.py module${NC}"
@@ -192,7 +209,7 @@ if [ -d "$INSTALL_DIR/webchat" ]; then
 fi
 
 # Calculate total updates needed
-TOTAL_UPDATES=$((NEEDS_LINKING_PY + NEEDS_API_PY + NEEDS_SYSTEMD_UPDATE + NEEDS_WEB_ADMIN + NEEDS_SELINUX + NEEDS_POLKIT + NEEDS_APACHE_SETUP + NEEDS_WEBCHAT_UPDATE))
+TOTAL_UPDATES=$((NEEDS_CORE_MODULES + NEEDS_LINKING_PY + NEEDS_API_PY + NEEDS_SYSTEMD_UPDATE + NEEDS_WEB_ADMIN + NEEDS_SELINUX + NEEDS_POLKIT + NEEDS_APACHE_SETUP + NEEDS_WEBCHAT_UPDATE))
 
 echo ""
 if [ $TOTAL_UPDATES -eq 0 ]; then
@@ -233,10 +250,6 @@ mkdir -p "$BACKUP_DIR/opt" "$BACKUP_DIR/etc"
 cp -r "$INSTALL_DIR" "$BACKUP_DIR/opt/" 2>/dev/null || true
 cp -r "$CONFIG_DIR" "$BACKUP_DIR/etc/" 2>/dev/null || true
 cp /etc/systemd/system/pyircx.service "$BACKUP_DIR/" 2>/dev/null || true
-if [ -d /usr/share/cockpit/pyircx ]; then
-    mkdir -p "$BACKUP_DIR/cockpit"
-    cp -r /usr/share/cockpit/pyircx "$BACKUP_DIR/cockpit/" 2>/dev/null || true
-fi
 echo -e "${GREEN}✓ Backup created at: $BACKUP_DIR${NC}"
 
 # Update files
@@ -246,6 +259,14 @@ echo -e "${BLUE}Updating core files...${NC}"
 # Copy main scripts
 cp "$SCRIPT_DIR/pyircx.py" "$INSTALL_DIR/"
 echo -e "${GREEN}✓ Updated pyircx.py${NC}"
+
+# Copy core modules
+for module in channel.py config.py database.py help_text.py modes.py responses.py security.py service_bot.py ssl_manager.py user.py validation.py; do
+    if [ -f "$SCRIPT_DIR/$module" ]; then
+        cp "$SCRIPT_DIR/$module" "$INSTALL_DIR/"
+        echo -e "${GREEN}✓ Updated $module${NC}"
+    fi
+done
 
 if [ -f "$SCRIPT_DIR/linking.py" ]; then
     cp "$SCRIPT_DIR/linking.py" "$INSTALL_DIR/"
@@ -268,9 +289,6 @@ if [ $NEEDS_API_PY -eq 1 ]; then
     if [ -f "$SCRIPT_DIR/api.py" ]; then
         cp "$SCRIPT_DIR/api.py" "$INSTALL_DIR/"
         echo -e "${GREEN}✓ Installed api.py to /opt/pyircx${NC}"
-    elif [ -f /usr/share/cockpit/pyircx/api.py ]; then
-        cp /usr/share/cockpit/pyircx/api.py "$INSTALL_DIR/"
-        echo -e "${GREEN}✓ Moved api.py to /opt/pyircx${NC}"
     fi
 fi
 

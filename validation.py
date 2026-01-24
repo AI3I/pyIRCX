@@ -6,6 +6,8 @@ Consolidates validation logic used across pyircx.py, api_helpers.py, and webchat
 
 import re
 
+from responses import SERVER_MESSAGES
+
 # Will be set by pyircx.py after CONFIG is initialized
 CONFIG = None
 
@@ -61,16 +63,16 @@ def validate_nickname(nick: str, check_reserved=True) -> tuple:
     max_len = CONFIG.get('limits', 'max_nick_length', default=30) if CONFIG else MAX_NICKNAME_LENGTH
 
     if not nick or len(nick) > max_len:
-        return False, "Erroneous nickname"
+        return False, SERVER_MESSAGES['validate_nick_erroneous']
     if nick[0].isdigit():
-        return False, "Erroneous nickname"
+        return False, SERVER_MESSAGES['validate_nick_erroneous']
     if any(c in FORBIDDEN_CHARS for c in nick):
-        return False, "Erroneous nickname"
+        return False, SERVER_MESSAGES['validate_nick_erroneous']
     if _looks_like_ip_or_host(nick):
-        return False, "Erroneous nickname"
+        return False, SERVER_MESSAGES['validate_nick_erroneous']
     # Check reserved service names (can be disabled for internal use)
     if check_reserved and is_reserved_service(nick):
-        return False, "Nickname is reserved for services"
+        return False, SERVER_MESSAGES['validate_nick_reserved']
     return True, ""
 
 
@@ -88,11 +90,11 @@ def validate_username(username: str) -> tuple:
     max_len = CONFIG.get('limits', 'max_user_length', default=30) if CONFIG else MAX_USERNAME_LENGTH
 
     if not username or len(username) > max_len:
-        return False, "Invalid username"
+        return False, SERVER_MESSAGES['validate_user_invalid']
     if any(c in FORBIDDEN_CHARS for c in username):
-        return False, "Invalid username"
+        return False, SERVER_MESSAGES['validate_user_invalid']
     if _looks_like_ip_or_host(username):
-        return False, "Invalid username"
+        return False, SERVER_MESSAGES['validate_user_invalid']
     return True, ""
 
 
@@ -114,24 +116,24 @@ def validate_channel_name(name: str) -> tuple:
     max_len = CONFIG.get('limits', 'max_channel_length', default=50) if CONFIG else MAX_CHANNEL_LENGTH
 
     if not name:
-        return False, "No channel name specified"
+        return False, SERVER_MESSAGES['validate_chan_no_name']
     if not is_channel(name):
-        return False, "Channel name must start with # or &"
+        return False, SERVER_MESSAGES['validate_chan_bad_prefix']
     if len(name) > max_len:
-        return False, f"Channel name too long (max {max_len})"
+        return False, SERVER_MESSAGES['validate_chan_too_long'].format(max_len=max_len)
 
     # Check the part after prefix
     channel_part = name[1:]
     if not channel_part:
-        return False, "Channel name cannot be just a prefix"
+        return False, SERVER_MESSAGES['validate_chan_just_prefix']
     if channel_part[0].isdigit():
-        return False, "Channel name cannot start with a digit"
+        return False, SERVER_MESSAGES['validate_chan_starts_digit']
     # Check for forbidden chars (excluding the prefix)
     for c in channel_part:
         if c in CHANNEL_FORBIDDEN_CHARS or ord(c) < 32:
-            return False, "Channel name contains invalid characters"
+            return False, SERVER_MESSAGES['validate_chan_invalid_chars']
     if _looks_like_ip_or_host(channel_part):
-        return False, "Channel name cannot look like IP/hostname"
+        return False, SERVER_MESSAGES['validate_chan_looks_like_host']
 
     return True, ""
 
@@ -234,19 +236,19 @@ def validate_realname(realname: str) -> tuple:
         tuple: (bool, str) - (is_valid, error_message)
     """
     if not realname:
-        return False, "Please provide your real name"
+        return False, SERVER_MESSAGES['validate_realname_empty']
 
     if not isinstance(realname, str):
-        return False, "Real name must be text"
+        return False, SERVER_MESSAGES['validate_realname_not_text']
 
     if len(realname) > MAX_REALNAME_LENGTH:
-        return False, f"Real name is too long - please use {MAX_REALNAME_LENGTH} characters or less"
+        return False, SERVER_MESSAGES['validate_realname_too_long'].format(max_len=MAX_REALNAME_LENGTH)
 
     # Remove control characters except space
     sanitized = re.sub(r'[\x00-\x08\x0B-\x1F\x7F]', '', realname)
 
     if not sanitized.strip():
-        return False, "Please provide a valid real name"
+        return False, SERVER_MESSAGES['validate_realname_invalid']
 
     return True, ""
 
@@ -262,20 +264,20 @@ def validate_message(text: str) -> tuple:
         tuple: (bool, str) - (is_valid, error_message)
     """
     if not text:
-        return False, "Please provide a message to send"
+        return False, SERVER_MESSAGES['validate_msg_empty']
 
     if not isinstance(text, str):
-        return False, "Message must be text"
+        return False, SERVER_MESSAGES['validate_msg_not_text']
 
     if len(text) > MAX_MESSAGE_LENGTH:
-        return False, f"Message is too long - please keep it under {MAX_MESSAGE_LENGTH} characters"
+        return False, SERVER_MESSAGES['validate_msg_too_long'].format(max_len=MAX_MESSAGE_LENGTH)
 
     # Remove control characters except common IRC formatting codes and CTCP
     # Keep: 0x01 (CTCP), 0x02 (bold), 0x03 (color), 0x0F (reset), 0x1D (italic), 0x1F (underline)
     sanitized = re.sub(r'[\x00\x04-\x08\x0B-\x0E\x10-\x1C\x1E\x7F]', '', text)
 
     if not sanitized.strip():
-        return False, "Please provide a valid message"
+        return False, SERVER_MESSAGES['validate_msg_invalid']
 
     return True, ""
 
@@ -291,17 +293,17 @@ def validate_password(password: str) -> tuple:
         tuple: (bool, str) - (is_valid, error_message)
     """
     if not password:
-        return False, "Please provide a password"
+        return False, SERVER_MESSAGES['validate_pass_empty']
 
     if not isinstance(password, str):
-        return False, "Password must be text"
+        return False, SERVER_MESSAGES['validate_pass_not_text']
 
     if len(password) > MAX_PASSWORD_LENGTH:
-        return False, f"Password is too long - please use {MAX_PASSWORD_LENGTH} characters or less"
+        return False, SERVER_MESSAGES['validate_pass_too_long'].format(max_len=MAX_PASSWORD_LENGTH)
 
     # Passwords can't contain control characters or spaces
     if re.search(r'[\s\x00-\x1F\x7F]', password):
-        return False, "Password cannot contain spaces - please use a password without spaces"
+        return False, SERVER_MESSAGES['validate_pass_has_spaces']
 
     return True, ""
 
@@ -318,7 +320,7 @@ def validate_staff_level(level: str) -> tuple:
     """
     valid_levels = ['ADMIN', 'SYSOP', 'GUIDE', 'USER']
     if level not in valid_levels:
-        return False, f"Invalid staff level: '{level}'. Must be one of: {', '.join(valid_levels)}"
+        return False, SERVER_MESSAGES['validate_staff_level_invalid'].format(level=level, valid_levels=', '.join(valid_levels))
     return True, ""
 
 
@@ -544,16 +546,16 @@ def validate_regex_pattern(pattern: str, max_length: int = 200) -> tuple:
         tuple: (bool, str) - (is_valid, error_message or None)
     """
     if not pattern:
-        return False, "Pattern cannot be empty"
+        return False, SERVER_MESSAGES['validate_pattern_empty']
 
     if len(pattern) > max_length:
-        return False, f"Pattern too long (max {max_length} characters)"
+        return False, SERVER_MESSAGES['validate_pattern_too_long'].format(max_len=max_length)
 
     # Check for basic syntax validity
     try:
         re.compile(pattern)
     except re.error as e:
-        return False, f"Invalid regex syntax: {e}"
+        return False, SERVER_MESSAGES['validate_pattern_bad_regex'].format(error=e)
 
     # Check for potentially dangerous patterns that could cause ReDoS
     # These are patterns with nested quantifiers or long repetitions
@@ -569,17 +571,17 @@ def validate_regex_pattern(pattern: str, max_length: int = 200) -> tuple:
 
     for dangerous in dangerous_patterns:
         if re.search(dangerous, pattern, re.IGNORECASE):
-            return False, "Pattern contains potentially dangerous constructs (could cause slow matching)"
+            return False, SERVER_MESSAGES['validate_pattern_dangerous']
 
     # Count quantifiers - too many could be problematic
     quantifier_count = len(re.findall(r'[\*\+\?]|\{[0-9,]+\}', pattern))
     if quantifier_count > 10:
-        return False, "Pattern has too many quantifiers (max 10)"
+        return False, SERVER_MESSAGES['validate_pattern_too_many_quantifiers']
 
     # Check for excessive alternation
     alternation_count = pattern.count('|')
     if alternation_count > 20:
-        return False, "Pattern has too many alternations (max 20)"
+        return False, SERVER_MESSAGES['validate_pattern_too_many_alternations']
 
     return True, None
 
@@ -596,24 +598,24 @@ def validate_raw_command(command: str) -> tuple:
         tuple: (bool, str) - (is_valid, error_message)
     """
     if not command:
-        return False, "Please provide a command"
+        return False, SERVER_MESSAGES['validate_cmd_empty']
 
     if not isinstance(command, str):
-        return False, "Command must be text"
+        return False, SERVER_MESSAGES['validate_cmd_not_text']
 
     command = command.strip()
 
     if len(command) > MAX_MESSAGE_LENGTH:
-        return False, f"Command is too long - please keep it under {MAX_MESSAGE_LENGTH} characters"
+        return False, SERVER_MESSAGES['validate_cmd_too_long'].format(max_len=MAX_MESSAGE_LENGTH)
 
     # Cannot contain newlines or carriage returns (command injection prevention)
     if re.search(r'[\r\n]', command):
-        return False, "Invalid command - please use a single-line command"
+        return False, SERVER_MESSAGES['validate_cmd_multiline']
 
     # Extract command name (first word, case-insensitive)
     cmd_parts = command.split()
     if not cmd_parts:
-        return False, "Please provide a valid command"
+        return False, SERVER_MESSAGES['validate_cmd_invalid']
 
     cmd_name = cmd_parts[0].upper()
 
@@ -629,7 +631,7 @@ def validate_raw_command(command: str) -> tuple:
     ]
 
     if cmd_name in dangerous_commands:
-        return False, f"Command '{cmd_name}' is not allowed via raw interface"
+        return False, SERVER_MESSAGES['validate_cmd_blocked'].format(cmd_name=cmd_name)
 
     return True, ""
 

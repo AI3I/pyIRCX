@@ -1136,9 +1136,9 @@ async def test_staff_list():
     await admin.disconnect()
 
 
-@runner.test("STAFF ADD/DEL Command", requires_level="ADMIN")
+@runner.test("STAFF ADD/DELETE Command", requires_level="ADMIN")
 async def test_staff_add_del():
-    """Test STAFF ADD creates account and STAFF DEL removes it"""
+    """Test STAFF ADD creates account and STAFF DELETE removes it"""
     admin = IRCTestClient("test_staff_add")
     await admin.connect("StaffAddAdmin", username=ADMIN_CONFIG['username'], password=ADMIN_CONFIG['password'])
     await asyncio.sleep(0.3)
@@ -1155,13 +1155,13 @@ async def test_staff_add_del():
 
     # Delete the account
     admin.buffer.clear()
-    await admin.send_raw("STAFF DEL teststaff")
+    await admin.send_raw("STAFF DELETE teststaff")
     await asyncio.sleep(0.3)
     await admin.read_lines()
 
     del_success = any("deleted" in line.lower() for line in admin.buffer)
-    print(f"   STAFF DEL success: {del_success}")
-    assert del_success, "STAFF DEL should remove account"
+    print(f"   STAFF DELETE success: {del_success}")
+    assert del_success, "STAFF DELETE should remove account"
 
     await admin.disconnect()
 
@@ -1187,7 +1187,7 @@ async def test_staff_set():
     print(f"   STAFF SET success: {set_success}")
 
     # Clean up
-    await admin.send_raw("STAFF DEL leveltest")
+    await admin.send_raw("STAFF DELETE leveltest")
     await asyncio.sleep(0.2)
 
     await admin.disconnect()

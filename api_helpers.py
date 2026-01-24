@@ -13,7 +13,7 @@ import time
 from collections import defaultdict
 from datetime import datetime, timedelta
 
-from responses import get_log_message
+from responses import get_log_message, SERVER_MESSAGES
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +60,7 @@ def rate_limit(calls_per_minute=10):
             # Check if rate limit exceeded
             if len(_rate_limits[key]) >= calls_per_minute:
                 logger.warning(get_log_message("rate_limit_exceeded", key=key))
-                raise ValueError(f"Too many attempts - please try again in a moment")
+                raise ValueError(SERVER_MESSAGES['api_rate_limit_exceeded'])
 
             # Record this call
             _rate_limits[key].append(now)
@@ -163,7 +163,7 @@ def api_error_handler(func):
             logger.error(get_log_message("api_integrity_error", func=func.__name__, error=e))
             return {
                 'success': False,
-                'error': f"Database integrity error: {str(e)}",
+                'error': SERVER_MESSAGES['api_db_integrity_error'].format(error=str(e)),
                 'error_type': 'integrity'
             }
 
@@ -171,7 +171,7 @@ def api_error_handler(func):
             logger.error(get_log_message("api_operational_error", func=func.__name__, error=e))
             return {
                 'success': False,
-                'error': f"Database operational error: {str(e)}",
+                'error': SERVER_MESSAGES['api_db_operational_error'].format(error=str(e)),
                 'error_type': 'operational'
             }
 
@@ -187,7 +187,7 @@ def api_error_handler(func):
             logger.error(get_log_message("api_socket_timeout", func=func.__name__))
             return {
                 'success': False,
-                'error': 'Connection timeout',
+                'error': SERVER_MESSAGES['api_connection_timeout'],
                 'error_type': 'timeout'
             }
 
@@ -195,7 +195,7 @@ def api_error_handler(func):
             logger.error(get_log_message("api_connection_refused", func=func.__name__))
             return {
                 'success': False,
-                'error': 'Connection refused - server may not be running',
+                'error': SERVER_MESSAGES['api_connection_refused'],
                 'error_type': 'connection'
             }
 
@@ -226,8 +226,8 @@ def validate_access_type(access_type):
     valid_types = ['GRANT', 'DENY', 'OWNER', 'HOST', 'VOICE']
     if access_type not in valid_types:
         raise ValueError(
-            f"Invalid access_type: '{access_type}'. "
-            f"Must be one of: {', '.join(valid_types)}"
+            SERVER_MESSAGES['api_invalid_access_type'].format(
+                access_type=access_type, valid_types=', '.join(valid_types))
         )
 
 
@@ -243,16 +243,16 @@ def validate_pattern(pattern, min_length=1, max_length=255):
         ValueError: If pattern is invalid
     """
     if not pattern:
-        raise ValueError("Please provide a pattern (e.g., nick!*@*.com)")
+        raise ValueError(SERVER_MESSAGES['api_pattern_required'])
 
     if not isinstance(pattern, str):
-        raise ValueError("Pattern must be a text string")
+        raise ValueError(SERVER_MESSAGES['api_pattern_not_string'])
 
     if len(pattern) < min_length:
-        raise ValueError(f"Pattern must be at least {min_length} character(s) long")
+        raise ValueError(SERVER_MESSAGES['api_pattern_too_short'].format(min_length=min_length))
 
     if len(pattern) > max_length:
-        raise ValueError(f"Pattern must not exceed {max_length} characters")
+        raise ValueError(SERVER_MESSAGES['api_pattern_too_long'].format(max_length=max_length))
 
 
 def validate_timeout(timeout):
@@ -265,10 +265,10 @@ def validate_timeout(timeout):
         ValueError: If timeout is invalid
     """
     if not isinstance(timeout, int):
-        raise ValueError("Timeout must be an integer")
+        raise ValueError(SERVER_MESSAGES['api_timeout_not_integer'])
 
     if timeout < 0:
-        raise ValueError("Timeout cannot be negative")
+        raise ValueError(SERVER_MESSAGES['api_timeout_negative'])
 
 
 # Import validation functions from centralized validation module
@@ -344,7 +344,7 @@ def send_irc_command(command, description="IRC command", server_status_func=None
             if not status.get('running'):
                 return {
                     'success': False,
-                    'error': 'IRC server not running',
+                    'error': SERVER_MESSAGES['api_irc_server_not_running'],
                     'response': ''
                 }
             host = status.get('host', '127.0.0.1')
@@ -383,7 +383,7 @@ def send_irc_command(command, description="IRC command", server_status_func=None
         logger.error(get_log_message("api_socket_timeout_cmd", description=description))
         return {
             'success': False,
-            'error': 'Connection timeout',
+            'error': SERVER_MESSAGES['api_connection_timeout'],
             'response': ''
         }
 
@@ -391,7 +391,7 @@ def send_irc_command(command, description="IRC command", server_status_func=None
         logger.error(get_log_message("api_connection_refused_cmd", description=description))
         return {
             'success': False,
-            'error': 'Connection refused - server may not be running',
+            'error': SERVER_MESSAGES['api_connection_refused'],
             'response': ''
         }
 

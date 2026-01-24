@@ -21,7 +21,7 @@ import time
 import logging
 from typing import Dict, Set, Optional, Tuple
 
-from responses import get_log_message
+from responses import SERVER_MESSAGES, get_log_message
 
 logger = logging.getLogger(__name__)
 
@@ -123,18 +123,18 @@ class ServerLinkManager:
         """
         # Standalone servers don't link
         if my_role == 'standalone':
-            return False, "This server is configured as standalone (linking disabled)"
+            return False, SERVER_MESSAGES['link_standalone_local']
 
         if remote_role == 'standalone':
-            return False, f"Remote server is configured as standalone"
+            return False, SERVER_MESSAGES['link_standalone_remote']
 
         # Trunk-to-Trunk not allowed (prevents complex hierarchies)
         if my_role == 'trunk' and remote_role == 'trunk':
-            return False, "Trunk-to-Trunk linking not allowed (would create multi-tier topology)"
+            return False, SERVER_MESSAGES['link_trunk_to_trunk']
 
         # Branch-to-Branch not allowed
         if my_role == 'branch' and remote_role == 'branch':
-            return False, "Branch-to-Branch linking not allowed (branches must connect to trunk)"
+            return False, SERVER_MESSAGES['link_branch_to_branch']
 
         # Trunk can link to branch
         if my_role == 'trunk' and remote_role == 'branch':
@@ -145,14 +145,14 @@ class ServerLinkManager:
             return True, ""
 
         # Anything else is invalid
-        return False, f"Invalid role combination: {my_role} <-> {remote_role}"
+        return False, SERVER_MESSAGES['link_invalid_role_combo'].format(my_role=my_role, remote_role=remote_role)
 
     async def _validate_version(self, line: str, remote_name: str, writer: asyncio.StreamWriter) -> bool:
         """Validate remote server version"""
         parts = line.split()
         if len(parts) < 2 or parts[0] != 'VERSION':
             logger.error(get_log_message("link_invalid_version", server=remote_name, line=line))
-            await self.send_to_writer(writer, f"ERROR :Invalid VERSION response")
+            await self.send_to_writer(writer, f"ERROR :{SERVER_MESSAGES['link_error_invalid_version']}")
             writer.close()
             return False
 
@@ -173,8 +173,7 @@ class ServerLinkManager:
             logger.error(get_log_message("link_version_mismatch", server=remote_name, remote_ver=remote_version, local_ver=PYIRCX_VERSION))
             await self.send_to_writer(
                 writer,
-                f"ERROR :Version mismatch. Remote: {remote_version}, Local: {PYIRCX_VERSION}. "
-                f"Versions must match exactly. Please upgrade/downgrade to match."
+                f"ERROR :{SERVER_MESSAGES['link_error_version_mismatch'].format(remote_version=remote_version, local_version=PYIRCX_VERSION)}"
             )
             writer.close()
             return False
@@ -184,8 +183,7 @@ class ServerLinkManager:
             logger.error(get_log_message("link_proto_mismatch", server=remote_name, remote_proto=remote_proto, local_proto=LINKING_PROTOCOL_VERSION))
             await self.send_to_writer(
                 writer,
-                f"ERROR :Incompatible linking protocol {remote_proto}. "
-                f"Required: {LINKING_PROTOCOL_VERSION}"
+                f"ERROR :{SERVER_MESSAGES['link_error_incompatible_proto'].format(remote_proto=remote_proto, required_proto=LINKING_PROTOCOL_VERSION)}"
             )
             writer.close()
             return False
@@ -198,7 +196,7 @@ class ServerLinkManager:
         parts = line.split()
         if len(parts) < 2 or parts[0] != 'TIMESYNC':
             logger.error(get_log_message("link_invalid_timesync", server=remote_name, line=line))
-            await self.send_to_writer(writer, f"ERROR :Invalid TIMESYNC response")
+            await self.send_to_writer(writer, f"ERROR :{SERVER_MESSAGES['link_error_invalid_timesync']}")
             writer.close()
             return None
 
@@ -214,8 +212,7 @@ class ServerLinkManager:
                 logger.error(get_log_message("link_clock_skew_reject", server=remote_name, delta=time_delta, limit=MAX_CLOCK_SKEW))
                 await self.send_to_writer(
                     writer,
-                    f"ERROR :Clock skew {time_delta}s exceeds {MAX_CLOCK_SKEW}s limit. "
-                    f"Synchronize clocks with NTP (same time source recommended)."
+                    f"ERROR :{SERVER_MESSAGES['link_error_clock_skew'].format(delta=time_delta, limit=MAX_CLOCK_SKEW)}"
                 )
                 writer.close()
                 return None
@@ -229,7 +226,7 @@ class ServerLinkManager:
 
         except (ValueError, IndexError) as e:
             logger.error(get_log_message("link_timesync_error", server=remote_name, error=e))
-            await self.send_to_writer(writer, f"ERROR :Invalid TIMESYNC format")
+            await self.send_to_writer(writer, f"ERROR :{SERVER_MESSAGES['link_error_timesync_format']}")
             writer.close()
             return None
 
@@ -257,7 +254,7 @@ class ServerLinkManager:
     async def start(self):
         """Start the linking subsystem"""
         if not self.enabled:
-            logger.info("Server linking disabled in config")
+            logger.info(get_log_message("link_disabled_config"))
             return
 
         # Start listening for incoming server connections
@@ -276,7 +273,7 @@ class ServerLinkManager:
 
             # Start ping monitoring task
             self.monitor_task = asyncio.create_task(self._monitor_links())
-            logger.info("Link monitoring task started")
+            logger.info(get_log_message("link_monitor_started"))
 
         except Exception as e:
             logger.error(get_log_message("link_start_failed", error=e))
@@ -298,7 +295,7 @@ class ServerLinkManager:
 
     async def _monitor_links(self):
         """Monitor all server links for health (ping/pong)"""
-        logger.info("Link health monitoring started")
+        logger.info(get_log_message("link_health_monitoring_started"))
         try:
             while True:
                 await asyncio.sleep(self.ping_interval)
@@ -319,15 +316,12 @@ class ServerLinkManager:
                     # Check if server has timed out (no PONG received)
                     time_since_pong = current_time - server.last_pong
                     if time_since_pong >= self.ping_timeout:
-                        logger.error(
-                            f"Server {servername} ping timeout "
-                            f"({time_since_pong:.0f}s since last PONG, limit {self.ping_timeout}s)"
-                        )
+                        logger.error(get_log_message("link_ping_timeout", server=servername, time_since_pong=f"{time_since_pong:.0f}", timeout=self.ping_timeout))
                         # Trigger split handling
                         await self.handle_server_split(server)
 
         except asyncio.CancelledError:
-            logger.info("Link monitoring task cancelled")
+            logger.info(get_log_message("link_monitor_cancelled"))
         except Exception as e:
             logger.error(get_log_message("link_monitoring_error", error=e))
 
@@ -359,7 +353,7 @@ class ServerLinkManager:
                     # Authenticate
                     if not await self.authenticate_server(servername, password):
                         logger.warning(get_log_message("link_auth_failed", server=servername, peer=peer))
-                        await self.send_to_writer(writer, f"ERROR :Bad password")
+                        await self.send_to_writer(writer, f"ERROR :{SERVER_MESSAGES['link_error_bad_password']}")
                         writer.close()
                         return
 
@@ -367,7 +361,7 @@ class ServerLinkManager:
                     valid, error_msg = self.validate_link_roles(self.server_role, remote_role)
                     if not valid:
                         logger.warning(get_log_message("link_role_validation_failed", server=servername, error=error_msg))
-                        await self.send_to_writer(writer, f"ERROR :Link rejected - {error_msg}")
+                        await self.send_to_writer(writer, f"ERROR :{SERVER_MESSAGES['link_error_rejected'].format(error_msg=error_msg)}")
                         writer.close()
                         return
 
@@ -414,7 +408,7 @@ class ServerLinkManager:
                     asyncio.create_task(self.read_server_messages(server, reader))
 
                     logger.info(get_log_message("link_server_linked", server=servername))
-                    await self.broadcast_to_local(f":{self.irc_server.servername} NOTICE * :Server {servername} linked", exclude_modes='a')
+                    await self.broadcast_to_local(f":{self.irc_server.servername} NOTICE * :{SERVER_MESSAGES['link_notice_server_linked'].format(server=servername)}", exclude_modes='a')
                     break
 
         except asyncio.TimeoutError:
@@ -495,7 +489,7 @@ class ServerLinkManager:
                 asyncio.create_task(self.read_server_messages(server, reader))
 
                 logger.info(get_log_message("link_successfully_linked", server=remote_name))
-                await self.broadcast_to_local(f":{self.irc_server.servername} NOTICE * :Linked to server {remote_name}", exclude_modes='a')
+                await self.broadcast_to_local(f":{self.irc_server.servername} NOTICE * :{SERVER_MESSAGES['link_notice_linked_to'].format(server=remote_name)}", exclude_modes='a')
 
                 # Reset reconnect attempts on successful connection
                 self.reconnect_attempts[servername] = 0
@@ -888,14 +882,14 @@ class ServerLinkManager:
         user = self.irc_server.users_by_nick.get(nickname)
         if not user:
             logger.warning(get_log_message("link_staffcmd_unknown_user", nickname=nickname, server=server.name))
-            await server.send(f"STAFFREPLY {nickname} :Error: User not found on trunk")
+            await server.send(f"STAFFREPLY {nickname} :{SERVER_MESSAGES['link_staff_user_not_found']}")
             return
 
         try:
             if subcmd == 'PASSWORD':
                 # STAFFCMD <nickname> PASSWORD <old_pass> <new_pass>
                 if len(parts) < 5:
-                    await server.send(f"STAFFREPLY {nickname} :Error: Invalid PASSWORD command syntax")
+                    await server.send(f"STAFFREPLY {nickname} :{SERVER_MESSAGES['link_staff_password_syntax']}")
                     return
 
                 old_pass = parts[3]
@@ -908,11 +902,11 @@ class ServerLinkManager:
                     async with db.execute("SELECT password_hash FROM users WHERE username=?", (user.username,)) as cursor:
                         row = await cursor.fetchone()
                         if not row:
-                            await server.send(f"STAFFREPLY {nickname} :Error: Staff account not found")
+                            await server.send(f"STAFFREPLY {nickname} :{SERVER_MESSAGES['link_staff_account_not_found']}")
                             return
 
                         if not await check_password_async(old_pass, row[0]):
-                            await server.send(f"STAFFREPLY {nickname} :Error: Incorrect current password")
+                            await server.send(f"STAFFREPLY {nickname} :{SERVER_MESSAGES['link_staff_wrong_password']}")
                             return
 
                         # Hash new password
@@ -926,18 +920,18 @@ class ServerLinkManager:
                         await self.broadcast_to_servers(f"STAFFUPDATE {user.username} PASSWORD_HASH {new_hash}")
 
                         # Send success reply
-                        await server.send(f"STAFFREPLY {nickname} :Password changed successfully")
+                        await server.send(f"STAFFREPLY {nickname} :{SERVER_MESSAGES['link_staff_password_changed']}")
                         logger.info(get_log_message("link_staff_password_changed", username=user.username, server=server.name))
 
             elif subcmd == 'ADD':
                 # STAFFCMD <nickname> ADD <new_username> <password> <level>
                 if len(parts) < 6:
-                    await server.send(f"STAFFREPLY {nickname} :Error: Invalid ADD command syntax")
+                    await server.send(f"STAFFREPLY {nickname} :{SERVER_MESSAGES['link_staff_add_syntax']}")
                     return
 
                 # Check if user has permission (ADMIN only)
                 if user.staff_level != 'ADMIN':
-                    await server.send(f"STAFFREPLY {nickname} :Error: Permission denied (ADMIN only)")
+                    await server.send(f"STAFFREPLY {nickname} :{SERVER_MESSAGES['link_staff_permission_denied']}")
                     return
 
                 new_username = parts[3]
@@ -945,7 +939,7 @@ class ServerLinkManager:
                 level = parts[5].upper()
 
                 if level not in ['ADMIN', 'SYSOP', 'GUIDE']:
-                    await server.send(f"STAFFREPLY {nickname} :Error: Invalid staff level (must be ADMIN, SYSOP, or GUIDE)")
+                    await server.send(f"STAFFREPLY {nickname} :{SERVER_MESSAGES['link_staff_invalid_level']}")
                     return
 
                 from pyircx import hash_password_async
@@ -954,7 +948,7 @@ class ServerLinkManager:
                     # Check if username exists
                     async with db.execute("SELECT username FROM users WHERE username=?", (new_username,)) as cursor:
                         if await cursor.fetchone():
-                            await server.send(f"STAFFREPLY {nickname} :Error: Username {new_username} already exists")
+                            await server.send(f"STAFFREPLY {nickname} :{SERVER_MESSAGES['link_staff_username_exists'].format(username=new_username)}")
                             return
 
                     # Create staff account
@@ -967,18 +961,18 @@ class ServerLinkManager:
                     await self.broadcast_to_servers(f"STAFFUPDATE {new_username} ADDED {level} {password_hash}")
 
                     # Send success reply
-                    await server.send(f"STAFFREPLY {nickname} :Staff account {new_username} created with level {level}")
+                    await server.send(f"STAFFREPLY {nickname} :{SERVER_MESSAGES['link_staff_account_created'].format(username=new_username, level=level)}")
                     logger.info(get_log_message("link_staff_account_added", new_username=new_username, level=level, by_user=user.username, server=server.name))
 
             elif subcmd == 'REMOVE':
                 # STAFFCMD <nickname> REMOVE <username>
                 if len(parts) < 4:
-                    await server.send(f"STAFFREPLY {nickname} :Error: Invalid REMOVE command syntax")
+                    await server.send(f"STAFFREPLY {nickname} :{SERVER_MESSAGES['link_staff_remove_syntax']}")
                     return
 
                 # Check if user has permission (ADMIN only)
                 if user.staff_level != 'ADMIN':
-                    await server.send(f"STAFFREPLY {nickname} :Error: Permission denied (ADMIN only)")
+                    await server.send(f"STAFFREPLY {nickname} :{SERVER_MESSAGES['link_staff_permission_denied']}")
                     return
 
                 target_username = parts[3]
@@ -987,12 +981,12 @@ class ServerLinkManager:
                     # Check if username exists
                     async with db.execute("SELECT username FROM users WHERE username=?", (target_username,)) as cursor:
                         if not await cursor.fetchone():
-                            await server.send(f"STAFFREPLY {nickname} :Error: Staff account {target_username} not found")
+                            await server.send(f"STAFFREPLY {nickname} :{SERVER_MESSAGES['link_staff_account_not_found_named'].format(username=target_username)}")
                             return
 
                     # Prevent self-removal
                     if target_username == user.username:
-                        await server.send(f"STAFFREPLY {nickname} :Error: Cannot remove your own staff account")
+                        await server.send(f"STAFFREPLY {nickname} :{SERVER_MESSAGES['link_staff_cannot_self_remove']}")
                         return
 
                     # Remove staff account
@@ -1003,32 +997,32 @@ class ServerLinkManager:
                     await self.broadcast_to_servers(f"STAFFUPDATE {target_username} REMOVED")
 
                     # Send success reply
-                    await server.send(f"STAFFREPLY {nickname} :Staff account {target_username} removed")
+                    await server.send(f"STAFFREPLY {nickname} :{SERVER_MESSAGES['link_staff_account_removed'].format(username=target_username)}")
                     logger.info(get_log_message("link_staff_account_removed", target_username=target_username, by_user=user.username, server=server.name))
 
             elif subcmd == 'LEVEL':
                 # STAFFCMD <nickname> LEVEL <username> <new_level>
                 if len(parts) < 5:
-                    await server.send(f"STAFFREPLY {nickname} :Error: Invalid LEVEL command syntax")
+                    await server.send(f"STAFFREPLY {nickname} :{SERVER_MESSAGES['link_staff_level_syntax']}")
                     return
 
                 # Check if user has permission (ADMIN only)
                 if user.staff_level != 'ADMIN':
-                    await server.send(f"STAFFREPLY {nickname} :Error: Permission denied (ADMIN only)")
+                    await server.send(f"STAFFREPLY {nickname} :{SERVER_MESSAGES['link_staff_permission_denied']}")
                     return
 
                 target_username = parts[3]
                 new_level = parts[4].upper()
 
                 if new_level not in ['ADMIN', 'SYSOP', 'GUIDE', 'USER']:
-                    await server.send(f"STAFFREPLY {nickname} :Error: Invalid level (must be ADMIN, SYSOP, GUIDE, or USER)")
+                    await server.send(f"STAFFREPLY {nickname} :{SERVER_MESSAGES['link_staff_invalid_level_full']}")
                     return
 
                 async with self.irc_server.db_pool.connection() as db:
                     # Check if username exists
                     async with db.execute("SELECT username FROM users WHERE username=?", (target_username,)) as cursor:
                         if not await cursor.fetchone():
-                            await server.send(f"STAFFREPLY {nickname} :Error: Staff account {target_username} not found")
+                            await server.send(f"STAFFREPLY {nickname} :{SERVER_MESSAGES['link_staff_account_not_found_named'].format(username=target_username)}")
                             return
 
                     # Update level
@@ -1039,15 +1033,15 @@ class ServerLinkManager:
                     await self.broadcast_to_servers(f"STAFFUPDATE {target_username} LEVEL {new_level}")
 
                     # Send success reply
-                    await server.send(f"STAFFREPLY {nickname} :Staff level for {target_username} changed to {new_level}")
+                    await server.send(f"STAFFREPLY {nickname} :{SERVER_MESSAGES['link_staff_level_changed'].format(username=target_username, level=new_level)}")
                     logger.info(get_log_message("link_staff_level_changed", target_username=target_username, new_level=new_level, by_user=user.username, server=server.name))
 
             else:
-                await server.send(f"STAFFREPLY {nickname} :Error: Unknown staff command {subcmd}")
+                await server.send(f"STAFFREPLY {nickname} :{SERVER_MESSAGES['link_staff_unknown_command'].format(command=subcmd)}")
 
         except Exception as e:
             logger.error(get_log_message("link_staffcmd_error", subcmd=subcmd, server=server.name, error=e))
-            await server.send(f"STAFFREPLY {nickname} :Error: Command failed - {e}")
+            await server.send(f"STAFFREPLY {nickname} :{SERVER_MESSAGES['link_staff_command_failed'].format(error=e)}")
 
     async def handle_staff_update(self, server: LinkedServer, parts: list):
         """Handle STAFFUPDATE broadcast from trunk (branch only)"""
@@ -1133,7 +1127,7 @@ class ServerLinkManager:
         user = self.irc_server.users_by_nick.get(nickname)
         if not user:
             logger.warning(get_log_message("link_regcmd_unknown_user", nickname=nickname, server=server.name))
-            await server.send(f"REGREPLY {nickname} :Error: User not found on trunk")
+            await server.send(f"REGREPLY {nickname} :{SERVER_MESSAGES['link_reg_user_not_found']}")
             return
 
         try:
@@ -1144,7 +1138,7 @@ class ServerLinkManager:
             if subcmd == 'REGISTER_NICK':
                 # REGCMD <nickname> REGISTER_NICK <account> <password> <email>
                 if len(parts) < 6:
-                    await server.send(f"REGREPLY {nickname} :Error: Invalid REGISTER syntax")
+                    await server.send(f"REGREPLY {nickname} :{SERVER_MESSAGES['link_reg_register_syntax']}")
                     return
 
                 account = parts[3]
@@ -1156,7 +1150,7 @@ class ServerLinkManager:
                 async with self.irc_server.db_pool.connection() as db:
                     async with db.execute("SELECT uuid FROM registered_nicks WHERE nickname = ?", (account,)) as cursor:
                         if await cursor.fetchone():
-                            await server.send(f"REGREPLY {nickname} :Error: Nickname {account} is already registered")
+                            await server.send(f"REGREPLY {nickname} :{SERVER_MESSAGES['link_reg_nick_already_registered'].format(account=account)}")
                             return
 
                     # Register nickname
@@ -1174,13 +1168,13 @@ class ServerLinkManager:
                     await self.broadcast_to_servers(f"REGUPDATE REGISTERED {nickname}")
 
                     # Send success reply
-                    await server.send(f"REGREPLY {nickname} :Nickname {account} has been registered")
+                    await server.send(f"REGREPLY {nickname} :{SERVER_MESSAGES['link_reg_nick_registered'].format(account=account)}")
                     logger.info(get_log_message("link_nick_registered", account=account, server=server.name))
 
             elif subcmd == 'UNREGISTER_NICK':
                 # REGCMD <nickname> UNREGISTER_NICK <account>
                 if len(parts) < 4:
-                    await server.send(f"REGREPLY {nickname} :Error: Invalid UNREGISTER syntax")
+                    await server.send(f"REGREPLY {nickname} :{SERVER_MESSAGES['link_reg_unregister_syntax']}")
                     return
 
                 account = parts[3]
@@ -1193,13 +1187,13 @@ class ServerLinkManager:
                     await self.broadcast_to_servers(f"REGUPDATE UNREGISTERED {nickname}")
 
                     # Send success reply
-                    await server.send(f"REGREPLY {nickname} :Nickname {account} has been unregistered")
+                    await server.send(f"REGREPLY {nickname} :{SERVER_MESSAGES['link_reg_nick_unregistered'].format(account=account)}")
                     logger.info(get_log_message("link_nick_unregistered", account=account, server=server.name))
 
             elif subcmd == 'IDENTIFY':
                 # REGCMD <nickname> IDENTIFY <account> <password>
                 if len(parts) < 5:
-                    await server.send(f"REGREPLY {nickname} :Error: Invalid IDENTIFY syntax")
+                    await server.send(f"REGREPLY {nickname} :{SERVER_MESSAGES['link_reg_identify_syntax']}")
                     return
 
                 account = parts[3]
@@ -1210,7 +1204,7 @@ class ServerLinkManager:
                                          (account,)) as cursor:
                         row = await cursor.fetchone()
                         if not row:
-                            await server.send(f"REGREPLY {nickname} :Error: Nickname {account} is not registered")
+                            await server.send(f"REGREPLY {nickname} :{SERVER_MESSAGES['link_reg_nick_not_registered'].format(account=account)}")
                             return
 
                         nick_uuid, password_hash, mfa_enabled, mfa_secret = row
@@ -1218,7 +1212,7 @@ class ServerLinkManager:
                         if await check_password_async(password, password_hash):
                             if mfa_enabled and mfa_secret:
                                 # MFA required - can't complete via proxy yet
-                                await server.send(f"REGREPLY {nickname} :Error: MFA-protected accounts must identify on trunk server")
+                                await server.send(f"REGREPLY {nickname} :{SERVER_MESSAGES['link_reg_mfa_trunk_only']}")
                                 return
 
                             # Update last_seen
@@ -1230,15 +1224,15 @@ class ServerLinkManager:
                             await self.broadcast_to_servers(f"REGUPDATE IDENTIFIED {nickname}")
 
                             # Send success reply
-                            await server.send(f"REGREPLY {nickname} :You are now identified as {account}")
+                            await server.send(f"REGREPLY {nickname} :{SERVER_MESSAGES['link_reg_identified'].format(account=account)}")
                             logger.info(get_log_message("link_nick_identified", account=account, server=server.name))
                         else:
-                            await server.send(f"REGREPLY {nickname} :Error: Incorrect password")
+                            await server.send(f"REGREPLY {nickname} :{SERVER_MESSAGES['link_reg_wrong_password']}")
 
             elif subcmd == 'REGISTER_CHANNEL':
                 # REGCMD <nickname> REGISTER_CHANNEL <channel> <password>
                 if len(parts) < 5:
-                    await server.send(f"REGREPLY {nickname} :Error: Invalid channel REGISTER syntax")
+                    await server.send(f"REGREPLY {nickname} :{SERVER_MESSAGES['link_reg_channel_register_syntax']}")
                     return
 
                 chan_name = parts[3]
@@ -1250,7 +1244,7 @@ class ServerLinkManager:
                     async with db.execute("SELECT uuid FROM registered_channels WHERE channel_name = ?",
                                          (chan_name,)) as cursor:
                         if await cursor.fetchone():
-                            await server.send(f"REGREPLY {nickname} :Error: Channel {chan_name} is already registered")
+                            await server.send(f"REGREPLY {nickname} :{SERVER_MESSAGES['link_reg_channel_already_registered'].format(channel=chan_name)}")
                             return
 
                     # Get user's registered_nicks uuid
@@ -1258,7 +1252,7 @@ class ServerLinkManager:
                                          (nickname,)) as cursor:
                         nick_row = await cursor.fetchone()
                         if not nick_row:
-                            await server.send(f"REGREPLY {nickname} :Error: You must be identified to register a channel")
+                            await server.send(f"REGREPLY {nickname} :{SERVER_MESSAGES['link_reg_must_identify']}")
                             return
                         owner_uuid = nick_row[0]
 
@@ -1274,13 +1268,13 @@ class ServerLinkManager:
                     await db.commit()
 
                     # Send success reply
-                    await server.send(f"REGREPLY {nickname} :Channel {chan_name} has been registered")
+                    await server.send(f"REGREPLY {nickname} :{SERVER_MESSAGES['link_reg_channel_registered'].format(channel=chan_name)}")
                     logger.info(get_log_message("link_channel_registered", channel=chan_name, nickname=nickname, server=server.name))
 
             elif subcmd == 'UNREGISTER_CHANNEL':
                 # REGCMD <nickname> UNREGISTER_CHANNEL <channel>
                 if len(parts) < 4:
-                    await server.send(f"REGREPLY {nickname} :Error: Invalid channel UNREGISTER syntax")
+                    await server.send(f"REGREPLY {nickname} :{SERVER_MESSAGES['link_reg_channel_unregister_syntax']}")
                     return
 
                 chan_name = parts[3]
@@ -1291,7 +1285,7 @@ class ServerLinkManager:
                                          (chan_name,)) as cursor:
                         chan_row = await cursor.fetchone()
                         if not chan_row:
-                            await server.send(f"REGREPLY {nickname} :Error: Channel {chan_name} is not registered")
+                            await server.send(f"REGREPLY {nickname} :{SERVER_MESSAGES['link_reg_channel_not_registered'].format(channel=chan_name)}")
                             return
 
                     # Verify ownership (admins can bypass)
@@ -1300,7 +1294,7 @@ class ServerLinkManager:
                                              (nickname,)) as cursor:
                             nick_row = await cursor.fetchone()
                             if not nick_row or nick_row[0] != chan_row[0]:
-                                await server.send(f"REGREPLY {nickname} :Error: You don't own channel {chan_name}")
+                                await server.send(f"REGREPLY {nickname} :{SERVER_MESSAGES['link_reg_channel_not_owner'].format(channel=chan_name)}")
                                 return
 
                     # Unregister channel
@@ -1308,13 +1302,13 @@ class ServerLinkManager:
                     await db.commit()
 
                     # Send success reply
-                    await server.send(f"REGREPLY {nickname} :Channel {chan_name} has been unregistered")
+                    await server.send(f"REGREPLY {nickname} :{SERVER_MESSAGES['link_reg_channel_unregistered'].format(channel=chan_name)}")
                     logger.info(get_log_message("link_channel_unregistered", channel=chan_name, nickname=nickname, server=server.name))
 
             elif subcmd == 'CHGPASS':
                 # REGCMD <nickname> CHGPASS <old_password> <new_password>
                 if len(parts) < 5:
-                    await server.send(f"REGREPLY {nickname} :Error: Invalid CHGPASS syntax")
+                    await server.send(f"REGREPLY {nickname} :{SERVER_MESSAGES['link_reg_chgpass_syntax']}")
                     return
 
                 old_pass = parts[3]
@@ -1326,12 +1320,12 @@ class ServerLinkManager:
                                          (nickname,)) as cursor:
                         row = await cursor.fetchone()
                         if not row:
-                            await server.send(f"REGREPLY {nickname} :Error: Nickname not registered")
+                            await server.send(f"REGREPLY {nickname} :{SERVER_MESSAGES['link_reg_nick_not_registered_pass']}")
                             return
 
                         # Verify old password
                         if not await check_password_async(old_pass, row[0]):
-                            await server.send(f"REGREPLY {nickname} :Error: Incorrect password")
+                            await server.send(f"REGREPLY {nickname} :{SERVER_MESSAGES['link_reg_wrong_password']}")
                             return
 
                         # Update password
@@ -1341,15 +1335,15 @@ class ServerLinkManager:
                         await db.commit()
 
                         # Send success reply
-                        await server.send(f"REGREPLY {nickname} :Password changed successfully")
+                        await server.send(f"REGREPLY {nickname} :{SERVER_MESSAGES['link_reg_password_changed']}")
                         logger.info(get_log_message("link_chgpass", nickname=nickname, server=server.name))
 
             else:
-                await server.send(f"REGREPLY {nickname} :Error: Unknown registration command {subcmd}")
+                await server.send(f"REGREPLY {nickname} :{SERVER_MESSAGES['link_reg_unknown_command'].format(command=subcmd)}")
 
         except Exception as e:
             logger.error(get_log_message("link_regcmd_error", subcmd=subcmd, server=server.name, error=e))
-            await server.send(f"REGREPLY {nickname} :Error: Command failed - {e}")
+            await server.send(f"REGREPLY {nickname} :{SERVER_MESSAGES['link_reg_command_failed'].format(error=e)}")
 
     async def handle_registration_update(self, server: LinkedServer, parts: list):
         """Handle REGUPDATE broadcast from trunk (branch only)"""
@@ -1413,7 +1407,7 @@ class ServerLinkManager:
         user = self.irc_server.users_by_nick.get(nickname)
         if not user:
             logger.warning(get_log_message("link_memocmd_unknown_user", nickname=nickname, server=server.name))
-            await server.send(f"MEMOREPLY {nickname} :Error: User not found on trunk")
+            await server.send(f"MEMOREPLY {nickname} :{SERVER_MESSAGES['link_memo_user_not_found']}")
             return
 
         try:
@@ -1422,7 +1416,7 @@ class ServerLinkManager:
             if subcmd == 'SEND':
                 # MEMOCMD <nickname> SEND <target> :<message>
                 if len(parts) < 5:
-                    await server.send(f"MEMOREPLY {nickname} :Error: Invalid MEMO SEND syntax")
+                    await server.send(f"MEMOREPLY {nickname} :{SERVER_MESSAGES['link_memo_send_syntax']}")
                     return
 
                 target_nick = parts[3]
@@ -1433,7 +1427,7 @@ class ServerLinkManager:
                     async with db.execute("SELECT uuid FROM registered_nicks WHERE nickname = ?",
                                          (target_nick,)) as cursor:
                         if not await cursor.fetchone():
-                            await server.send(f"MEMOREPLY {nickname} :Error: Nickname {target_nick} is not registered")
+                            await server.send(f"MEMOREPLY {nickname} :{SERVER_MESSAGES['link_memo_target_not_registered'].format(target=target_nick)}")
                             return
 
                     # Store memo
@@ -1444,7 +1438,7 @@ class ServerLinkManager:
                     await db.commit()
 
                     # Send success reply
-                    await server.send(f"MEMOREPLY {nickname} :Memo sent to {target_nick}")
+                    await server.send(f"MEMOREPLY {nickname} :{SERVER_MESSAGES['link_memo_sent'].format(target=target_nick)}")
                     logger.info(get_log_message("link_memo_sent", sender=nickname, recipient=target_nick, server=server.name))
 
                     # If recipient is online and identified, notify them
@@ -1454,12 +1448,12 @@ class ServerLinkManager:
                         if hasattr(target_user, 'from_server') and target_user.from_server:
                             target_server = self.servers.get(target_user.from_server)
                             if target_server:
-                                await target_server.send(f"MEMOREPLY {target_nick} :You have a new memo from {nickname}. Use MEMO READ to view.")
+                                await target_server.send(f"MEMOREPLY {target_nick} :{SERVER_MESSAGES['link_memo_new_notification'].format(nickname=nickname)}")
                         else:
                             # User on trunk
-                            await target_user.send(f":{self.irc_server.servername} NOTICE {target_nick} :You have a new memo from {nickname}. Use MEMO READ to view.")
+                            await target_user.send(f":{self.irc_server.servername} NOTICE {target_nick} :{SERVER_MESSAGES['link_memo_new_notification'].format(nickname=nickname)}")
 
-            elif subcmd == 'LIST':
+            elif subcmd in ('LIST', 'L'):
                 # MEMOCMD <nickname> LIST
                 async with self.irc_server.db_pool.connection() as db:
                     async with db.execute("""
@@ -1469,15 +1463,15 @@ class ServerLinkManager:
                         memos = await cursor.fetchall()
 
                     if not memos:
-                        await server.send(f"MEMOREPLY {nickname} :You have no memos")
+                        await server.send(f"MEMOREPLY {nickname} :{SERVER_MESSAGES['link_memo_no_memos']}")
                     else:
-                        await server.send(f"MEMOREPLY {nickname} :You have {len(memos)} memo(s):")
+                        await server.send(f"MEMOREPLY {nickname} :{SERVER_MESSAGES['link_memo_count'].format(count=len(memos))}")
                         for mid, sender, sent_at, is_read in memos:
                             timestamp = time.strftime("%Y-%m-%d %H:%M", time.localtime(sent_at))
-                            read_status = "[READ]" if is_read else "[NEW]"
-                            await server.send(f"MEMOREPLY {nickname} :  #{mid} from {sender} {read_status} ({timestamp})")
+                            read_status = SERVER_MESSAGES['link_memo_status_read'] if is_read else SERVER_MESSAGES['link_memo_status_new']
+                            await server.send(f"MEMOREPLY {nickname} :{SERVER_MESSAGES['link_memo_list_entry'].format(id=mid, sender=sender, status=read_status, timestamp=timestamp)}")
 
-            elif subcmd == 'READ':
+            elif subcmd in ('READ', 'R'):
                 # MEMOCMD <nickname> READ [memo_id]
                 memo_id = None
                 if len(parts) > 3 and parts[3].isdigit():
@@ -1491,7 +1485,7 @@ class ServerLinkManager:
                         """, (nickname.lower(), memo_id)) as cursor:
                             row = await cursor.fetchone()
                         if not row:
-                            await server.send(f"MEMOREPLY {nickname} :Memo #{memo_id} not found")
+                            await server.send(f"MEMOREPLY {nickname} :{SERVER_MESSAGES['link_memo_not_found'].format(id=memo_id)}")
                             return
                         memos = [row]
                     else:
@@ -1503,12 +1497,12 @@ class ServerLinkManager:
                             memos = await cursor.fetchall()
 
                     if not memos:
-                        await server.send(f"MEMOREPLY {nickname} :No unread memos")
+                        await server.send(f"MEMOREPLY {nickname} :{SERVER_MESSAGES['link_memo_no_unread']}")
                         return
 
                     for mid, sender, message, sent_at in memos:
                         timestamp = time.strftime("%Y-%m-%d %H:%M", time.localtime(sent_at))
-                        await server.send(f"MEMOREPLY {nickname} :Memo #{mid} from {sender} ({timestamp}):")
+                        await server.send(f"MEMOREPLY {nickname} :{SERVER_MESSAGES['link_memo_read_header'].format(id=mid, sender=sender, timestamp=timestamp)}")
                         await server.send(f"MEMOREPLY {nickname} :{message}")
 
                     # Mark as read
@@ -1517,10 +1511,10 @@ class ServerLinkManager:
                     await db.execute(f"UPDATE memos SET read = 1 WHERE id IN ({placeholders})", ids)
                     await db.commit()
 
-            elif subcmd == 'DEL':
-                # MEMOCMD <nickname> DEL <id|ALL>
+            elif subcmd in ('DELETE', 'DEL', 'D'):
+                # MEMOCMD <nickname> DELETE <id|ALL>
                 if len(parts) < 4:
-                    await server.send(f"MEMOREPLY {nickname} :Error: Invalid MEMO DEL syntax")
+                    await server.send(f"MEMOREPLY {nickname} :{SERVER_MESSAGES['link_memo_delete_syntax']}")
                     return
 
                 target = parts[3]
@@ -1529,24 +1523,24 @@ class ServerLinkManager:
                     if target.upper() == "ALL":
                         await db.execute("DELETE FROM memos WHERE recipient = ?", (nickname.lower(),))
                         await db.commit()
-                        await server.send(f"MEMOREPLY {nickname} :All memos deleted")
+                        await server.send(f"MEMOREPLY {nickname} :{SERVER_MESSAGES['link_memo_all_deleted']}")
                     elif target.isdigit():
                         cursor = await db.execute("DELETE FROM memos WHERE recipient = ? AND id = ?",
                                                  (nickname.lower(), int(target)))
                         await db.commit()
                         if cursor.rowcount > 0:
-                            await server.send(f"MEMOREPLY {nickname} :Memo #{target} deleted")
+                            await server.send(f"MEMOREPLY {nickname} :{SERVER_MESSAGES['link_memo_deleted'].format(id=target)}")
                         else:
-                            await server.send(f"MEMOREPLY {nickname} :Memo #{target} not found")
+                            await server.send(f"MEMOREPLY {nickname} :{SERVER_MESSAGES['link_memo_not_found'].format(id=target)}")
                     else:
-                        await server.send(f"MEMOREPLY {nickname} :Error: Invalid memo ID")
+                        await server.send(f"MEMOREPLY {nickname} :{SERVER_MESSAGES['link_memo_invalid_id']}")
 
             else:
-                await server.send(f"MEMOREPLY {nickname} :Error: Unknown memo command {subcmd}")
+                await server.send(f"MEMOREPLY {nickname} :{SERVER_MESSAGES['link_memo_unknown_command'].format(command=subcmd)}")
 
         except Exception as e:
             logger.error(get_log_message("link_memocmd_error", subcmd=subcmd, server=server.name, error=e))
-            await server.send(f"MEMOREPLY {nickname} :Error: Command failed - {e}")
+            await server.send(f"MEMOREPLY {nickname} :{SERVER_MESSAGES['link_memo_command_failed'].format(error=e)}")
 
     async def handle_memo_reply(self, server: LinkedServer, parts: list):
         """Handle MEMOREPLY from trunk to user on branch (branch only)"""
@@ -2539,7 +2533,7 @@ class ServerLinkManager:
 
         # Notify local users
         await self.broadcast_to_local(
-            f":{self.irc_server.servername} NOTICE * :Server {server.name} has split",
+            f":{self.irc_server.servername} NOTICE * :{SERVER_MESSAGES['link_notice_server_split'].format(server=server.name)}",
             exclude_modes='a'
         )
 
@@ -2603,7 +2597,7 @@ class ServerLinkManager:
         """Get the services hub server connection"""
         hub_name = CONFIG.get('services', 'hub_server')
         if not hub_name:
-            logger.debug("No hub_server configured in services")
+            logger.debug(get_log_message("link_no_hub_configured"))
             return None
 
         trunk = self.servers.get(hub_name)
@@ -2628,7 +2622,7 @@ class ServerLinkManager:
             if hub:
                 logger.warning(get_log_message("link_trunk_not_direct", hub_name=hub.name, is_direct=hub.is_direct))
             else:
-                logger.warning("No trunk server found for service routing")
+                logger.warning(get_log_message("link_no_trunk_routing"))
         return False
 
     def is_service_user(self, nickname: str) -> bool:

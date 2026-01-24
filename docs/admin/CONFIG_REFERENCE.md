@@ -181,6 +181,19 @@ Connection and resource limits.
 
 ---
 
+### limits.max_users_per_channel
+**Type:** Integer
+**Default:** `500`
+**Description:** Maximum number of users allowed in any single channel
+
+**How it works:**
+- Acts as a server-wide cap on the channel mode +l (user limit)
+- If a user sets +l higher than this value, it is silently capped
+- On channel join, enforces both the channel's +l limit and this server cap
+- Staff members can bypass the limit to join full channels
+
+---
+
 ### limits.max_nick_length
 **Type:** Integer
 **Default:** `30`
@@ -219,7 +232,42 @@ Connection and resource limits.
 ### limits.max_away_length
 **Type:** Integer
 **Default:** `200`
-**Description:** Maximum away message length
+**Description:** Maximum away message length. Advertised as AWAYLEN in ISUPPORT (005). Messages exceeding this limit are silently truncated.
+
+---
+
+### limits.max_kick_length
+**Type:** Integer
+**Default:** `390`
+**Description:** Maximum kick reason length. Advertised as KICKLEN in ISUPPORT (005).
+
+---
+
+### limits.max_monitor
+**Type:** Integer
+**Default:** `100`
+**Description:** Maximum entries in a user's MONITOR/WATCH list. Advertised as MONITOR in ISUPPORT (005). When the limit is reached, new entries are rejected with ERR_MONLISTFULL (734).
+
+---
+
+### limits.max_silence
+**Type:** Integer
+**Default:** `100`
+**Description:** Maximum entries in a user's SILENCE list. Advertised as SILENCE in ISUPPORT (005). When the limit is reached, new entries are rejected with a server NOTICE.
+
+---
+
+### limits.max_targets
+**Type:** Integer
+**Default:** `1`
+**Description:** Maximum number of targets allowed in a single PRIVMSG or NOTICE command. Advertised as MAXTARGETS in ISUPPORT (005).
+
+---
+
+### limits.max_chathistory
+**Type:** Integer
+**Default:** `100`
+**Description:** Maximum number of messages returned by the CHATHISTORY command. Advertised as CHATHISTORY in ISUPPORT (005). Clients can request up to this many messages per CHATHISTORY query. Requires channels to have +y (transcript) mode enabled.
 
 ---
 
@@ -965,6 +1013,33 @@ Click "Reload Server" button
 3. Reduce `services.servicebot_count` if using too much CPU
 4. Enable database backups less frequently
 5. Lower log level to WARNING or ERROR
+
+## IRCv3 Capabilities
+
+The server advertises the following IRCv3 capabilities via `CAP LS`:
+
+| Capability | Description |
+|-----------|-------------|
+| `sasl` | SASL authentication (PLAIN mechanism) |
+| `multi-prefix` | Show all prefix modes in NAMES/WHO |
+| `away-notify` | Notify when users go away |
+| `account-notify` | Notify on account changes |
+| `account-tag` | Include sender's account in message tags |
+| `extended-join` | Extended JOIN with account info |
+| `server-time` | Message timestamps (@time tag) |
+| `userhost-in-names` | Full hostmask in NAMES |
+| `cap-notify` | Notify of cap changes |
+| `echo-message` | Echo sent messages back to sender |
+| `invite-notify` | Notify channel members of INVITEs |
+| `chghost` | Notify when user's host changes |
+| `setname` | Allow users to change realname |
+| `batch` | Group related messages |
+| `message-tags` | Full client-only tag relay with server-generated msgid/account/bot tags |
+| `labeled-response` | Correlate replies with commands via label tag |
+| `standard-replies` | FAIL/WARN/NOTE structured error messages |
+| `draft/chathistory` | Channel history playback (requires +y mode) |
+
+**ISUPPORT tokens (005):** `UTF8ONLY`, `BOT=b`, `CHATHISTORY=<max>`
 
 ## See Also
 

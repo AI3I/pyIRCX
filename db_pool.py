@@ -10,7 +10,7 @@ import logging
 from contextlib import contextmanager
 from queue import Queue, Empty
 
-from responses import get_log_message
+from responses import get_log_message, SERVER_MESSAGES
 
 logger = logging.getLogger(__name__)
 
@@ -94,7 +94,7 @@ class ConnectionPool:
                 cursor.execute("SELECT * FROM users")
         """
         if not self._initialized:
-            raise RuntimeError("Connection pool not initialized")
+            raise RuntimeError(SERVER_MESSAGES['db_pool_not_initialized'])
 
         conn = None
         try:
@@ -103,7 +103,7 @@ class ConnectionPool:
                 conn = self.pool.get(timeout=timeout)
             except Empty:
                 logger.error(get_log_message("db_pool_exhausted", timeout=timeout))
-                raise RuntimeError(f"No database connection available (pool size: {self.pool_size})")
+                raise RuntimeError(SERVER_MESSAGES['db_pool_no_connection'].format(pool_size=self.pool_size))
 
             # Yield connection to caller
             yield conn
@@ -116,7 +116,7 @@ class ConnectionPool:
             if conn is not None:
                 try:
                     conn.rollback()
-                    logger.debug("Transaction rolled back due to error")
+                    logger.debug(get_log_message("db_rollback"))
                 except Exception as rollback_error:
                     logger.error(get_log_message("db_pool_rollback_failed", error=rollback_error))
             raise
@@ -132,7 +132,7 @@ class ConnectionPool:
                     try:
                         new_conn = self._create_connection()
                         self.pool.put(new_conn, block=False)
-                        logger.info("Created replacement connection")
+                        logger.info(get_log_message("db_replacement_created"))
                     except Exception as create_error:
                         logger.error(get_log_message("db_pool_replacement_failed", error=create_error))
 
@@ -141,7 +141,7 @@ class ConnectionPool:
 
         Should be called during shutdown to cleanly close all connections.
         """
-        logger.info("Closing all connections in pool")
+        logger.info(get_log_message("db_closing"))
         closed_count = 0
 
         while not self.pool.empty():
@@ -191,7 +191,7 @@ def init_pool(db_path, pool_size=10):
 
     with _pool_lock:
         if _pool is not None:
-            logger.warning("Connection pool already initialized, closing existing pool")
+            logger.warning(get_log_message("db_already_init"))
             _pool.close_all()
 
         _pool = ConnectionPool(db_path, pool_size)
@@ -216,7 +216,7 @@ def get_connection(timeout=5.0):
             cursor.execute("SELECT * FROM users")
     """
     if _pool is None:
-        raise RuntimeError("Connection pool not initialized. Call init_pool() first.")
+        raise RuntimeError(SERVER_MESSAGES['db_pool_not_initialized_call'])
 
     return _pool.get_connection(timeout=timeout)
 

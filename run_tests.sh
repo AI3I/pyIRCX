@@ -22,7 +22,7 @@ TEST_TIMEOUT=120
 # Logging
 TIMESTAMP=$(date +%s)
 DATETIME=$(date '+%Y-%m-%d %H:%M:%S')
-LOG_DIR="testing/logs"
+LOG_DIR="tests/integration/logs"
 LOG_FILE="${LOG_DIR}/test_run_${TIMESTAMP}.md"
 LATEST_LINK="${LOG_DIR}/latest.md"
 
@@ -215,7 +215,7 @@ main() {
 
     echo ""
     echo "========================================"
-    echo "pyIRCX v1.1.8 TEST RUNNER"
+    echo "pyIRCX v2.0.0 TEST RUNNER"
     echo "========================================"
     echo ""
     echo "📝 Logging to: $LOG_FILE"
@@ -223,7 +223,7 @@ main() {
 
     # Log to markdown
     {
-        echo "**Test Runner**: pyIRCX v1.1.8"
+        echo "**Test Runner**: pyIRCX v2.0.0"
         echo ""
     } >> "$LOG_FILE"
 
@@ -236,46 +236,46 @@ main() {
 
     # Check for test directory
     echo -e "${BLUE}Checking for test files...${NC}"
-    if [ ! -d "testing" ]; then
-        echo -e "${RED}Error: testing/ directory not found${NC}"
+    if [ ! -d "tests/integration" ]; then
+        echo -e "${RED}Error: tests/integration/ directory not found${NC}"
         exit 1
     fi
 
     TESTS_FOUND=0
 
     # Core functionality tests
-    if [ -f "testing/users.py" ]; then
-        echo -e "${GREEN}✓ testing/users.py (115 tests)${NC}"
+    if [ -f "tests/integration/core/users.py" ]; then
+        echo -e "${GREEN}✓ tests/integration/core/users.py (115 tests)${NC}"
         TESTS_FOUND=$((TESTS_FOUND + 1))
     fi
-    if [ -f "testing/staff.py" ]; then
-        echo -e "${GREEN}✓ testing/staff.py (39 tests)${NC}"
+    if [ -f "tests/integration/staff/staff.py" ]; then
+        echo -e "${GREEN}✓ tests/integration/staff/staff.py (39 tests)${NC}"
         TESTS_FOUND=$((TESTS_FOUND + 1))
     fi
-    if [ -f "testing/test_auth.py" ]; then
-        echo -e "${GREEN}✓ testing/test_auth.py (18 tests - v1.1.8)${NC}"
+    if [ -f "tests/integration/staff/authentication.py" ]; then
+        echo -e "${GREEN}✓ tests/integration/staff/authentication.py (18 tests - v1.1.8)${NC}"
         TESTS_FOUND=$((TESTS_FOUND + 1))
     fi
-    if [ -f "testing/links.py" ]; then
-        echo -e "${GREEN}✓ testing/links.py (4 tests)${NC}"
+    if [ -f "tests/integration/network/links.py" ]; then
+        echo -e "${GREEN}✓ tests/integration/network/links.py (4 tests)${NC}"
         TESTS_FOUND=$((TESTS_FOUND + 1))
     fi
-    if [ -f "testing/access.py" ]; then
-        echo -e "${GREEN}✓ testing/access.py (10 tests)${NC}"
+    if [ -f "tests/integration/ircx/access.py" ]; then
+        echo -e "${GREEN}✓ tests/integration/ircx/access.py (10 tests)${NC}"
         TESTS_FOUND=$((TESTS_FOUND + 1))
     fi
 
     # v1.1.5 feature tests
-    if [ -f "testing/stats.py" ]; then
-        echo -e "${GREEN}✓ testing/stats.py (16 tests - v1.1.5)${NC}"
+    if [ -f "tests/integration/core/stats.py" ]; then
+        echo -e "${GREEN}✓ tests/integration/core/stats.py (16 tests - v1.1.5)${NC}"
         TESTS_FOUND=$((TESTS_FOUND + 1))
     fi
-    if [ -f "testing/help.py" ]; then
-        echo -e "${GREEN}✓ testing/help.py (15 tests - v1.1.5)${NC}"
+    if [ -f "tests/integration/core/help.py" ]; then
+        echo -e "${GREEN}✓ tests/integration/core/help.py (15 tests - v1.1.5)${NC}"
         TESTS_FOUND=$((TESTS_FOUND + 1))
     fi
-    if [ -f "testing/services.py" ]; then
-        echo -e "${GREEN}✓ testing/services.py (13 tests - v1.1.5)${NC}"
+    if [ -f "tests/integration/ircx/services.py" ]; then
+        echo -e "${GREEN}✓ tests/integration/ircx/services.py (13 tests - v1.1.5)${NC}"
         TESTS_FOUND=$((TESTS_FOUND + 1))
     fi
 
@@ -319,9 +319,9 @@ main() {
     FAILED_SUITES=0
 
     # Core IRC/IRCX tests
-    if [ -f "testing/users.py" ]; then
+    if [ -f "tests/integration/core/users.py" ]; then
         TOTAL_SUITES=$((TOTAL_SUITES + 1))
-        if run_test_suite "testing/users.py" "IRC/IRCX Protocol Tests (115 tests)"; then
+        if run_test_suite "tests/integration/core/users.py" "IRC/IRCX Protocol Tests (115 tests)"; then
             PASSED_SUITES=$((PASSED_SUITES + 1))
         else
             FAILED_SUITES=$((FAILED_SUITES + 1))
@@ -329,9 +329,9 @@ main() {
     fi
 
     # Staff authentication tests
-    if [ -f "testing/staff.py" ]; then
+    if [ -f "tests/integration/staff/staff.py" ]; then
         TOTAL_SUITES=$((TOTAL_SUITES + 1))
-        if run_test_suite "testing/staff.py" "Staff PASS Authentication Tests (39 tests)"; then
+        if run_test_suite "tests/integration/staff/staff.py" "Staff PASS Authentication Tests (39 tests)"; then
             PASSED_SUITES=$((PASSED_SUITES + 1))
         else
             FAILED_SUITES=$((FAILED_SUITES + 1))
@@ -339,11 +339,11 @@ main() {
     fi
 
     # AUTH command tests (v1.1.8)
-    if [ -f "testing/test_auth.py" ]; then
+    if [ -f "tests/integration/staff/authentication.py" ]; then
         TOTAL_SUITES=$((TOTAL_SUITES + 1))
         echo ""
         echo -e "${BLUE}=== v1.1.8 Feature Tests ===${NC}"
-        if run_test_suite "testing/test_auth.py" "AUTH Command & MFA Tests (18 tests)"; then
+        if run_test_suite "tests/integration/staff/authentication.py" "AUTH Command & MFA Tests (18 tests)"; then
             PASSED_SUITES=$((PASSED_SUITES + 1))
         else
             FAILED_SUITES=$((FAILED_SUITES + 1))
@@ -351,9 +351,9 @@ main() {
     fi
 
     # Server linking tests
-    if [ -f "testing/links.py" ]; then
+    if [ -f "tests/integration/network/links.py" ]; then
         TOTAL_SUITES=$((TOTAL_SUITES + 1))
-        if run_test_suite "testing/links.py" "Server Linking Tests (4 tests)"; then
+        if run_test_suite "tests/integration/network/links.py" "Server Linking Tests (4 tests)"; then
             PASSED_SUITES=$((PASSED_SUITES + 1))
         else
             FAILED_SUITES=$((FAILED_SUITES + 1))
@@ -361,9 +361,9 @@ main() {
     fi
 
     # Access control tests
-    if [ -f "testing/access.py" ]; then
+    if [ -f "tests/integration/ircx/access.py" ]; then
         TOTAL_SUITES=$((TOTAL_SUITES + 1))
-        if run_test_suite "testing/access.py" "Access Control Tests (10 tests)"; then
+        if run_test_suite "tests/integration/ircx/access.py" "Access Control Tests (10 tests)"; then
             PASSED_SUITES=$((PASSED_SUITES + 1))
         else
             FAILED_SUITES=$((FAILED_SUITES + 1))
@@ -371,11 +371,11 @@ main() {
     fi
 
     # v1.1.5 STATS system tests
-    if [ -f "testing/stats.py" ]; then
+    if [ -f "tests/integration/core/stats.py" ]; then
         TOTAL_SUITES=$((TOTAL_SUITES + 1))
         echo ""
         echo -e "${BLUE}=== v1.1.5 Feature Tests ===${NC}"
-        if run_test_suite "testing/stats.py" "STATS System Tests (16 tests)"; then
+        if run_test_suite "tests/integration/core/stats.py" "STATS System Tests (16 tests)"; then
             PASSED_SUITES=$((PASSED_SUITES + 1))
         else
             FAILED_SUITES=$((FAILED_SUITES + 1))
@@ -383,9 +383,9 @@ main() {
     fi
 
     # v1.1.5 HELP system tests
-    if [ -f "testing/help.py" ]; then
+    if [ -f "tests/integration/core/help.py" ]; then
         TOTAL_SUITES=$((TOTAL_SUITES + 1))
-        if run_test_suite "testing/help.py" "HELP System Tests (15 tests)"; then
+        if run_test_suite "tests/integration/core/help.py" "HELP System Tests (15 tests)"; then
             PASSED_SUITES=$((PASSED_SUITES + 1))
         else
             FAILED_SUITES=$((FAILED_SUITES + 1))
@@ -393,9 +393,9 @@ main() {
     fi
 
     # v1.1.5 service improvements tests
-    if [ -f "testing/services.py" ]; then
+    if [ -f "tests/integration/ircx/services.py" ]; then
         TOTAL_SUITES=$((TOTAL_SUITES + 1))
-        if run_test_suite "testing/services.py" "Service Improvements Tests (13 tests)"; then
+        if run_test_suite "tests/integration/ircx/services.py" "Service Improvements Tests (13 tests)"; then
             PASSED_SUITES=$((PASSED_SUITES + 1))
         else
             FAILED_SUITES=$((FAILED_SUITES + 1))
@@ -480,7 +480,7 @@ main() {
         echo -e "${RED}✗✗✗ SOME TESTS FAILED ✗✗✗${NC}"
         echo ""
         echo "Check test output above for details"
-        echo "See TESTING_v1.1.5.md for troubleshooting guide"
+        echo "See tests/integration/README.md for troubleshooting guide"
         echo ""
 
         {
@@ -491,9 +491,9 @@ main() {
             echo "Please review the error output above for details."
             echo ""
             echo "**Troubleshooting:**"
-            echo "- Check TESTING_v1.1.5.md for guidance"
+            echo "- Check tests/integration/README.md for guidance"
             echo "- Verify server is running correctly"
-            echo "- Check test accounts exist: \`sudo python3 testing/setup_test_accounts.py\`"
+            echo "- Check test accounts exist: \`sudo python3 tests/integration/setup_test_accounts.py\`"
             echo ""
             echo "---"
             echo ""

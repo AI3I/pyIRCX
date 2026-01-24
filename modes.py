@@ -12,6 +12,7 @@ This module contains IRC/IRCX mode definitions, categories, and helper functions
 # User mode definitions: mode_char -> (description, staff_only, auto_set)
 USER_MODES = {
     'a': ('IRC administrator', True, True),      # ADMIN - highest staff level
+    'b': ('Bot', False, False),                  # Bot flag (user-settable or service-set)
     'g': ('IRC guide', True, True),              # GUIDE - helper/moderator
     'i': ('Invisible', False, False),            # Hidden from WHO *
     'o': ('IRC operator', True, True),           # SYSOP - operator level
@@ -24,7 +25,7 @@ USER_MODES = {
 }
 
 # Default user modes string for ISUPPORT
-USER_MODES_STR = 'agiorsxz'
+USER_MODES_STR = 'abgiorsxz'
 
 # Staff modes (confer special privileges)
 STAFF_MODES = {'a', 'o', 'g'}

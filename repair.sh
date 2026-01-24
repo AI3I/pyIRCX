@@ -91,7 +91,20 @@ echo ""
 echo "=== Checking Required Files ==="
 REQUIRED_FILES=(
     "$INSTALL_DIR/pyircx.py"
+    "$INSTALL_DIR/channel.py"
+    "$INSTALL_DIR/config.py"
+    "$INSTALL_DIR/database.py"
+    "$INSTALL_DIR/help_text.py"
+    "$INSTALL_DIR/modes.py"
+    "$INSTALL_DIR/responses.py"
+    "$INSTALL_DIR/security.py"
+    "$INSTALL_DIR/service_bot.py"
+    "$INSTALL_DIR/ssl_manager.py"
+    "$INSTALL_DIR/user.py"
+    "$INSTALL_DIR/validation.py"
     "$INSTALL_DIR/api.py"
+    "$INSTALL_DIR/api_helpers.py"
+    "$INSTALL_DIR/db_pool.py"
     "$INSTALL_DIR/linking.py"
     "$CONFIG_DIR/pyircx_config.json"
     "/etc/systemd/system/pyircx.service"
@@ -322,19 +335,18 @@ if [ -d "$INSTALL_DIR/webchat" ]; then
         ((WEBCHAT_ISSUES++))
     fi
 
-    # Check index.html
-    if [ -f "$INSTALL_DIR/webchat/index.html" ]; then
-        echo -e "${GREEN}✓${NC} index.html exists"
+    # Check frontend files (in web directory)
+    if [ -f "/var/www/html/webchat/index.html" ]; then
+        echo -e "${GREEN}✓${NC} webchat/index.html exists"
     else
-        echo -e "${RED}✗${NC} index.html missing ${YELLOW}(ISSUE)${NC}"
+        echo -e "${YELLOW}⚠${NC} webchat/index.html missing ${YELLOW}(FIXABLE)${NC}"
         ((WEBCHAT_ISSUES++))
     fi
 
-    # Check config.js
     if [ -f "/var/www/html/webchat/config.js" ]; then
-        echo -e "${GREEN}✓${NC} config.js exists"
+        echo -e "${GREEN}✓${NC} webchat/config.js exists"
     else
-        echo -e "${YELLOW}⚠${NC} config.js missing ${YELLOW}(FIXABLE)${NC}"
+        echo -e "${YELLOW}⚠${NC} webchat/config.js missing ${YELLOW}(FIXABLE)${NC}"
         ((WEBCHAT_ISSUES++))
     fi
 

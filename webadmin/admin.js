@@ -2319,6 +2319,7 @@ console.log("=== admin.js LOADING ===");
                     "max_users": 10000,
                     "max_channels": 2500,
                     "max_channels_per_user": 20,
+                    "max_users_per_channel": 500,
                     "max_nick_length": 30,
                     "max_user_length": 30,
                     "max_channel_length": 50,
@@ -2522,6 +2523,7 @@ console.log("=== admin.js LOADING ===");
             setVal('#cfg-limits-max-channel', config.limits?.max_channel_length || 50);
             setVal('#cfg-limits-max-channels', config.limits?.max_channels || 2500);
             setVal('#cfg-limits-max-channels-user', config.limits?.max_channels_per_user || 20);
+            setVal('#cfg-limits-max-users-channel', config.limits?.max_users_per_channel || 500);
 
             // Security
             setCheck('#cfg-security-flood-enabled', config.security?.enable_flood_protection || false);
@@ -2660,6 +2662,7 @@ console.log("=== admin.js LOADING ===");
         newConfig.limits.max_channel_length = parseInt(getVal('#cfg-limits-max-channel'));
         newConfig.limits.max_channels = parseInt(getVal('#cfg-limits-max-channels'));
         newConfig.limits.max_channels_per_user = parseInt(getVal('#cfg-limits-max-channels-user'));
+        newConfig.limits.max_users_per_channel = parseInt(getVal('#cfg-limits-max-users-channel'));
 
         // Security
         newConfig.security.enable_flood_protection = getCheck('#cfg-security-flood-enabled');

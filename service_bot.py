@@ -10,6 +10,8 @@ import logging
 import re
 import time
 
+from responses import SERVER_MESSAGES
+
 # Will be set by pyircx.py after CONFIG is initialized
 CONFIG = None
 
@@ -247,23 +249,23 @@ class ServiceBotMonitor:
         # Check profanity
         has_profanity, matched = self.check_profanity(text)
         if has_profanity:
-            violations.append(('profanity', self._config_cache['profanity_action'], f"matched word: {matched}"))
+            violations.append(('profanity', self._config_cache['profanity_action'], SERVER_MESSAGES['violation_profanity'].format(matched=matched)))
 
         # Check flood
         if self.check_flood(nickname, text):
-            violations.append(('flood', self._config_cache['flood_action'], "message flooding"))
+            violations.append(('flood', self._config_cache['flood_action'], SERVER_MESSAGES['violation_flood']))
 
         # Check repeat spam
         if self.check_repeat(nickname, text):
-            violations.append(('repeat', self._config_cache['repeat_action'], "repeated message spam"))
+            violations.append(('repeat', self._config_cache['repeat_action'], SERVER_MESSAGES['violation_repeat']))
 
         # Check excessive caps
         if self.check_caps(text):
-            violations.append(('caps', self._config_cache['caps_action'], "excessive caps"))
+            violations.append(('caps', self._config_cache['caps_action'], SERVER_MESSAGES['violation_caps']))
 
         # Check URL spam
         if self.check_url_spam(nickname, text):
-            violations.append(('url_spam', self._config_cache['url_spam_action'], "URL spam"))
+            violations.append(('url_spam', self._config_cache['url_spam_action'], SERVER_MESSAGES['violation_url_spam']))
 
         return violations
 

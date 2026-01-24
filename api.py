@@ -30,7 +30,7 @@ from api_helpers import (
     validate_channel_name,
     validate_staff_level
 )
-from responses import get_log_message
+from responses import get_log_message, SERVER_MESSAGES
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -147,7 +147,7 @@ def write_admin_command(command_string, success_message):
             f.write(f"{command_string}\n")
         return {"success": True, "message": success_message}
     except Exception as e:
-        return {"error": f"Failed to write admin command: {str(e)}"}
+        return {"error": SERVER_MESSAGES['api_admin_command_write_failed'].format(error=e)}
 
 
 def init_db_pool(pool_size=10):
@@ -200,7 +200,7 @@ def health_check():
             cursor = conn.cursor()
             cursor.execute("SELECT 1")
             cursor.fetchone()
-        health['checks']['database'] = {'status': 'ok', 'message': 'Connected'}
+        health['checks']['database'] = {'status': 'ok', 'message': SERVER_MESSAGES['api_health_db_ok']}
     except Exception as e:
         health['checks']['database'] = {'status': 'error', 'message': str(e)}
         health['healthy'] = False
@@ -212,14 +212,14 @@ def health_check():
                 status = json.load(f)
             age = time.time() - status.get('timestamp', 0)
             if age < 60:
-                health['checks']['status_file'] = {'status': 'ok', 'message': f'Fresh ({int(age)}s old)'}
+                health['checks']['status_file'] = {'status': 'ok', 'message': SERVER_MESSAGES['api_health_status_fresh'].format(age=int(age))}
             elif age < 300:
-                health['checks']['status_file'] = {'status': 'warning', 'message': f'Stale ({int(age)}s old)'}
+                health['checks']['status_file'] = {'status': 'warning', 'message': SERVER_MESSAGES['api_health_status_stale'].format(age=int(age))}
             else:
-                health['checks']['status_file'] = {'status': 'error', 'message': f'Very stale ({int(age)}s old)'}
+                health['checks']['status_file'] = {'status': 'error', 'message': SERVER_MESSAGES['api_health_status_very_stale'].format(age=int(age))}
                 health['healthy'] = False
         else:
-            health['checks']['status_file'] = {'status': 'warning', 'message': 'Not found - server may not be running'}
+            health['checks']['status_file'] = {'status': 'warning', 'message': SERVER_MESSAGES['api_health_status_not_found']}
     except Exception as e:
         health['checks']['status_file'] = {'status': 'error', 'message': str(e)}
 
@@ -234,7 +234,7 @@ def health_check():
                 'in_use': pool_stats['in_use']
             }
         else:
-            health['checks']['connection_pool'] = {'status': 'error', 'message': 'Pool not initialized'}
+            health['checks']['connection_pool'] = {'status': 'error', 'message': SERVER_MESSAGES['api_health_pool_not_initialized']}
             health['healthy'] = False
     except Exception as e:
         health['checks']['connection_pool'] = {'status': 'error', 'message': str(e)}
@@ -250,7 +250,7 @@ def health_check():
 def get_realtime_status():
     """Get real-time connected users and active channels from status dump"""
     if not os.path.exists(DEFAULT_STATUS):
-        return {"error": "Status file not found - server may not be running"}
+        return {"error": SERVER_MESSAGES['api_status_not_found']}
 
     with open(DEFAULT_STATUS, 'r') as f:
         status = json.load(f)
@@ -370,11 +370,11 @@ def send_irc_kill_channel(channel_name):
     validate_channel_name(channel_name)
     return write_admin_command(
         f"KILL_CHANNEL:{channel_name}",
-        f"Channel {channel_name} will be reset"
+        SERVER_MESSAGES['api_channel_reset'].format(channel=channel_name)
     )
 
 @api_error_handler
-def send_irc_kill_user(nickname, reason="Killed by administrator"):
+def send_irc_kill_user(nickname, reason=None):
     """Kill a user connection by writing to pyircx admin command queue
 
     Args:
@@ -385,15 +385,17 @@ def send_irc_kill_user(nickname, reason="Killed by administrator"):
         dict with success/error status
     """
     validate_nickname(nickname)
-    if not reason or len(reason) > 500:
-        raise ValueError("Please provide a reason (1-500 characters)")
+    if not reason:
+        reason = SERVER_MESSAGES['api_kill_default_reason']
+    if len(reason) > 500:
+        raise ValueError(SERVER_MESSAGES['api_reason_required'])
     return write_admin_command(
         f"KILL_USER:{nickname}:{reason}",
-        f"User {nickname} will be disconnected"
+        SERVER_MESSAGES['api_kill_success'].format(nickname=nickname)
     )
 
 @api_error_handler
-def send_irc_ban_user(nickname, reason="Banned by administrator", duration=3600):
+def send_irc_ban_user(nickname, reason=None, duration=3600):
     """Ban a user by writing to pyircx admin command queue
 
     Args:
@@ -406,12 +408,14 @@ def send_irc_ban_user(nickname, reason="Banned by administrator", duration=3600)
     """
     validate_nickname(nickname)
     if not isinstance(duration, int) or duration < 0:
-        raise ValueError("Ban duration must be a non-negative number (in seconds)")
-    if not reason or len(reason) > 500:
-        raise ValueError("Please provide a reason (1-500 characters)")
+        raise ValueError(SERVER_MESSAGES['api_ban_duration_invalid'])
+    if not reason:
+        reason = SERVER_MESSAGES['api_ban_default_reason']
+    if len(reason) > 500:
+        raise ValueError(SERVER_MESSAGES['api_reason_required'])
     return write_admin_command(
         f"BAN_USER:{nickname}:{duration}:{reason}",
-        f"User {nickname} will be banned for {duration} seconds"
+        SERVER_MESSAGES['api_ban_success'].format(nickname=nickname, duration=duration)
     )
 
 @api_error_handler
@@ -427,10 +431,10 @@ def send_irc_lock_channel(channel_name, owner="System"):
     """
     validate_channel_name(channel_name)
     if not owner or len(owner) > 30:
-        raise ValueError("Owner name must be provided (1-30 characters)")
+        raise ValueError(SERVER_MESSAGES['api_owner_name_required'])
     return write_admin_command(
         f"LOCK_CHANNEL:{channel_name}:{owner}",
-        f"Channel {channel_name} will be locked and registered to {owner}"
+        SERVER_MESSAGES['api_lock_channel_success'].format(channel_name=channel_name, owner=owner)
     )
 
 @api_error_handler
@@ -446,12 +450,12 @@ def set_channel_mode(channel_name, mode_string):
     """
     validate_channel_name(channel_name)
     if not mode_string or len(mode_string) > 50:
-        raise ValueError("Please provide a mode string (1-50 characters)")
+        raise ValueError(SERVER_MESSAGES['api_mode_string_required'])
     if not re.match(r'^[+-][a-zA-Z]+$', mode_string):
-        raise ValueError("Mode string must start with + or - followed by mode letters (e.g., '+nt' or '-s')")
+        raise ValueError(SERVER_MESSAGES['api_mode_string_invalid_format'])
     return write_admin_command(
         f"SET_CHANNEL_MODE:{channel_name}:{mode_string}",
-        f"Mode {mode_string} will be set on {channel_name}"
+        SERVER_MESSAGES['api_set_mode_success'].format(mode_string=mode_string, channel_name=channel_name)
     )
 
 @api_error_handler
@@ -467,10 +471,10 @@ def set_channel_topic(channel_name, topic):
     """
     validate_channel_name(channel_name)
     if topic and len(topic) > 500:
-        raise ValueError("Topic must not exceed 500 characters")
+        raise ValueError(SERVER_MESSAGES['api_topic_too_long'])
     return write_admin_command(
         f"SET_CHANNEL_TOPIC:{channel_name}:{topic}",
-        f"Topic will be set on {channel_name}"
+        SERVER_MESSAGES['api_set_topic_success'].format(channel_name=channel_name)
     )
 
 @api_error_handler
@@ -671,7 +675,7 @@ def add_server_access(access_type, pattern, set_by, reason, timeout=0):
             VALUES (?, ?, ?, ?, ?, ?)
         """, (access_type, pattern, set_by, set_at, timeout_val, reason))
 
-        return {"success": True, "message": f"Added {access_type} for {pattern}"}
+        return {"success": True, "message": SERVER_MESSAGES['api_server_access_added'].format(access_type=access_type, pattern=pattern)}
 
 @api_error_handler
 def remove_server_access(access_type, pattern):
@@ -690,9 +694,9 @@ def remove_server_access(access_type, pattern):
         rows_affected = cursor.rowcount
 
         if rows_affected > 0:
-            return {"success": True, "message": f"Removed {access_type} for {pattern}"}
+            return {"success": True, "message": SERVER_MESSAGES['api_server_access_removed'].format(access_type=access_type, pattern=pattern)}
         else:
-            return {"error": f"Server access rule not found for pattern '{pattern}'"}
+            return {"error": SERVER_MESSAGES['api_server_access_not_found'].format(pattern=pattern)}
 
 # ============================================================================
 # NEWSFLASH MANAGEMENT
@@ -727,9 +731,9 @@ def add_newsflash(message, created_by, priority=0):
     """Add a NewsFlash message"""
     # Validate inputs
     if not message or len(message) > 500:
-        raise ValueError("Please provide a message (1-500 characters)")
+        raise ValueError(SERVER_MESSAGES['api_newsflash_message_required'])
     if priority < 0 or priority > 10:
-        raise ValueError("Priority must be between 0 (normal) and 10 (highest)")
+        raise ValueError(SERVER_MESSAGES['api_newsflash_priority_invalid'])
 
     with db_pool.get_connection() as conn:
         cursor = conn.cursor()
@@ -741,14 +745,14 @@ def add_newsflash(message, created_by, priority=0):
             VALUES (?, ?, ?, ?)
         """, (message, created_by, created_at, priority))
 
-        return {"success": True, "message": "NewsFlash added"}
+        return {"success": True, "message": SERVER_MESSAGES['api_newsflash_added']}
 
 @api_error_handler
 def delete_newsflash(msg_id):
     """Delete a NewsFlash message"""
     # Validate input
     if not msg_id or int(msg_id) < 1:
-        raise ValueError("Please provide a valid NewsFlash message ID (must be a positive number)")
+        raise ValueError(SERVER_MESSAGES['api_newsflash_id_invalid'])
 
     with db_pool.get_connection() as conn:
         cursor = conn.cursor()
@@ -758,9 +762,9 @@ def delete_newsflash(msg_id):
         rows_affected = cursor.rowcount
 
         if rows_affected > 0:
-            return {"success": True, "message": "NewsFlash message deleted successfully"}
+            return {"success": True, "message": SERVER_MESSAGES['api_newsflash_deleted']}
         else:
-            return {"error": f"NewsFlash message with ID {msg_id} not found"}
+            return {"error": SERVER_MESSAGES['api_newsflash_not_found'].format(msg_id=msg_id)}
 
 # ============================================================================
 # MAILBOX VIEWING
@@ -808,9 +812,9 @@ def send_mailbox_message(sender_nick, recipient_nick, message):
     """
     # Validate inputs
     if not sender_nick or len(sender_nick) > 30:
-        raise ValueError("Sender nickname must be provided (1-30 characters)")
+        raise ValueError(SERVER_MESSAGES['api_sender_nick_required'])
     if not message or len(message) > 500:
-        raise ValueError("Please provide a message (1-500 characters)")
+        raise ValueError(SERVER_MESSAGES['api_newsflash_message_required'])
     validate_nickname(recipient_nick)
 
     with db_pool.get_connection() as conn:
@@ -842,7 +846,7 @@ def send_mailbox_message(sender_nick, recipient_nick, message):
             VALUES (?, ?, ?, ?, 0)
         """, (sender_nick, recipient_uuid, message, sent_at))
 
-        return {"success": True, "message": f"Message sent to {recipient_nick}"}
+        return {"success": True, "message": SERVER_MESSAGES['api_mailbox_sent'].format(recipient_nick=recipient_nick)}
 
 @api_error_handler
 def delete_mailbox_message(message_id):
@@ -853,12 +857,12 @@ def delete_mailbox_message(message_id):
         # Check if message exists
         cursor.execute("SELECT id FROM mailbox WHERE id = ?", (message_id,))
         if not cursor.fetchone():
-            return {"error": f"Message ID {message_id} not found"}
+            return {"error": SERVER_MESSAGES['api_mailbox_not_found'].format(message_id=message_id)}
 
         # Delete the message
         cursor.execute("DELETE FROM mailbox WHERE id = ?", (message_id,))
 
-        return {"success": True, "message": f"Message {message_id} deleted"}
+        return {"success": True, "message": SERVER_MESSAGES['api_mailbox_deleted'].format(message_id=message_id)}
 
 # ============================================================================
 # SEARCH FUNCTIONS
@@ -1039,9 +1043,9 @@ def add_staff(username, password, level, realname=None, email=None, force_realna
     # Validate inputs
     validate_staff_level(level)
     if not re.match(r'^[a-zA-Z0-9_-]{3,20}$', username):
-        raise ValueError("Username must be 3-20 characters long and contain only letters, numbers, underscores, or hyphens")
+        raise ValueError(SERVER_MESSAGES['api_username_invalid_format'])
     if len(password) < 8:
-        raise ValueError("Password must be at least 8 characters long")
+        raise ValueError(SERVER_MESSAGES['api_password_too_short'])
 
     with db_pool.get_connection() as conn:
         cursor = conn.cursor()
@@ -1049,7 +1053,7 @@ def add_staff(username, password, level, realname=None, email=None, force_realna
         # Check if username already exists
         cursor.execute("SELECT username FROM users WHERE username = ?", (username,))
         if cursor.fetchone():
-            return {"error": f"Staff member '{username}' already exists"}
+            return {"error": SERVER_MESSAGES['api_staff_already_exists'].format(username=username)}
 
         # Hash password (same method as pyircx.py uses)
         password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
@@ -1060,14 +1064,14 @@ def add_staff(username, password, level, realname=None, email=None, force_realna
             VALUES (?, ?, ?, ?, ?, ?)
         """, (username, password_hash, level, realname, email, 1 if force_realname else 0))
 
-        return {"success": True, "message": f"Staff member '{username}' added as {level}"}
+        return {"success": True, "message": SERVER_MESSAGES['api_staff_added'].format(username=username, level=level)}
 
 @api_error_handler
 def delete_staff(username):
     """Delete a staff member"""
     # Validate input
     if not username or len(username) < 3:
-        raise ValueError("Please provide a valid username (at least 3 characters)")
+        raise ValueError(SERVER_MESSAGES['api_username_too_short'])
 
     with db_pool.get_connection() as conn:
         cursor = conn.cursor()
@@ -1075,21 +1079,21 @@ def delete_staff(username):
         # Check if user exists
         cursor.execute("SELECT username FROM users WHERE username = ?", (username,))
         if not cursor.fetchone():
-            return {"error": f"Staff member '{username}' not found"}
+            return {"error": SERVER_MESSAGES['api_staff_not_found'].format(username=username)}
 
         # Delete staff member
         cursor.execute("DELETE FROM users WHERE username = ?", (username,))
 
-        return {"success": True, "message": f"Staff member '{username}' deleted successfully"}
+        return {"success": True, "message": SERVER_MESSAGES['api_staff_deleted'].format(username=username)}
 
 @api_error_handler
 def change_staff_password(username, new_password):
     """Change a staff member's password"""
     # Validate inputs
     if not username or len(username) < 3:
-        raise ValueError("Please provide a valid username (at least 3 characters)")
+        raise ValueError(SERVER_MESSAGES['api_username_too_short'])
     if len(new_password) < 8:
-        raise ValueError("Password must be at least 8 characters long")
+        raise ValueError(SERVER_MESSAGES['api_password_too_short'])
 
     with db_pool.get_connection() as conn:
         cursor = conn.cursor()
@@ -1097,7 +1101,7 @@ def change_staff_password(username, new_password):
         # Check if user exists
         cursor.execute("SELECT username FROM users WHERE username = ?", (username,))
         if not cursor.fetchone():
-            return {"error": f"Staff member '{username}' not found"}
+            return {"error": SERVER_MESSAGES['api_staff_not_found'].format(username=username)}
 
         # Hash password
         password_hash = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
@@ -1107,14 +1111,14 @@ def change_staff_password(username, new_password):
             UPDATE users SET password_hash = ? WHERE username = ?
         """, (password_hash, username))
 
-        return {"success": True, "message": f"Password changed for '{username}'"}
+        return {"success": True, "message": SERVER_MESSAGES['api_staff_password_changed'].format(username=username)}
 
 @api_error_handler
 def change_staff_level(username, new_level):
     """Change a staff member's privilege level"""
     # Validate inputs
     if not username or len(username) < 3:
-        raise ValueError("Please provide a valid username (at least 3 characters)")
+        raise ValueError(SERVER_MESSAGES['api_username_too_short'])
     validate_staff_level(new_level)
 
     with db_pool.get_connection() as conn:
@@ -1123,21 +1127,21 @@ def change_staff_level(username, new_level):
         # Check if user exists
         cursor.execute("SELECT username FROM users WHERE username = ?", (username,))
         if not cursor.fetchone():
-            return {"error": f"Staff member '{username}' not found"}
+            return {"error": SERVER_MESSAGES['api_staff_not_found'].format(username=username)}
 
         # Update level
         cursor.execute("""
             UPDATE users SET level = ? WHERE username = ?
         """, (new_level, username))
 
-        return {"success": True, "message": f"Level changed for '{username}' to {new_level}"}
+        return {"success": True, "message": SERVER_MESSAGES['api_staff_level_changed'].format(username=username, new_level=new_level)}
 
 @api_error_handler
 def update_staff_profile(username, realname=None, email=None, force_realname=None):
     """Update staff member's profile information (realname and email)"""
     # Validate input
     if not username or len(username) < 3:
-        raise ValueError("Please provide a valid username (at least 3 characters)")
+        raise ValueError(SERVER_MESSAGES['api_username_too_short'])
 
     with db_pool.get_connection() as conn:
         cursor = conn.cursor()
@@ -1145,7 +1149,7 @@ def update_staff_profile(username, realname=None, email=None, force_realname=Non
         # Check if user exists
         cursor.execute("SELECT username FROM users WHERE username = ?", (username,))
         if not cursor.fetchone():
-            return {"error": f"Staff member '{username}' not found"}
+            return {"error": SERVER_MESSAGES['api_staff_not_found'].format(username=username)}
 
         # Update profile fields
         cursor.execute("""
@@ -1153,7 +1157,7 @@ def update_staff_profile(username, realname=None, email=None, force_realname=Non
             WHERE username = ?
         """, (realname, email, 1 if force_realname else 0, username))
 
-        return {"success": True, "message": f"Profile updated for '{username}'"}
+        return {"success": True, "message": SERVER_MESSAGES['api_staff_profile_updated'].format(username=username)}
 
 
 @timed_cache(seconds=60)
@@ -1227,7 +1231,7 @@ def get_logs(lines=100, level_filter=None, search=None):
 
     # Fallback to log file if journalctl not available
     if not os.path.exists(DEFAULT_LOG):
-        return {"error": "No logs available - journalctl failed and log file not found"}
+        return {"error": SERVER_MESSAGES['api_logs_unavailable']}
 
     with open(DEFAULT_LOG, 'r') as f:
         log_lines = f.readlines()
@@ -1278,7 +1282,7 @@ def set_newsflash_settings(on_connect, periodic_enabled, periodic_interval):
     result = save_config(config)
     if 'error' in result:
         return result
-    return {"success": True, "message": "NewsFlash settings updated successfully"}
+    return {"success": True, "message": SERVER_MESSAGES['api_newsflash_settings_updated']}
 
 # ============================================================================
 # NICKNAME AND CHANNEL REGISTRATION
@@ -1290,10 +1294,10 @@ def register_nickname(nickname, password, email=None):
     # Validate inputs
     validate_nickname(nickname)
     if len(password) < 8:
-        raise ValueError("Password must be at least 8 characters long")
+        raise ValueError(SERVER_MESSAGES['api_password_too_short'])
     if email and email != '*':
         if not re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email):
-            raise ValueError("Invalid email address")
+            raise ValueError(SERVER_MESSAGES['api_email_invalid'])
 
     with db_pool.get_connection() as conn:
         cursor = conn.cursor()
@@ -1301,7 +1305,7 @@ def register_nickname(nickname, password, email=None):
         # Check if nickname already exists
         cursor.execute("SELECT nickname FROM registered_nicks WHERE nickname = ?", (nickname,))
         if cursor.fetchone():
-            return {"error": f"Nickname '{nickname}' is already registered"}
+            return {"error": SERVER_MESSAGES['api_nickname_already_registered'].format(nickname=nickname)}
 
         # Generate UUID and hash password
         import uuid
@@ -1318,7 +1322,7 @@ def register_nickname(nickname, password, email=None):
             VALUES (?, ?, ?, ?, ?, ?, ?)
         """, (nick_uuid, nickname, password_hash, email_val, now, now, "API Admin"))
 
-        return {"success": True, "message": f"Nickname '{nickname}' registered successfully"}
+        return {"success": True, "message": SERVER_MESSAGES['api_nickname_registered'].format(nickname=nickname)}
 
 # Reserved service names (from pyircx.py)
 RESERVED_SERVICES = {
@@ -1341,7 +1345,7 @@ def register_channel(channel_name, owner_nickname, topic=None, modes=None, onjoi
         # Check if channel already exists
         cursor.execute("SELECT channel_name FROM registered_channels WHERE LOWER(channel_name) = LOWER(?)", (channel_name,))
         if cursor.fetchone():
-            return {"error": f"Channel '{channel_name}' is already registered"}
+            return {"error": SERVER_MESSAGES['api_channel_already_registered'].format(channel_name=channel_name)}
 
         # Get owner's UUID from registered_nicks
         cursor.execute("SELECT uuid FROM registered_nicks WHERE LOWER(nickname) = LOWER(?)", (owner_nickname,))
@@ -1368,7 +1372,7 @@ def register_channel(channel_name, owner_nickname, topic=None, modes=None, onjoi
 
                 owner_uuid = service_uuid
             else:
-                return {"error": f"Owner '{owner_nickname}' not found. Please use a registered nickname or service name (System, Registrar, Messenger, NewsFlash)"}
+                return {"error": SERVER_MESSAGES['api_channel_owner_not_found'].format(owner_nickname=owner_nickname)}
         else:
             owner_uuid = owner_row[0]
 
@@ -1382,7 +1386,7 @@ def register_channel(channel_name, owner_nickname, topic=None, modes=None, onjoi
             VALUES (?, ?, ?, ?, ?, ?)
         """, (chan_uuid, channel_name, owner_uuid, now, now, description or ""))
 
-        return {"success": True, "message": f"Channel '{channel_name}' registered successfully to {owner_nickname}"}
+        return {"success": True, "message": SERVER_MESSAGES['api_channel_registered'].format(channel_name=channel_name, owner_nickname=owner_nickname)}
 
 
 @api_error_handler
@@ -1399,7 +1403,7 @@ def unregister_nickname(nickname):
         nick_row = cursor.fetchone()
 
         if not nick_row:
-            return {"error": f"Nickname '{nickname}' is not registered"}
+            return {"error": SERVER_MESSAGES['api_nickname_not_registered'].format(nickname=nickname)}
 
         nick_uuid = nick_row[0]
 
@@ -1408,12 +1412,12 @@ def unregister_nickname(nickname):
         channel_count = cursor.fetchone()[0]
 
         if channel_count > 0:
-            return {"error": f"Cannot unregister '{nickname}': owns {channel_count} registered channel(s). Unregister channels first."}
+            return {"error": SERVER_MESSAGES['api_nickname_owns_channels'].format(nickname=nickname, channel_count=channel_count)}
 
         # Delete the nickname
         cursor.execute("DELETE FROM registered_nicks WHERE uuid = ?", (nick_uuid,))
 
-        return {"success": True, "message": f"Nickname '{nickname}' has been unregistered"}
+        return {"success": True, "message": SERVER_MESSAGES['api_nickname_unregistered'].format(nickname=nickname)}
 
 @api_error_handler
 def edit_nickname(nickname, new_password=None, new_email=None):
@@ -1421,7 +1425,7 @@ def edit_nickname(nickname, new_password=None, new_email=None):
     # Validate inputs
     validate_nickname(nickname)
     if not new_password and new_email is None:
-        raise ValueError("No changes specified - please provide a new password and/or email address")
+        raise ValueError(SERVER_MESSAGES['api_nickname_no_changes'])
 
     with db_pool.get_connection() as conn:
         cursor = conn.cursor()
@@ -1431,7 +1435,7 @@ def edit_nickname(nickname, new_password=None, new_email=None):
         nick_row = cursor.fetchone()
 
         if not nick_row:
-            return {"error": f"Nickname '{nickname}' is not registered"}
+            return {"error": SERVER_MESSAGES['api_nickname_not_registered'].format(nickname=nickname)}
 
         nick_uuid = nick_row[0]
         updates = []
@@ -1440,7 +1444,7 @@ def edit_nickname(nickname, new_password=None, new_email=None):
         # Update password if provided
         if new_password:
             if len(new_password) < 8:
-                raise ValueError("Password must be at least 8 characters long")
+                raise ValueError(SERVER_MESSAGES['api_password_too_short'])
             password_hash = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
             updates.append("password_hash = ?")
             params.append(password_hash)
@@ -1452,7 +1456,7 @@ def edit_nickname(nickname, new_password=None, new_email=None):
             else:
                 # Validate email
                 if not re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', new_email):
-                    raise ValueError("Invalid email address")
+                    raise ValueError(SERVER_MESSAGES['api_email_invalid'])
                 updates.append("email = ?")
                 params.append(new_email)
 
@@ -1467,7 +1471,7 @@ def edit_nickname(nickname, new_password=None, new_email=None):
         if new_email is not None:
             changes.append("email")
 
-        return {"success": True, "message": f"Updated {' and '.join(changes)} for nickname '{nickname}'"}
+        return {"success": True, "message": SERVER_MESSAGES['api_nickname_updated'].format(changes=' and '.join(changes), nickname=nickname)}
 
 @api_error_handler
 def reset_mfa(nickname):
@@ -1483,7 +1487,7 @@ def reset_mfa(nickname):
         nick_row = cursor.fetchone()
 
         if not nick_row:
-            return {"error": f"Nickname '{nickname}' is not registered"}
+            return {"error": SERVER_MESSAGES['api_nickname_not_registered'].format(nickname=nickname)}
 
         # Reset MFA
         cursor.execute(
@@ -1491,7 +1495,7 @@ def reset_mfa(nickname):
             (nickname,)
         )
 
-        return {"success": True, "message": f"MFA disabled for '{nickname}'"}
+        return {"success": True, "message": SERVER_MESSAGES['api_mfa_disabled'].format(nickname=nickname)}
 
 @rate_limit(calls_per_minute=5)
 @api_error_handler
@@ -1500,7 +1504,7 @@ def test_identify(nickname, password):
     # Validate inputs
     validate_nickname(nickname)
     if not password:
-        raise ValueError("Password is required")
+        raise ValueError(SERVER_MESSAGES['api_password_required'])
 
     with db_pool.get_connection() as conn:
         cursor = conn.cursor()
@@ -1513,18 +1517,18 @@ def test_identify(nickname, password):
         row = cursor.fetchone()
 
         if not row:
-            return {"success": False, "message": "Nickname not registered"}
+            return {"success": False, "message": SERVER_MESSAGES['api_identify_nickname_not_registered']}
 
         password_hash, mfa_enabled = row
 
         # Verify password
         if bcrypt.checkpw(password.encode('utf-8'), password_hash.encode('utf-8')):
             if mfa_enabled:
-                return {"success": True, "message": "Password correct (MFA required for login)", "mfa_required": True}
+                return {"success": True, "message": SERVER_MESSAGES['api_identify_mfa_required'], "mfa_required": True}
             else:
-                return {"success": True, "message": "Password correct (authentication would succeed)", "mfa_required": False}
+                return {"success": True, "message": SERVER_MESSAGES['api_identify_success'], "mfa_required": False}
         else:
-            return {"success": False, "message": "Password incorrect"}
+            return {"success": False, "message": SERVER_MESSAGES['api_identify_password_incorrect']}
 
 @rate_limit(calls_per_minute=5)
 @api_error_handler
@@ -1532,7 +1536,7 @@ def test_staff_login(username, password):
     """Test if a staff username/password combination is valid (rate limited: 5 attempts/minute)"""
     # Validate inputs
     if not username or not password:
-        raise ValueError("Username and password are required")
+        raise ValueError(SERVER_MESSAGES['api_login_credentials_required'])
 
     with db_pool.get_connection() as conn:
         cursor = conn.cursor()
@@ -1545,15 +1549,15 @@ def test_staff_login(username, password):
         row = cursor.fetchone()
 
         if not row:
-            return {"success": False, "message": "Staff account not found"}
+            return {"success": False, "message": SERVER_MESSAGES['api_staff_login_not_found']}
 
         password_hash, level = row
 
         # Verify password
         if bcrypt.checkpw(password.encode('utf-8'), password_hash.encode('utf-8')):
-            return {"success": True, "message": f"Password correct (Level: {level})", "level": level}
+            return {"success": True, "message": SERVER_MESSAGES['api_login_success_with_level'].format(level=level), "level": level}
         else:
-            return {"success": False, "message": "Password incorrect"}
+            return {"success": False, "message": SERVER_MESSAGES['api_staff_login_password_incorrect']}
 
 @api_error_handler
 def test_staff_login_stdin(username):
@@ -1578,7 +1582,7 @@ def get_staff_details(username):
         row = cursor.fetchone()
 
         if not row:
-            return {"error": f"Staff account '{username}' not found"}
+            return {"error": SERVER_MESSAGES['api_staff_account_not_found'].format(username=username)}
 
         # Get all nicknames registered by this staff member
         cursor.execute(
@@ -1614,12 +1618,12 @@ def unregister_channel(channel_name):
         chan_row = cursor.fetchone()
 
         if not chan_row:
-            return {"error": f"Channel '{channel_name}' is not registered"}
+            return {"error": SERVER_MESSAGES['api_channel_not_registered'].format(channel_name=channel_name)}
 
         # Delete the channel
         cursor.execute("DELETE FROM registered_channels WHERE LOWER(channel_name) = LOWER(?)", (channel_name,))
 
-        return {"success": True, "message": f"Channel '{channel_name}' has been unregistered"}
+        return {"success": True, "message": SERVER_MESSAGES['api_channel_unregistered'].format(channel_name=channel_name)}
 
 @api_error_handler
 def edit_channel(channel_name, new_owner=None, new_description=None, new_topic=None, new_modes=None,
@@ -1636,7 +1640,7 @@ def edit_channel(channel_name, new_owner=None, new_description=None, new_topic=N
         row = cursor.fetchone()
 
         if not row:
-            return {"error": f"Channel '{channel_name}' is not registered"}
+            return {"error": SERVER_MESSAGES['api_channel_not_registered'].format(channel_name=channel_name)}
 
         # Parse JSON properties (may be None for newly registered channels)
         channel_data = json.loads(row[0]) if row[0] else {}
@@ -1658,7 +1662,7 @@ def edit_channel(channel_name, new_owner=None, new_description=None, new_topic=N
                 channel_data['owners'] = [new_owner]
                 changes.append("owner")
             else:
-                return {"error": f"Owner nickname '{new_owner}' not found"}
+                return {"error": SERVER_MESSAGES['api_owner_not_found'].format(new_owner=new_owner)}
 
         # Update description
         if new_description is not None:
@@ -1732,7 +1736,7 @@ def edit_channel(channel_name, new_owner=None, new_description=None, new_topic=N
             changes.append("userlimit")
 
         if not changes:
-            return {"error": "No changes were made - please specify at least one property to update"}
+            return {"error": SERVER_MESSAGES['api_channel_no_changes']}
 
         # Save back to registered_channels
         cursor.execute("""UPDATE registered_channels
@@ -1743,9 +1747,10 @@ def edit_channel(channel_name, new_owner=None, new_description=None, new_topic=N
     # Kill channel to force reload from database (outside transaction)
     kill_result = send_irc_kill_channel(channel_name)
 
-    message = f"Updated {', '.join(changes)} for channel '{channel_name}'"
     if kill_result.get("success"):
-        message += " (channel will reload)"
+        message = SERVER_MESSAGES['api_channel_updated_reload'].format(changes=', '.join(changes), channel_name=channel_name)
+    else:
+        message = SERVER_MESSAGES['api_channel_updated'].format(changes=', '.join(changes), channel_name=channel_name)
 
     return {"success": True, "message": message}
 
@@ -1827,7 +1832,7 @@ def get_channel_details(channel_name):
         row = cursor.fetchone()
 
         if not row:
-            return {"error": f"Channel '{channel_name}' not found"}
+            return {"error": SERVER_MESSAGES['api_channel_not_found'].format(channel_name=channel_name)}
 
         # Parse JSON properties (may be None for newly registered channels)
         channel_data = json.loads(row[0]) if row[0] else {}
@@ -1885,12 +1890,12 @@ def set_channel_access(channel_name, access_list_json):
     # Validate inputs
     validate_channel_name(channel_name)
     if not access_list_json:
-        raise ValueError("Access list JSON is required")
+        raise ValueError(SERVER_MESSAGES['api_access_list_required'])
 
     try:
         access_list = json.loads(access_list_json)
     except json.JSONDecodeError as e:
-        raise ValueError(f"Invalid JSON: {str(e)}")
+        raise ValueError(SERVER_MESSAGES['api_json_invalid'].format(error=e))
 
     with db_pool.get_connection() as conn:
         cursor = conn.cursor()
@@ -1907,12 +1912,12 @@ def set_channel_access(channel_name, access_list_json):
                          (json.dumps(data), int(time.time()), channel_name))
         else:
             # Channel not registered - cannot set ACCESS on unregistered channel
-            return {"error": f"Channel '{channel_name}' is not registered. Register it first."}
+            return {"error": SERVER_MESSAGES['api_channel_not_registered_for_access'].format(channel_name=channel_name)}
 
     # Kill channel to force reload from database (outside transaction)
     send_irc_kill_channel(channel_name)
 
-    return {"success": True, "message": f"ACCESS lists updated for {channel_name}"}
+    return {"success": True, "message": SERVER_MESSAGES['api_channel_access_updated'].format(channel_name=channel_name)}
 
 # ============================================================================
 # MAIN COMMAND DISPATCHER
@@ -1921,7 +1926,7 @@ def set_channel_access(channel_name, access_list_json):
 def main():
     """Main entry point for API calls"""
     if len(sys.argv) < 2:
-        print(json.dumps({"error": "No command specified"}))
+        print(json.dumps({"error": SERVER_MESSAGES['api_no_command']}))
         sys.exit(1)
 
     command = sys.argv[1]
@@ -1944,13 +1949,13 @@ def main():
         result = get_server_access_list()
     elif command == "add-server-access":
         if len(sys.argv) < 6:
-            result = {"error": "Usage: add-server-access <type> <pattern> <set_by> <reason> [timeout]"}
+            result = {"error": SERVER_MESSAGES['api_usage_add_server_access']}
         else:
             timeout = int(sys.argv[6]) if len(sys.argv) > 6 else 0
             result = add_server_access(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], timeout)
     elif command == "remove-server-access":
         if len(sys.argv) < 4:
-            result = {"error": "Usage: remove-server-access <type> <pattern>"}
+            result = {"error": SERVER_MESSAGES['api_usage_remove_server_access']}
         else:
             result = remove_server_access(sys.argv[2], sys.argv[3])
 
@@ -1959,20 +1964,20 @@ def main():
         result = get_newsflash_list()
     elif command == "add-newsflash":
         if len(sys.argv) < 4:
-            result = {"error": "Usage: add-newsflash <message> <created_by> [priority]"}
+            result = {"error": SERVER_MESSAGES['api_usage_add_newsflash']}
         else:
             priority = int(sys.argv[4]) if len(sys.argv) > 4 else 0
             result = add_newsflash(sys.argv[2], sys.argv[3], priority)
     elif command == "delete-newsflash":
         if len(sys.argv) < 3:
-            result = {"error": "Usage: delete-newsflash <id>"}
+            result = {"error": SERVER_MESSAGES['api_usage_delete_newsflash']}
         else:
             result = delete_newsflash(sys.argv[2])
     elif command == "newsflash-settings":
         result = get_newsflash_settings()
     elif command == "set-newsflash-settings":
         if len(sys.argv) < 5:
-            result = {"error": "Usage: set-newsflash-settings <on_connect> <periodic_enabled> <periodic_interval>"}
+            result = {"error": SERVER_MESSAGES['api_usage_set_newsflash_settings']}
         else:
             result = set_newsflash_settings(sys.argv[2], sys.argv[3], sys.argv[4])
 
@@ -1982,24 +1987,24 @@ def main():
         result = get_mailbox_messages(limit)
     elif command == "send-mailbox-message":
         if len(sys.argv) < 5:
-            result = {"error": "Usage: send-mailbox-message <sender> <recipient> <message>"}
+            result = {"error": SERVER_MESSAGES['api_usage_send_mailbox_message']}
         else:
             result = send_mailbox_message(sys.argv[2], sys.argv[3], sys.argv[4])
     elif command == "delete-mailbox-message":
         if len(sys.argv) < 3:
-            result = {"error": "Usage: delete-mailbox-message <message_id>"}
+            result = {"error": SERVER_MESSAGES['api_usage_delete_mailbox_message']}
         else:
             result = delete_mailbox_message(sys.argv[2])
 
     # Search
     elif command == "search-nicknames":
         if len(sys.argv) < 3:
-            result = {"error": "Usage: search-nicknames <query>"}
+            result = {"error": SERVER_MESSAGES['api_usage_search_nicknames']}
         else:
             result = search_registered_nicks(sys.argv[2])
     elif command == "search-channels":
         if len(sys.argv) < 3:
-            result = {"error": "Usage: search-channels <query>"}
+            result = {"error": SERVER_MESSAGES['api_usage_search_channels']}
         else:
             result = search_channels(sys.argv[2])
 
@@ -2012,7 +2017,7 @@ def main():
         result = get_full_config()
     elif command == "set-config":
         if len(sys.argv) < 3:
-            result = {"error": "Usage: set-config <json>"}
+            result = {"error": SERVER_MESSAGES['api_usage_set_config']}
         else:
             result = set_config(sys.argv[2])
 
@@ -2021,7 +2026,7 @@ def main():
         result = get_motd()
     elif command == "set-motd":
         if len(sys.argv) < 3:
-            result = {"error": "Usage: set-motd <motd_lines>"}
+            result = {"error": SERVER_MESSAGES['api_usage_set_motd']}
         else:
             result = set_motd(sys.argv[2])
 
@@ -2035,7 +2040,7 @@ def main():
     # Staff management
     elif command == "add-staff":
         if len(sys.argv) < 5:
-            result = {"error": "Usage: add-staff <username> <password> <level> [realname] [email] [force_realname]"}
+            result = {"error": SERVER_MESSAGES['api_usage_add_staff']}
         else:
             realname = sys.argv[5] if len(sys.argv) > 5 and sys.argv[5] else None
             email = sys.argv[6] if len(sys.argv) > 6 and sys.argv[6] else None
@@ -2043,22 +2048,22 @@ def main():
             result = add_staff(sys.argv[2], sys.argv[3], sys.argv[4], realname, email, force_realname)
     elif command == "delete-staff":
         if len(sys.argv) < 3:
-            result = {"error": "Usage: delete-staff <username>"}
+            result = {"error": SERVER_MESSAGES['api_usage_delete_staff']}
         else:
             result = delete_staff(sys.argv[2])
     elif command == "change-staff-password":
         if len(sys.argv) < 4:
-            result = {"error": "Usage: change-staff-password <username> <new_password>"}
+            result = {"error": SERVER_MESSAGES['api_usage_change_staff_password']}
         else:
             result = change_staff_password(sys.argv[2], sys.argv[3])
     elif command == "change-staff-level":
         if len(sys.argv) < 4:
-            result = {"error": "Usage: change-staff-level <username> <new_level>"}
+            result = {"error": SERVER_MESSAGES['api_usage_change_staff_level']}
         else:
             result = change_staff_level(sys.argv[2], sys.argv[3])
     elif command == "update-staff-profile":
         if len(sys.argv) < 4:
-            result = {"error": "Usage: update-staff-profile <username> <realname> <email> <force_realname>"}
+            result = {"error": SERVER_MESSAGES['api_usage_update_staff_profile']}
         else:
             realname = sys.argv[3] if len(sys.argv) > 3 and sys.argv[3] else None
             email = sys.argv[4] if len(sys.argv) > 4 and sys.argv[4] else None
@@ -2068,60 +2073,60 @@ def main():
     # Nickname and channel registration
     elif command == "register-nick":
         if len(sys.argv) < 4:
-            result = {"error": "Usage: register-nick <nickname> <password> [email]"}
+            result = {"error": SERVER_MESSAGES['api_usage_register_nick']}
         else:
             email = sys.argv[4] if len(sys.argv) > 4 else None
             result = register_nickname(sys.argv[2], sys.argv[3], email)
     elif command == "register-channel":
         if len(sys.argv) < 4:
-            result = {"error": "Usage: register-channel <channel_name> <owner_nickname>"}
+            result = {"error": SERVER_MESSAGES['api_usage_register_channel']}
         else:
             result = register_channel(sys.argv[2], sys.argv[3])
     elif command == "unregister-nick":
         if len(sys.argv) < 3:
-            result = {"error": "Usage: unregister-nick <nickname>"}
+            result = {"error": SERVER_MESSAGES['api_usage_unregister_nick']}
         else:
             result = unregister_nickname(sys.argv[2])
     elif command == "unregister-channel":
         if len(sys.argv) < 3:
-            result = {"error": "Usage: unregister-channel <channel_name>"}
+            result = {"error": SERVER_MESSAGES['api_usage_unregister_channel']}
         else:
             result = unregister_channel(sys.argv[2])
     elif command == "edit-nick":
         if len(sys.argv) < 3:
-            result = {"error": "Usage: edit-nick <nickname> <new_password> [new_email]"}
+            result = {"error": SERVER_MESSAGES['api_usage_edit_nick']}
         else:
             new_password = sys.argv[3] if len(sys.argv) > 3 and sys.argv[3] else None
             new_email = sys.argv[4] if len(sys.argv) > 4 else None
             result = edit_nickname(sys.argv[2], new_password, new_email)
     elif command == "reset-mfa":
         if len(sys.argv) < 3:
-            result = {"error": "Usage: reset-mfa <nickname>"}
+            result = {"error": SERVER_MESSAGES['api_usage_reset_mfa']}
         else:
             result = reset_mfa(sys.argv[2])
     elif command == "test-identify":
         if len(sys.argv) < 4:
-            result = {"error": "Usage: test-identify <nickname> <password>"}
+            result = {"error": SERVER_MESSAGES['api_usage_test_identify']}
         else:
             result = test_identify(sys.argv[2], sys.argv[3])
     elif command == "test-staff-login":
         if len(sys.argv) < 4:
-            result = {"error": "Usage: test-staff-login <username> <password>"}
+            result = {"error": SERVER_MESSAGES['api_usage_test_staff_login']}
         else:
             result = test_staff_login(sys.argv[2], sys.argv[3])
     elif command == "test-staff-login-stdin":
         if len(sys.argv) < 3:
-            result = {"error": "Usage: test-staff-login-stdin <username> (password from stdin)"}
+            result = {"error": SERVER_MESSAGES['api_usage_test_staff_login_stdin']}
         else:
             result = test_staff_login_stdin(sys.argv[2])
     elif command == "get-staff-details":
         if len(sys.argv) < 3:
-            result = {"error": "Usage: get-staff-details <username>"}
+            result = {"error": SERVER_MESSAGES['api_usage_get_staff_details']}
         else:
             result = get_staff_details(sys.argv[2])
     elif command == "edit-channel":
         if len(sys.argv) < 3:
-            result = {"error": "Usage: edit-channel <channel_name> <new_owner> [new_description] [new_topic] [new_modes] [new_onjoin] [new_onpart] [new_memberkey] [new_hostkey] [new_ownerkey] [new_voicekey]"}
+            result = {"error": SERVER_MESSAGES['api_usage_edit_channel']}
         else:
             new_owner = sys.argv[3] if len(sys.argv) > 3 and sys.argv[3] else None
             new_description = sys.argv[4] if len(sys.argv) > 4 and sys.argv[4] else None
@@ -2146,17 +2151,17 @@ def main():
         result = get_registered_channels_paginated(limit, offset)
     elif command == "get-channel-access":
         if len(sys.argv) < 3:
-            result = {"error": "Usage: get-channel-access <channel_name>"}
+            result = {"error": SERVER_MESSAGES['api_usage_get_channel_access']}
         else:
             result = get_channel_access(sys.argv[2])
     elif command == "get-channel-details":
         if len(sys.argv) < 3:
-            result = {"error": "Usage: get-channel-details <channel_name>"}
+            result = {"error": SERVER_MESSAGES['api_usage_get_channel_details']}
         else:
             result = get_channel_details(sys.argv[2])
     elif command == "set-channel-access":
         if len(sys.argv) < 4:
-            result = {"error": "Usage: set-channel-access <channel_name> <access_list_json>"}
+            result = {"error": SERVER_MESSAGES['api_usage_set_channel_access']}
         else:
             result = set_channel_access(sys.argv[2], sys.argv[3])
 
@@ -2173,29 +2178,29 @@ def main():
         result = get_services_list()
     elif command == "kill-user":
         if len(sys.argv) < 3:
-            result = {"error": "Usage: kill-user <nickname> [reason]"}
+            result = {"error": SERVER_MESSAGES['api_usage_kill_user']}
         else:
             nickname = sys.argv[2]
-            reason = sys.argv[3] if len(sys.argv) > 3 else "Killed by administrator"
+            reason = sys.argv[3] if len(sys.argv) > 3 else SERVER_MESSAGES['api_kill_default_reason']
             result = send_irc_kill_user(nickname, reason)
     elif command == "ban-user":
         if len(sys.argv) < 3:
-            result = {"error": "Usage: ban-user <nickname> [duration] [reason]"}
+            result = {"error": SERVER_MESSAGES['api_usage_ban_user']}
         else:
             nickname = sys.argv[2]
             duration = int(sys.argv[3]) if len(sys.argv) > 3 else 3600
-            reason = sys.argv[4] if len(sys.argv) > 4 else "Banned by administrator"
+            reason = sys.argv[4] if len(sys.argv) > 4 else SERVER_MESSAGES['api_ban_default_reason']
             result = send_irc_ban_user(nickname, reason, duration)
     elif command == "kill-channel":
         if len(sys.argv) < 3:
-            result = {"error": "Usage: kill-channel <channel>"}
+            result = {"error": SERVER_MESSAGES['api_usage_kill_channel']}
         else:
 
             channel = sys.argv[2]
             result = send_irc_kill_channel(channel)
     elif command == "lock-channel":
         if len(sys.argv) < 3:
-            result = {"error": "Usage: lock-channel <channel> [owner]"}
+            result = {"error": SERVER_MESSAGES['api_usage_lock_channel']}
         else:
             channel = sys.argv[2]
             owner = sys.argv[3] if len(sys.argv) > 3 else "System"
@@ -2203,7 +2208,7 @@ def main():
 
     elif command == "set-channel-mode":
         if len(sys.argv) < 4:
-            result = {"error": "Usage: set-channel-mode <channel> <mode_string>"}
+            result = {"error": SERVER_MESSAGES['api_usage_set_channel_mode']}
         else:
             channel = sys.argv[2]
             mode_string = sys.argv[3]
@@ -2211,7 +2216,7 @@ def main():
 
     elif command == "set-channel-topic":
         if len(sys.argv) < 3:
-            result = {"error": "Usage: set-channel-topic <channel> [topic]"}
+            result = {"error": SERVER_MESSAGES['api_usage_set_channel_topic']}
         else:
             channel = sys.argv[2]
             topic = sys.argv[3] if len(sys.argv) > 3 else ""
@@ -2219,7 +2224,7 @@ def main():
 
 
     else:
-        result = {"error": f"Unknown command: {command}"}
+        result = {"error": SERVER_MESSAGES['api_unknown_command'].format(command=command)}
 
     print(json.dumps(result, indent=2))
 

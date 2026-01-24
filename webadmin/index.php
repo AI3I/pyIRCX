@@ -603,6 +603,11 @@ $csrf_token = $_SESSION['csrf_token'];
                                 <input type="number" class="form-control" id="cfg-limits-max-channels-user">
                                 <small>Maximum channels a single user can join simultaneously. Default: 20</small>
                             </div>
+                            <div class="form-group">
+                                <label>Maximum Users Per Channel</label>
+                                <input type="number" class="form-control" id="cfg-limits-max-users-channel">
+                                <small>Server-enforced cap on channel membership. Overrides MODE +l if set higher. Default: 500</small>
+                            </div>
                         </div>
 
                         <!-- MOTD Tab -->

@@ -10,7 +10,7 @@ import json
 import logging
 from pathlib import Path
 
-from responses import get_log_message
+from responses import get_log_message, SERVER_MESSAGES
 
 logger = logging.getLogger('pyIRCX')
 
@@ -39,7 +39,7 @@ class ServerConfig:
                 raise
         else:
             logger.error(get_log_message("config_not_found", file=self.config_file))
-            raise FileNotFoundError(f"Configuration file '{self.config_file}' is required but not found. Please run the installation script or create the config file.")
+            raise FileNotFoundError(SERVER_MESSAGES['config_file_not_found'].format(config_file=self.config_file))
 
     def save(self):
         try:

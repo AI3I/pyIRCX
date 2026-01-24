@@ -25,13 +25,13 @@ def test_nickname():
         validate_nickname("123Invalid")  # Starts with number
         assert False, "Should have raised ValueError"
     except ValueError as e:
-        assert "Erroneous nickname" in str(e) or "Invalid" in str(e)
+        assert "invalid characters" in str(e)
 
     try:
         validate_nickname("Invalid Nick")  # Contains space
         assert False, "Should have raised ValueError"
     except ValueError as e:
-        assert "Erroneous nickname" in str(e) or "Invalid" in str(e)
+        assert "invalid characters" in str(e)
 
     print("✓ Nickname validation passed")
 

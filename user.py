@@ -272,10 +272,30 @@ class User:
         if self.is_virtual or not self.writer:
             return
 
-        # IRCv3 server-time: prepend timestamp to messages (not to CAP/numeric responses)
-        if 'server-time' in self.enabled_caps and not msg.startswith('@'):
+        # IRCv3 labeled-response: track that a response was sent
+        if hasattr(self, '_label') and self._label:
+            self._label_sent = True
+            # If label_batch_id is set, prepend batch tag to all responses
+            if hasattr(self, '_label_batch_id') and self._label_batch_id:
+                if msg.startswith('@'):
+                    space_idx = msg.index(' ')
+                    existing_tags = msg[1:space_idx]
+                    rest = msg[space_idx:]
+                    msg = f"@{existing_tags};batch={self._label_batch_id}{rest}"
+                else:
+                    msg = f"@batch={self._label_batch_id} {msg}"
+
+        # IRCv3 server-time: add timestamp tag to messages
+        if 'server-time' in self.enabled_caps:
             timestamp = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
-            msg = f"@time={timestamp} {msg}"
+            if msg.startswith('@'):
+                # Merge time tag into existing tag section
+                space_idx = msg.index(' ')
+                existing_tags = msg[1:space_idx]
+                rest = msg[space_idx:]
+                msg = f"@{existing_tags};time={timestamp}{rest}"
+            else:
+                msg = f"@time={timestamp} {msg}"
 
         max_len = CONFIG.get('limits', 'msg_length', default=512) if CONFIG else 512
         if len(msg) > max_len:

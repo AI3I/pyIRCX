@@ -77,7 +77,7 @@ python3 tests/integration/core/commands.py
 
 #### `staff.py` - Staff Features (45+ tests)
 - ADMIN, SYSOP, GUIDE authentication
-- STAFF command (LIST, ADD, DEL, SET, PASS)
+- STAFF command (LIST, ADD, DELETE, SET, PASS)
 - Staff-only commands (KILL, GAG, REHASH)
 - Permission hierarchies
 - Staff mode propagation

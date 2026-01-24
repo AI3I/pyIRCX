@@ -116,7 +116,7 @@ HELP_TOPICS = {
             "CREATE #chan [key] - Create/join channel (alias for JOIN)",
             "ACCESS #chan LIST [level] - List access entries",
             "ACCESS #chan ADD level mask [reason] - Add access entry",
-            "ACCESS #chan DEL level mask - Remove access entry",
+            "ACCESS #chan DELETE level mask - Remove access entry",
             "ACCESS #chan CLEAR level - Clear access list",
             "PROP #chan [prop [value]] - View/set channel properties",
             "LISTX [pattern] - Extended channel list with modes",
@@ -129,6 +129,7 @@ HELP_TOPICS = {
     "USERMODES": {
         "lines": [
             "=== User Modes ===",
+            "+b - Bot (marks user as a bot, shown in WHOIS and message tags)",
             "+i - Invisible (hidden from WHO *)",
             "+x - IRCX mode enabled",
             "+r - Registered nickname (auto-set)",
@@ -139,7 +140,7 @@ HELP_TOPICS = {
             "Other modes:",
             "  +s - Service (server bots and service accounts)",
             "  +z - Gagged (you cannot send messages to channels or users)",
-            "Example: /MODE yournick +i (to set invisible)",
+            "Example: /MODE yournick +b (to mark yourself as a bot)",
         ],
     },
 
@@ -155,7 +156,7 @@ HELP_TOPICS = {
             "  +s - Secret: Channel hidden from /LIST and /WHOIS",
             "  +t - Topic protection: Only channel hosts can change the topic",
             "  +k <key> - Key: Password required to join",
-            "  +l <limit> - Limit: Maximum number of users allowed",
+            "  +l <limit> - Limit: Maximum number of users allowed (server cap applies)",
             "",
             "IRCX Extended Modes:",
             "  +a - Auth only: Only registered and identified users can join",
@@ -192,7 +193,7 @@ HELP_TOPICS = {
             "  Commands: SEND READ DELETE COUNT",
             "  /MSG Messenger HELP",
             "NewsFlash - Network news",
-            "  Commands: LIST ADD DEL PUSH",
+            "  Commands: LIST ADD DELETE PUSH",
             "  /MSG NewsFlash HELP",
             "ServiceBot - Channel monitoring",
             "  Commands: HELP STATUS",
@@ -218,7 +219,7 @@ HELP_TOPICS = {
             "STAFF Management:",
             "  STAFF LIST - List all staff accounts",
             "  STAFF ADD user level - Add staff account (ADMIN/SYSOP/GUIDE)",
-            "  STAFF DEL user - Remove staff account",
+            "  STAFF DELETE user - Remove staff account",
             "  STAFF SET user level - Change staff level",
             "  STAFF PASS user password - Change staff password",
             "  STAFF MFA user ENABLE/DISABLE/STATUS - Manage MFA (ADMIN only)",
@@ -331,13 +332,13 @@ HELP_TOPICS = {
             "",
             "Channel-level ACCESS:",
             "  Usage: /ACCESS <#channel> <action> [level] [mask] [reason]",
-            "  Actions: LIST, ADD, DEL, CLEAR",
+            "  Actions: LIST, ADD, DELETE, CLEAR",
             "  Levels: OWNER, HOST, VOICE, GRANT, DENY",
             "  Examples:",
             "    /ACCESS #lobby LIST - View all entries",
             "    /ACCESS #lobby ADD HOST alice!*@* Trusted - Give host",
             "    /ACCESS #lobby ADD DENY *!*@spammer.com Banned",
-            "    /ACCESS #lobby DEL DENY *!*@spammer.com",
+            "    /ACCESS #lobby DELETE DENY *!*@spammer.com",
         ],
         "staff_lines": [
             "",
@@ -351,7 +352,7 @@ HELP_TOPICS = {
             "    /ACCESS $ LIST - View local server access list",
             "    /ACCESS $ ADD DENY *!*@badhost.com Local ban",
             "    /ACCESS * ADD DENY *!*@spammer.net Network-wide ban",
-            "    /ACCESS $ DEL DENY *!*@badhost.com",
+            "    /ACCESS $ DELETE DENY *!*@badhost.com",
         ],
     },
 
@@ -693,8 +694,8 @@ HELP_TOPICS = {
             "  /PROFANITY LIST - View current configuration",
             "  /PROFANITY ADD WORD <word> - Add word to filter",
             "  /PROFANITY ADD PATTERN <regex> - Add regex pattern",
-            "  /PROFANITY DEL WORD <word> - Remove word",
-            "  /PROFANITY DEL PATTERN <regex> - Remove pattern",
+            "  /PROFANITY DELETE WORD <word> - Remove word",
+            "  /PROFANITY DELETE PATTERN <regex> - Remove pattern",
             "  /PROFANITY ENABLE - Enable filter",
             "  /PROFANITY DISABLE - Disable filter",
             "  /PROFANITY TEST <text> - Test if text matches",
@@ -890,16 +891,16 @@ HELP_TOPICS = {
             "Send and receive offline messages directly (alternative to /MSG Messenger).",
             "",
             "Usage:",
-            "  /MEMO SEND <nick> <message> - Send memo to user",
-            "  /MEMO LIST - List pending memos",
-            "  /MEMO READ [id] - Read memo(s)",
-            "  /MEMO DEL <id|ALL> - Delete memo(s)",
+            "  /MEMO SEND <nickname> <message> - Send a message to a user",
+            "  /MEMO LIST - List your pending messages",
+            "  /MEMO READ [id] - Read message(s)",
+            "  /MEMO DELETE <id|ALL> - Delete message(s)",
             "",
-            "Example:",
+            "Examples:",
             "  /MEMO SEND alice Don't forget the meeting tomorrow!",
-            "  /MEMO LIST - See all pending memos",
-            "  /MEMO READ 1 - Read memo #1",
-            "  /MEMO DEL ALL - Delete all memos",
+            "  /MEMO LIST - See all pending messages",
+            "  /MEMO READ 1 - Read message #1",
+            "  /MEMO DELETE ALL - Delete all messages",
         ],
     },
 
@@ -996,6 +997,59 @@ HELP_TOPICS = {
     "SQUIT": {
         "alias": "CONNECT",
     },
+
+    "CHATHISTORY": {
+        "lines": [
+            "=== CHATHISTORY Command (IRCv3) ===",
+            "Retrieve channel message history from transcript logs.",
+            "",
+            "Usage:",
+            "  /CHATHISTORY LATEST <#channel> * <limit>",
+            "  /CHATHISTORY BEFORE <#channel> timestamp=<ts> <limit>",
+            "  /CHATHISTORY AFTER <#channel> timestamp=<ts> <limit>",
+            "  /CHATHISTORY BETWEEN <#channel> timestamp=<ts1> timestamp=<ts2> <limit>",
+            "",
+            "Timestamp format: timestamp=2024-01-15T10:30:00.000Z (ISO 8601)",
+            "",
+            "Requirements:",
+            "  - You must be a member of the channel",
+            "  - Channel must have transcript mode (+y) enabled",
+            "",
+            "Examples:",
+            "  /CHATHISTORY LATEST #lobby * 50 - Get last 50 messages",
+            "  /CHATHISTORY BEFORE #lobby timestamp=2024-01-15T12:00:00Z 20",
+        ],
+    },
+
+    "RENAME": {
+        "staff_only": True,
+        "lines": [
+            "=== RENAME Command (IRC operator/administrator only) ===",
+            "Rename a channel. All members are notified and channel state is preserved.",
+            "",
+            "Usage: /RENAME <#oldname> <#newname> [reason]",
+            "",
+            "Examples:",
+            "  /RENAME #oldchan #newchan Channel reorganization",
+            "  /RENAME #temp #permanent",
+            "",
+            "Requirements: IRC operator or administrator privileges",
+            "Note: The new channel name must not already exist",
+        ],
+    },
+
+    "TAGMSG": {
+        "lines": [
+            "=== TAGMSG Command (IRCv3) ===",
+            "Send a message with tags only (no text content).",
+            "Used for typing indicators, reactions, and other tag-only messages.",
+            "",
+            "Usage: @+tag=value TAGMSG <target>",
+            "",
+            "Requirements: message-tags capability must be enabled",
+            "Note: Only recipients with message-tags capability will receive TAGMSG",
+        ],
+    },
 }
 
 # Valid topics for fuzzy matching suggestions
@@ -1021,7 +1075,9 @@ VALID_TOPICS = [
     # Command shortcuts
     "ALIASES", "ALIAS", "SHORTCUTS",
     # Staff commands
-    "KILL", "PROFANITY", "CONFIG", "GAG", "UNGAG", "CONNECT", "SQUIT"
+    "KILL", "PROFANITY", "CONFIG", "GAG", "UNGAG", "CONNECT", "SQUIT",
+    # IRCv3 extensions
+    "CHATHISTORY", "RENAME", "TAGMSG",
 ]
 
 

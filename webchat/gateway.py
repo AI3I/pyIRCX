@@ -36,11 +36,12 @@ except ImportError:
 try:
     import sys
     sys.path.insert(0, str(Path(__file__).parent.parent))
-    from responses import get_log_message
+    from responses import get_log_message, SERVER_MESSAGES
 except ImportError:
     # Fallback if responses.py not available - return key as message
     def get_log_message(key, **kwargs):
         return key
+    SERVER_MESSAGES = {}
 
 
 # =============================================================================
@@ -301,7 +302,7 @@ class IRCWebSocketGateway:
             try:
                 await websocket.send(json.dumps({
                     'type': 'error',
-                    'message': 'Server at capacity - please try again later'
+                    'message': SERVER_MESSAGES['webchat_error_at_capacity']
                 }))
                 await websocket.close()
             except Exception:
@@ -314,7 +315,7 @@ class IRCWebSocketGateway:
             try:
                 await websocket.send(json.dumps({
                     'type': 'error',
-                    'message': 'Too many connections from your IP - please close some connections first'
+                    'message': SERVER_MESSAGES['webchat_error_too_many_ip']
                 }))
                 await websocket.close()
             except Exception:
@@ -374,7 +375,7 @@ class IRCWebSocketGateway:
             try:
                 await websocket.send(json.dumps({
                     'type': 'error',
-                    'message': 'Unable to connect to chat server - please try again later'
+                    'message': SERVER_MESSAGES['webchat_error_connect_refused']
                 }))
             except Exception:
                 pass
@@ -383,7 +384,7 @@ class IRCWebSocketGateway:
             try:
                 await websocket.send(json.dumps({
                     'type': 'error',
-                    'message': 'Connection timeout - please try again later'
+                    'message': SERVER_MESSAGES['webchat_error_connect_timeout']
                 }))
             except Exception:
                 pass
@@ -392,7 +393,7 @@ class IRCWebSocketGateway:
             try:
                 await websocket.send(json.dumps({
                     'type': 'error',
-                    'message': 'Connection error - please try again later'
+                    'message': SERVER_MESSAGES['webchat_error_connection']
                 }))
             except Exception:
                 pass
@@ -433,7 +434,7 @@ class IRCWebSocketGateway:
                     self.logger.warning(get_log_message("webchat_rate_limit", client_id=client_id))
                     await websocket.send(json.dumps({
                         'type': 'error',
-                        'message': 'Sending messages too fast - please slow down'
+                        'message': SERVER_MESSAGES['webchat_error_rate_limit']
                     }))
                     continue
 
@@ -601,7 +602,7 @@ class IRCWebSocketGateway:
                     self.logger.warning(get_log_message("webchat_buffer_overflow", client_id=client_id))
                     await websocket.send(json.dumps({
                         'type': 'error',
-                        'message': 'Connection error - please reconnect'
+                        'message': SERVER_MESSAGES['webchat_error_reconnect']
                     }))
                     break
 
@@ -759,7 +760,7 @@ async def main():
         gateway.logger.info(get_log_message("webchat_rate_limit_config", rate=config['max_messages_per_second']))
         await stop.wait()
 
-    gateway.logger.info("Gateway shutting down")
+    gateway.logger.info(get_log_message("webchat_shutdown"))
 
 
 if __name__ == '__main__':
