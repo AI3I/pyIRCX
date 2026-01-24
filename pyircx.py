@@ -6551,8 +6551,9 @@ class pyIRCXServer:
         nicks_to_check = params[0].split() if len(params) == 1 else params
         online_nicks = []
         for nick in nicks_to_check:
-            if nick in self.users and not self.users[nick].is_virtual:
-                online_nicks.append(nick)
+            target = self.get_user(nick)
+            if target and not target.is_virtual:
+                online_nicks.append(target.nickname)
         await user.send(self.get_reply("303", user, nicks=" ".join(online_nicks)))
 
     async def handle_userhost(self, user, params):
@@ -6573,7 +6574,7 @@ class pyIRCXServer:
         userhost_info = []
 
         for nick in nicks_to_check:
-            target = self.users.get(nick)
+            target = self.get_user(nick)
             if target and not target.is_virtual:
                 # Build userhost reply: nick*=+user@host
                 # * = operator, + = here, - = away
