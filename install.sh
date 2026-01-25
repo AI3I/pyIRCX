@@ -720,6 +720,9 @@ install_unbound() {
     # Create unbound configuration for local caching resolver
     echo -e "${YELLOW}Configuring unbound as local resolver...${NC}"
 
+    # Create unbound.conf.d directory if it doesn't exist
+    mkdir -p /etc/unbound/unbound.conf.d
+
     # Backup existing config if present
     if [ -f /etc/unbound/unbound.conf ]; then
         cp /etc/unbound/unbound.conf /etc/unbound/unbound.conf.backup.$(date +%Y%m%d%H%M%S)
@@ -768,9 +771,6 @@ server:
     prefetch: yes
     prefetch-key: yes
 EOF
-
-    # Create unbound.conf.d directory if it doesn't exist
-    mkdir -p /etc/unbound/unbound.conf.d
 
     # Ensure main config includes the conf.d directory
     if ! grep -q "include.*unbound.conf.d" /etc/unbound/unbound.conf 2>/dev/null; then
