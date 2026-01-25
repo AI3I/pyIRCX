@@ -292,6 +292,89 @@ if [ -d "$CONFIG_DIR/ssl" ] && [ -f "$CONFIG_DIR/ssl/cert.pem" ]; then
     fi
 fi
 
+# Ask about Unbound DNS resolver
+echo ""
+echo -e "${BLUE}Checking for Unbound DNS resolver...${NC}"
+if systemctl is-active --quiet unbound 2>/dev/null || [ -f /etc/unbound/unbound.conf.d/pyircx.conf ]; then
+    echo -e "${YELLOW}Unbound DNS resolver is installed${NC}"
+    echo ""
+    echo "Options:"
+    echo "  1. Remove pyIRCX config only (keep Unbound running)"
+    echo "  2. Stop Unbound service (keep package installed)"
+    echo "  3. Completely remove Unbound"
+    echo "  4. Keep everything"
+    echo ""
+    read -p "Choose option [1-4] (default: 1): " UNBOUND_CHOICE
+    echo
+
+    case "${UNBOUND_CHOICE:-1}" in
+        1)
+            # Remove just the pyircx config
+            if [ -f /etc/unbound/unbound.conf.d/pyircx.conf ]; then
+                rm -f /etc/unbound/unbound.conf.d/pyircx.conf
+                systemctl restart unbound 2>/dev/null || true
+                echo -e "${GREEN}✓ pyIRCX unbound config removed${NC}"
+            fi
+            ;;
+        2)
+            # Stop service but keep installed
+            systemctl stop unbound 2>/dev/null || true
+            systemctl disable unbound 2>/dev/null || true
+            rm -f /etc/unbound/unbound.conf.d/pyircx.conf 2>/dev/null || true
+            echo -e "${GREEN}✓ Unbound service stopped${NC}"
+            ;;
+        3)
+            # Complete removal
+            systemctl stop unbound 2>/dev/null || true
+            systemctl disable unbound 2>/dev/null || true
+
+            # Restore resolv.conf if we modified it
+            if grep -q "pyIRCX install.sh for unbound" /etc/resolv.conf 2>/dev/null; then
+                # Remove immutable flag if set
+                chattr -i /etc/resolv.conf 2>/dev/null || true
+
+                # Try to restore backup or use defaults
+                if [ -f /etc/resolv.conf.backup.* ]; then
+                    LATEST_BACKUP=$(ls -t /etc/resolv.conf.backup.* 2>/dev/null | head -1)
+                    if [ -n "$LATEST_BACKUP" ]; then
+                        cp "$LATEST_BACKUP" /etc/resolv.conf
+                        echo -e "${GREEN}✓ resolv.conf restored from backup${NC}"
+                    fi
+                else
+                    # Use systemd-resolved or NetworkManager defaults
+                    if systemctl is-active --quiet systemd-resolved 2>/dev/null; then
+                        ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
+                        rm -f /etc/systemd/resolved.conf.d/unbound.conf
+                        systemctl restart systemd-resolved
+                        echo -e "${GREEN}✓ Restored systemd-resolved DNS${NC}"
+                    elif systemctl is-active --quiet NetworkManager 2>/dev/null; then
+                        rm -f /etc/NetworkManager/conf.d/unbound.conf
+                        systemctl restart NetworkManager
+                        echo -e "${GREEN}✓ Restored NetworkManager DNS${NC}"
+                    fi
+                fi
+            fi
+
+            # Remove unbound package
+            if command -v dnf &>/dev/null; then
+                dnf remove -y unbound 2>/dev/null || true
+            elif command -v apt-get &>/dev/null; then
+                apt-get remove -y unbound 2>/dev/null || true
+            elif command -v pacman &>/dev/null; then
+                pacman -R --noconfirm unbound 2>/dev/null || true
+            elif command -v zypper &>/dev/null; then
+                zypper remove -y unbound 2>/dev/null || true
+            fi
+            echo -e "${GREEN}✓ Unbound completely removed${NC}"
+            ;;
+        4)
+            echo "Keeping Unbound as-is"
+            ;;
+    esac
+else
+    echo "Unbound not installed"
+fi
+
 # Ask about Python packages
 echo ""
 echo -e "${BLUE}Python packages${NC}"

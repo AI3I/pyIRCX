@@ -419,7 +419,52 @@ else
 fi
 echo ""
 
-# Check 11: SSL/Certbot (optional)
+# Check 11: Unbound DNS Resolver (optional)
+echo "=== Checking Unbound DNS Resolver (Optional) ==="
+UNBOUND_ISSUES=0
+if command -v unbound &>/dev/null; then
+    echo -e "${GREEN}✓${NC} Unbound is installed"
+
+    # Check if service is running
+    if systemctl is-active --quiet unbound 2>/dev/null; then
+        echo -e "${GREEN}✓${NC} Unbound service is running"
+    else
+        echo -e "${YELLOW}⚠${NC} Unbound service is not running ${YELLOW}(FIXABLE)${NC}"
+        ((UNBOUND_ISSUES++))
+    fi
+
+    # Check if service is enabled
+    if systemctl is-enabled --quiet unbound 2>/dev/null; then
+        echo -e "${GREEN}✓${NC} Unbound service is enabled"
+    else
+        echo -e "${YELLOW}⚠${NC} Unbound service is not enabled ${YELLOW}(FIXABLE)${NC}"
+        ((UNBOUND_ISSUES++))
+    fi
+
+    # Check pyircx config exists
+    if [ -f /etc/unbound/unbound.conf.d/pyircx.conf ]; then
+        echo -e "${GREEN}✓${NC} pyIRCX unbound config exists"
+    else
+        echo -e "${YELLOW}⚠${NC} pyIRCX unbound config missing ${YELLOW}(FIXABLE)${NC}"
+        ((UNBOUND_ISSUES++))
+    fi
+
+    # Check resolv.conf points to unbound
+    if grep -q "nameserver 127.0.0.53" /etc/resolv.conf 2>/dev/null; then
+        echo -e "${GREEN}✓${NC} System DNS points to unbound"
+    else
+        echo -e "${YELLOW}⚠${NC} System DNS not using unbound ${YELLOW}(INFO)${NC}"
+    fi
+
+    if [ $UNBOUND_ISSUES -gt 0 ]; then
+        ((ISSUES_FOUND++))
+    fi
+else
+    echo -e "${BLUE}ℹ${NC} Unbound not installed ${BLUE}(Optional)${NC}"
+fi
+echo ""
+
+# Check 12: SSL/Certbot (optional)
 echo "=== SSL Configuration ==="
 
 # Check if SSL is enabled in config
@@ -679,6 +724,54 @@ EOF
                 echo -e "${GREEN}✓ pyircx-webchat service enabled${NC}"
                 ((FIXES_APPLIED++))
             fi
+        fi
+    fi
+
+    # Fix Unbound issues if installed
+    if command -v unbound &>/dev/null && [ $UNBOUND_ISSUES -gt 0 ]; then
+        echo -e "${YELLOW}Fixing Unbound issues...${NC}"
+
+        # Enable service if not enabled
+        if ! systemctl is-enabled --quiet unbound 2>/dev/null; then
+            systemctl enable unbound
+            echo -e "${GREEN}✓ Unbound service enabled${NC}"
+            ((FIXES_APPLIED++))
+        fi
+
+        # Start service if not running
+        if ! systemctl is-active --quiet unbound 2>/dev/null; then
+            systemctl start unbound
+            echo -e "${GREEN}✓ Unbound service started${NC}"
+            ((FIXES_APPLIED++))
+        fi
+
+        # Create pyircx config if missing
+        if [ ! -f /etc/unbound/unbound.conf.d/pyircx.conf ]; then
+            mkdir -p /etc/unbound/unbound.conf.d
+            cat > /etc/unbound/unbound.conf.d/pyircx.conf << 'UNBOUND_EOF'
+# pyIRCX Unbound Configuration
+server:
+    interface: 127.0.0.53
+    port: 53
+    access-control: 127.0.0.0/8 allow
+    access-control: ::1/128 allow
+    num-threads: 2
+    msg-cache-size: 16m
+    rrset-cache-size: 32m
+    cache-min-ttl: 300
+    cache-max-ttl: 86400
+    hide-identity: yes
+    hide-version: yes
+    qname-minimisation: yes
+    harden-glue: yes
+    harden-dnssec-stripped: yes
+    prefetch: yes
+UNBOUND_EOF
+            chown -R unbound:unbound /etc/unbound/unbound.conf.d 2>/dev/null || true
+            chmod 644 /etc/unbound/unbound.conf.d/pyircx.conf
+            systemctl restart unbound
+            echo -e "${GREEN}✓ Unbound pyircx config created${NC}"
+            ((FIXES_APPLIED++))
         fi
     fi
 

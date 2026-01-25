@@ -35,6 +35,9 @@ SSL_ENABLED="false"
 SSL_CERT_FILE=""
 SSL_KEY_FILE=""
 
+# DNS resolver
+UNBOUND_ENABLED="true"
+
 # Apache/httpd configuration
 APACHE_CONFIG_DIR="/etc/httpd/conf.d"
 APACHE_SERVICE="httpd"

@@ -57,6 +57,7 @@ NEEDS_SELINUX=0
 NEEDS_POLKIT=0
 NEEDS_APACHE_SETUP=0
 NEEDS_WEBCHAT_UPDATE=0
+NEEDS_UNBOUND=0
 WEBCHAT_SERVICE_WAS_RUNNING=0
 SERVICE_WAS_RUNNING=0
 
@@ -208,8 +209,16 @@ if [ -d "$INSTALL_DIR/webchat" ]; then
     fi
 fi
 
+# Check for Unbound DNS resolver
+if ! systemctl is-active --quiet unbound 2>/dev/null; then
+    echo -e "${YELLOW}✗ Unbound DNS resolver not installed${NC}"
+    NEEDS_UNBOUND=1
+else
+    echo -e "${GREEN}✓ Unbound DNS resolver running${NC}"
+fi
+
 # Calculate total updates needed
-TOTAL_UPDATES=$((NEEDS_CORE_MODULES + NEEDS_LINKING_PY + NEEDS_API_PY + NEEDS_SYSTEMD_UPDATE + NEEDS_WEB_ADMIN + NEEDS_SELINUX + NEEDS_POLKIT + NEEDS_APACHE_SETUP + NEEDS_WEBCHAT_UPDATE))
+TOTAL_UPDATES=$((NEEDS_CORE_MODULES + NEEDS_LINKING_PY + NEEDS_API_PY + NEEDS_SYSTEMD_UPDATE + NEEDS_WEB_ADMIN + NEEDS_SELINUX + NEEDS_POLKIT + NEEDS_APACHE_SETUP + NEEDS_WEBCHAT_UPDATE + NEEDS_UNBOUND))
 
 echo ""
 if [ $TOTAL_UPDATES -eq 0 ]; then
@@ -544,6 +553,28 @@ if [ $NEEDS_WEBCHAT_UPDATE -eq 1 ] && [ -d "$SCRIPT_DIR/webchat" ]; then
         cp "$SCRIPT_DIR/pyircx-webchat.service" /etc/systemd/system/
         systemctl daemon-reload
         echo -e "${GREEN}✓ WebChat service updated${NC}"
+    fi
+fi
+
+# Install Unbound DNS resolver if needed
+if [ $NEEDS_UNBOUND -eq 1 ]; then
+    echo ""
+    echo -e "${BLUE}Installing Unbound DNS resolver...${NC}"
+    read -p "Install Unbound for local DNS resolution? [Y/n] " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+        # Source install.sh to get the install_unbound function
+        if [ -f "$SCRIPT_DIR/install.sh" ]; then
+            # Extract and run just the install_unbound function
+            source <(sed -n '/^install_unbound()/,/^}/p' "$SCRIPT_DIR/install.sh")
+            source <(sed -n '/^detect_os()/,/^}/p' "$SCRIPT_DIR/install.sh")
+            install_unbound
+            echo -e "${GREEN}✓ Unbound installed${NC}"
+        else
+            echo -e "${YELLOW}⚠ install.sh not found, skipping Unbound${NC}"
+        fi
+    else
+        echo "Skipping Unbound installation"
     fi
 fi
 

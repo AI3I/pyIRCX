@@ -26,6 +26,9 @@ INSTALL_CONF="/etc/pyircx/install.conf"
 WEB_ADMIN_DIR=""
 WEBCHAT_WEB_DIR=""
 
+# DNS resolver (will be set by prompts)
+UNBOUND_INSTALLED="false"
+
 # Detect OS
 detect_os() {
     if [ -f /etc/os-release ]; then
@@ -90,6 +93,9 @@ DATABASE_PATH="$INSTALL_DIR/pyircx.db"
 SERVICE_ENABLED="true"
 SERVICE_USER="$SERVICE_USER"
 SERVICE_GROUP="$SERVICE_GROUP"
+
+# DNS
+UNBOUND_ENABLED="${UNBOUND_INSTALLED:-false}"
 EOF
 
     chmod 644 "$INSTALL_CONF"
@@ -653,6 +659,247 @@ install_selinux() {
     echo -e "${GREEN}SELinux policies installed${NC}"
 }
 
+# Install Unbound DNS resolver
+install_unbound() {
+    echo -e "${YELLOW}Installing Unbound DNS resolver...${NC}"
+
+    local os=$(detect_os)
+
+    # Install unbound based on OS
+    case "$os" in
+        ubuntu|debian|linuxmint|pop|elementary|zorin|kali|parrot|raspbian)
+            apt-get update
+            apt-get install -y unbound
+            ;;
+        fedora)
+            dnf install -y unbound
+            ;;
+        centos|rhel|rocky|almalinux|oracle|scientific)
+            if [ -f /etc/centos-release ] || [ "$VERSION_ID" -lt 8 ]; then
+                yum install -y unbound
+            else
+                dnf install -y unbound
+            fi
+            ;;
+        arch|manjaro|endeavouros|garuda|artix)
+            pacman -Sy --noconfirm unbound
+            ;;
+        opensuse*|sles|tumbleweed)
+            zypper install -y unbound
+            ;;
+        gentoo|funtoo)
+            emerge --ask=n net-dns/unbound
+            ;;
+        void)
+            xbps-install -Sy unbound
+            ;;
+        alpine)
+            apk add --no-cache unbound
+            ;;
+        *)
+            echo -e "${YELLOW}Unknown OS ($os), attempting generic installation...${NC}"
+            if command -v apt-get &> /dev/null; then
+                apt-get update && apt-get install -y unbound
+            elif command -v dnf &> /dev/null; then
+                dnf install -y unbound
+            elif command -v yum &> /dev/null; then
+                yum install -y unbound
+            elif command -v pacman &> /dev/null; then
+                pacman -Sy --noconfirm unbound
+            elif command -v zypper &> /dev/null; then
+                zypper install -y unbound
+            elif command -v apk &> /dev/null; then
+                apk add --no-cache unbound
+            else
+                echo -e "${RED}No supported package manager found for unbound installation${NC}"
+                return 1
+            fi
+            ;;
+    esac
+
+    # Create unbound configuration for local caching resolver
+    echo -e "${YELLOW}Configuring unbound as local resolver...${NC}"
+
+    # Backup existing config if present
+    if [ -f /etc/unbound/unbound.conf ]; then
+        cp /etc/unbound/unbound.conf /etc/unbound/unbound.conf.backup.$(date +%Y%m%d%H%M%S)
+    fi
+
+    # Create pyircx-specific unbound configuration
+    cat > /etc/unbound/unbound.conf.d/pyircx.conf << 'EOF'
+# pyIRCX Unbound Configuration
+# Local caching DNS resolver for IRC hostname resolution
+
+server:
+    # Listen on localhost (127.0.0.53 to avoid conflicts with systemd-resolved)
+    interface: 127.0.0.53
+    port: 53
+
+    # Access control - only allow localhost
+    access-control: 127.0.0.0/8 allow
+    access-control: ::1/128 allow
+
+    # Performance settings
+    num-threads: 2
+    msg-cache-size: 16m
+    rrset-cache-size: 32m
+    cache-min-ttl: 300
+    cache-max-ttl: 86400
+
+    # Privacy settings - don't send client info upstream
+    hide-identity: yes
+    hide-version: yes
+    qname-minimisation: yes
+
+    # Security settings
+    harden-glue: yes
+    harden-dnssec-stripped: yes
+    harden-referral-path: yes
+    use-caps-for-id: yes
+
+    # Logging (minimal for production)
+    verbosity: 1
+    log-queries: no
+
+    # Root hints for recursive resolution
+    root-hints: "/var/lib/unbound/root.hints"
+
+    # Enable prefetching for better performance
+    prefetch: yes
+    prefetch-key: yes
+EOF
+
+    # Create unbound.conf.d directory if it doesn't exist
+    mkdir -p /etc/unbound/unbound.conf.d
+
+    # Ensure main config includes the conf.d directory
+    if ! grep -q "include.*unbound.conf.d" /etc/unbound/unbound.conf 2>/dev/null; then
+        echo 'include: "/etc/unbound/unbound.conf.d/*.conf"' >> /etc/unbound/unbound.conf
+    fi
+
+    # Download root hints if not present
+    if [ ! -f /var/lib/unbound/root.hints ]; then
+        echo -e "${YELLOW}Downloading root hints...${NC}"
+        mkdir -p /var/lib/unbound
+        if command -v wget &> /dev/null; then
+            wget -q -O /var/lib/unbound/root.hints https://www.internic.net/domain/named.root
+        elif command -v curl &> /dev/null; then
+            curl -s -o /var/lib/unbound/root.hints https://www.internic.net/domain/named.root
+        else
+            echo -e "${YELLOW}Could not download root hints (no wget/curl). Using system defaults.${NC}"
+        fi
+        chown unbound:unbound /var/lib/unbound/root.hints 2>/dev/null || true
+    fi
+
+    # Set permissions
+    chown -R unbound:unbound /etc/unbound/unbound.conf.d 2>/dev/null || true
+    chmod 644 /etc/unbound/unbound.conf.d/pyircx.conf
+
+    # Check configuration
+    echo -e "${YELLOW}Checking unbound configuration...${NC}"
+    if unbound-checkconf 2>/dev/null; then
+        echo -e "${GREEN}✓ Unbound configuration is valid${NC}"
+    else
+        echo -e "${RED}⚠ Unbound configuration check failed, using defaults${NC}"
+        rm -f /etc/unbound/unbound.conf.d/pyircx.conf
+    fi
+
+    # Enable and start unbound
+    echo -e "${YELLOW}Enabling unbound service...${NC}"
+    systemctl enable unbound
+    systemctl restart unbound
+
+    if systemctl is-active --quiet unbound; then
+        echo -e "${GREEN}✓ Unbound is running${NC}"
+    else
+        echo -e "${RED}⚠ Unbound failed to start. Check: journalctl -u unbound${NC}"
+        return 1
+    fi
+
+    # Configure system to use unbound for DNS
+    echo -e "${YELLOW}Configuring system to use unbound for DNS resolution...${NC}"
+
+    # Detect init system and DNS management
+    if command -v resolvectl &> /dev/null && systemctl is-active --quiet systemd-resolved; then
+        # systemd-resolved is active - configure it to use unbound
+        echo -e "${YELLOW}Configuring systemd-resolved to use unbound...${NC}"
+
+        mkdir -p /etc/systemd/resolved.conf.d
+        cat > /etc/systemd/resolved.conf.d/unbound.conf << 'EOF'
+[Resolve]
+DNS=127.0.0.53
+DNSStubListener=no
+EOF
+        systemctl restart systemd-resolved
+
+        # Update /etc/resolv.conf symlink if needed
+        if [ -L /etc/resolv.conf ]; then
+            ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.conf 2>/dev/null || true
+        fi
+
+        echo -e "${GREEN}✓ systemd-resolved configured to use unbound${NC}"
+
+    elif [ -f /etc/NetworkManager/NetworkManager.conf ] && systemctl is-active --quiet NetworkManager; then
+        # NetworkManager is active - configure it to use unbound
+        echo -e "${YELLOW}Configuring NetworkManager to use unbound...${NC}"
+
+        mkdir -p /etc/NetworkManager/conf.d
+        cat > /etc/NetworkManager/conf.d/unbound.conf << 'EOF'
+[main]
+dns=none
+EOF
+        # Set resolv.conf to use unbound
+        cat > /etc/resolv.conf << 'EOF'
+# Generated by pyIRCX install.sh for unbound
+nameserver 127.0.0.53
+EOF
+        chattr +i /etc/resolv.conf 2>/dev/null || true
+        systemctl restart NetworkManager
+
+        echo -e "${GREEN}✓ NetworkManager configured to use unbound${NC}"
+
+    else
+        # Direct resolv.conf modification
+        echo -e "${YELLOW}Configuring /etc/resolv.conf to use unbound...${NC}"
+
+        # Backup existing resolv.conf
+        if [ -f /etc/resolv.conf ] && [ ! -L /etc/resolv.conf ]; then
+            cp /etc/resolv.conf /etc/resolv.conf.backup.$(date +%Y%m%d%H%M%S)
+        fi
+
+        # Check if resolv.conf is immutable
+        if lsattr /etc/resolv.conf 2>/dev/null | grep -q 'i'; then
+            chattr -i /etc/resolv.conf 2>/dev/null || true
+        fi
+
+        cat > /etc/resolv.conf << 'EOF'
+# Generated by pyIRCX install.sh for unbound
+nameserver 127.0.0.53
+EOF
+        chattr +i /etc/resolv.conf 2>/dev/null || true
+
+        echo -e "${GREEN}✓ /etc/resolv.conf configured to use unbound${NC}"
+    fi
+
+    # Test DNS resolution
+    echo -e "${YELLOW}Testing DNS resolution...${NC}"
+    if host google.com 127.0.0.53 &>/dev/null || dig @127.0.0.53 google.com +short &>/dev/null; then
+        echo -e "${GREEN}✓ DNS resolution via unbound is working${NC}"
+    else
+        echo -e "${YELLOW}⚠ DNS test failed - unbound may need additional configuration${NC}"
+        echo "  Check: journalctl -u unbound"
+        echo "  Test: dig @127.0.0.53 google.com"
+    fi
+
+    echo -e "${GREEN}Unbound DNS resolver installed and configured!${NC}"
+    echo ""
+    echo "Unbound configuration: /etc/unbound/unbound.conf.d/pyircx.conf"
+    echo "Service commands:"
+    echo "  systemctl status unbound   - Check status"
+    echo "  systemctl restart unbound  - Restart resolver"
+    echo ""
+}
+
 # Install Polkit rules
 install_polkit() {
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -949,6 +1196,30 @@ main() {
     echo ""
     echo "  This will require staff authentication over encrypted connections only."
     echo "  Run: sudo ./setup_ssl.sh to configure SSL/TLS"
+    echo ""
+    echo "========================================"
+    echo -e "${YELLOW}Optional: Local DNS Resolver (Unbound)${NC}"
+    echo "========================================"
+    echo ""
+    echo "Unbound is a fast, secure caching DNS resolver."
+    echo "Installing it provides:"
+    echo "  - Faster DNS lookups for hostname resolution"
+    echo "  - Local caching to reduce external DNS queries"
+    echo "  - Privacy - queries don't go through ISP DNS"
+    echo "  - DNSSEC validation for security"
+    echo ""
+    read -p "Install Unbound DNS resolver on localhost? [Y/n] " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+        install_unbound
+        UNBOUND_INSTALLED="true"
+    else
+        echo ""
+        echo "Unbound installation skipped."
+        echo "You can install it later manually if needed."
+        UNBOUND_INSTALLED="false"
+    fi
+
     echo ""
     echo "========================================"
     echo -e "${YELLOW}Optional: Web Server Setup (Apache/httpd)${NC}"
