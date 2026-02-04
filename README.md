@@ -780,7 +780,7 @@ python3 -m py_compile pyircx.py linking.py
 <p align="center">
   <i>Bringing back the chat rooms of yesterday, with the technology of today.</i>
   <br><br>
-  <b>pyIRCX 1.2.0</b> — The production-ready IRCX server for distributed networks
+  <b>pyIRCX 2.0.0</b> — The production-ready IRCX server for distributed networks
   <br><br>
   ⭐ <b>Star this project on GitHub if you find it useful!</b> ⭐
 </p>
