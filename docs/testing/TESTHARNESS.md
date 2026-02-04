@@ -1,8 +1,8 @@
-# Test Harness Updates for v1.1.5
+# Test Harness Updates for v2.0.0
 
 ## Summary
 
-All test harnesses have been updated and modernized for pyIRCX v1.1.5 release.
+All test harnesses have been updated and modernized for pyIRCX v2.0.0 release.
 
 ## Files Updated
 
@@ -27,7 +27,7 @@ All test harnesses have been updated and modernized for pyIRCX v1.1.5 release.
 - ACCESS - Server DENY (ADMIN)
 
 ### 2. tests/integration/stats.py - Created (595 lines, 16 tests)
-**New test file for v1.1.5 STATS enhancements**
+**New test file for v2.0.0 STATS enhancements**
 
 **Tests:**
 - STATS p - Basic functionality
@@ -48,7 +48,7 @@ All test harnesses have been updated and modernized for pyIRCX v1.1.5 release.
 - STATS * - Admin only (deny sysop)
 
 ### 3. tests/integration/help.py - Created (507 lines, 15 tests)
-**New test file for v1.1.5 HELP enhancements**
+**New test file for v2.0.0 HELP enhancements**
 
 **Tests:**
 - HELP - Main menu
@@ -68,7 +68,7 @@ All test harnesses have been updated and modernized for pyIRCX v1.1.5 release.
 - HELP INVALID - Shows topics
 
 ### 4. tests/integration/services.py - Created (416 lines, 13 tests)
-**New test file for v1.1.5 service improvements**
+**New test file for v2.0.0 service improvements**
 
 **Tests:**
 - Registrar HELP - Exists
@@ -86,7 +86,7 @@ All test harnesses have been updated and modernized for pyIRCX v1.1.5 release.
 - NewsFlash HELP - Still works
 
 ### 5. tests/integration/test_auth.py - Created (900 lines, 18 tests)
-**NEW v1.1.8: AUTH command for post-connection staff authentication with MFA**
+**NEW v2.0.0: AUTH command for post-connection staff authentication with MFA**
 
 **Tests:**
 - AUTH - Basic Authentication (No MFA)
@@ -118,12 +118,12 @@ All test harnesses have been updated and modernized for pyIRCX v1.1.5 release.
 - ✅ HELP documentation (AUTH and DROP)
 
 ### 6. run_tests.sh - Updated (330 lines)
-**Major rewrite for v1.1.8**
+**Major rewrite for v2.0.0**
 
 **Changes:**
-- Updated to v1.1.8
+- Updated to v2.0.0
 - Changed from `pyIRCX_test_*.py` to `tests/integration/*.py` directory structure
-- Added all 8 test suites (4 core + 3 v1.1.5 + 1 v1.1.8)
+- Added all 8 test suites (4 core + 3 v2.0.0 + 1 v2.0.0)
 - Enhanced output with version feature separation
 - Increased test timeout to 120 seconds
 - Total test count: ~230 tests across 8 suites
@@ -131,12 +131,12 @@ All test harnesses have been updated and modernized for pyIRCX v1.1.5 release.
 **Test Execution Order:**
 1. tests/integration/users.py - IRC/IRCX Protocol (115 tests)
 2. tests/integration/staff.py - Staff PASS Authentication (39 tests)
-3. tests/integration/test_auth.py - AUTH Command v1.1.8 (18 tests)
+3. tests/integration/test_auth.py - AUTH Command v2.0.0 (18 tests)
 4. tests/integration/links.py - Server Linking (4 tests)
 5. tests/integration/access.py - Access Control (10 tests)
-6. tests/integration/stats.py - STATS System v1.1.5 (16 tests)
-7. tests/integration/help.py - HELP System v1.1.5 (15 tests)
-8. tests/integration/services.py - Service Improvements v1.1.5 (13 tests)
+6. tests/integration/stats.py - STATS System v2.0.0 (16 tests)
+7. tests/integration/help.py - HELP System v2.0.0 (15 tests)
+8. tests/integration/services.py - Service Improvements v2.0.0 (13 tests)
 
 ## Test Pattern
 
@@ -221,12 +221,12 @@ python3 services.py
 - Server Linking: 4 tests
 - Access Control: 10 tests
 
-**v1.1.5 Features:**
+**v2.0.0 Features:**
 - STATS System: 16 tests
 - HELP System: 15 tests
 - Service Improvements: 13 tests
 
-**v1.1.8 Features:**
+**v2.0.0 Features:**
 - AUTH Command & MFA: 18 tests
 
 ## Test Accounts
@@ -241,5 +241,5 @@ All test files document available test accounts:
 ✅ All test harnesses modernized
 ✅ All test files use consistent async/await pattern
 ✅ All test files independently executable
-✅ Test runner updated for v1.1.5 structure
+✅ Test runner updated for v2.0.0 structure
 ✅ Test documentation complete

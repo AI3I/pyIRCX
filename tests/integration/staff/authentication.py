@@ -10,6 +10,7 @@ import asyncio
 import time
 import sys
 import ssl
+import os
 import aiosqlite
 import bcrypt
 from typing import List
@@ -19,20 +20,26 @@ from typing import List
 # ==============================================================================
 ADMIN_CONFIG = {
     "username": "admin",
-    "password": "password",
+    "password": "testpass",
     "level": "ADMIN"
 }
 
 SYSOP_CONFIG = {
     "username": "sysop",
-    "password": "password",
+    "password": "testpass",
     "level": "SYSOP"
+}
+
+GUIDE_CONFIG = {
+    "username": "guide",
+    "password": "testpass",
+    "level": "GUIDE"
 }
 
 # Test account for MFA testing
 MFA_TEST_CONFIG = {
     "username": "mfatest",
-    "password": "testpass123",
+    "password": "testpass",
     "level": "SYSOP"
 }
 
@@ -86,19 +93,30 @@ class IRCTestClient:
     async def send_raw(self, line: str):
         """Send raw IRC command"""
         if not self.connected:
-            return
-        msg = line + "\r\n"
-        self.writer.write(msg.encode('utf-8'))
-        await self.writer.drain()
-        print(f"[{self.name}] >>> {line}")
+            print(f"[{self.name}] WARNING: Not connected, skipping: {line}")
+            return False
+        try:
+            msg = line + "\r\n"
+            self.writer.write(msg.encode('utf-8'))
+            await self.writer.drain()
+            print(f"[{self.name}] >>> {line}")
+            return True
+        except (ConnectionResetError, BrokenPipeError, OSError) as e:
+            print(f"[{self.name}] ERROR: Connection lost while sending: {e}")
+            self.connected = False
+            return False
 
     async def read_lines(self, timeout: float = 1.0) -> List[str]:
         """Read all available lines"""
+        if not self.connected:
+            return []
         lines = []
         try:
             while True:
                 line = await asyncio.wait_for(self.reader.readline(), timeout=0.1)
                 if not line:
+                    print(f"[{self.name}] Connection closed by server")
+                    self.connected = False
                     break
                 decoded = line.decode('utf-8', errors='replace').strip()
                 if decoded:
@@ -106,6 +124,9 @@ class IRCTestClient:
                     print(f"[{self.name}] <<< {decoded}")
         except asyncio.TimeoutError:
             pass
+        except (ConnectionResetError, BrokenPipeError, OSError) as e:
+            print(f"[{self.name}] ERROR: Connection lost while reading: {e}")
+            self.connected = False
 
         self.buffer.extend(lines)
         return lines
@@ -133,8 +154,10 @@ class IRCTestClient:
         if self.connected:
             try:
                 await self.send_raw("QUIT :Test completed")
+                await asyncio.sleep(0.2)  # Give server time to process QUIT
                 self.writer.close()
                 await self.writer.wait_closed()
+                await asyncio.sleep(0.3)  # Allow connection cleanup and throttle window
             except Exception:
                 pass  # Connection already closed
             self.connected = False
@@ -188,6 +211,10 @@ class TestRunner:
                 print(f"   Exception: {e}")
                 import traceback
                 traceback.print_exc()
+
+            # Delay between tests to avoid connection throttling
+            # Server allows 3 connections per 10 seconds by default
+            await asyncio.sleep(0.5)
 
         print("\n" + "="*70)
         print("TEST SUMMARY")
@@ -374,7 +401,8 @@ async def test_auth_enable_mfa():
 
     # Clean up - disable MFA for next test
     try:
-        async with aiosqlite.connect("trunk_pyircx.db") as db:
+        db_path = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'pyircx.db')
+        async with aiosqlite.connect(db_path) as db:
             await db.execute(
                 "UPDATE users SET mfa_enabled = 0, mfa_secret = NULL WHERE username = ?",
                 (MFA_TEST_CONFIG['username'],)
@@ -617,7 +645,8 @@ async def test_auth_lockout():
 
     # Clean up lockout for next tests
     try:
-        async with aiosqlite.connect("trunk_pyircx.db") as db:
+        db_path = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'pyircx.db')
+        async with aiosqlite.connect(db_path) as db:
             # Clear lockout (implementation detail - may need adjustment)
             await db.execute("DELETE FROM auth_failures WHERE username = ?", ("testlockout",))
             await db.commit()
@@ -723,7 +752,10 @@ async def create_test_accounts():
     print("="*70 + "\n")
 
     try:
-        async with aiosqlite.connect("trunk_pyircx.db") as db:
+        # Use the same database as the server (pyircx.db in project root)
+        import os
+        db_path = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'pyircx.db')
+        async with aiosqlite.connect(db_path) as db:
             for config in [ADMIN_CONFIG, SYSOP_CONFIG, MFA_TEST_CONFIG]:
                 username = config['username']
                 password = config['password']

@@ -3,8 +3,13 @@
 # pyIRCX Test Runner v2.0.0
 # Automated test execution with server management
 #
+# NOTE: For best results, configure server with relaxed connection throttling:
+#   security.enable_connection_throttle: false
+#   OR security.connection_throttle: 100
+#
 
 set -e
+set -o pipefail  # Ensure pipeline failures are detected
 
 # Colors
 RED='\033[0;31m'
@@ -253,7 +258,7 @@ main() {
         TESTS_FOUND=$((TESTS_FOUND + 1))
     fi
     if [ -f "tests/integration/staff/authentication.py" ]; then
-        echo -e "${GREEN}✓ tests/integration/staff/authentication.py (18 tests - v1.1.8)${NC}"
+        echo -e "${GREEN}✓ tests/integration/staff/authentication.py (18 tests)${NC}"
         TESTS_FOUND=$((TESTS_FOUND + 1))
     fi
     if [ -f "tests/integration/network/links.py" ]; then
@@ -265,17 +270,17 @@ main() {
         TESTS_FOUND=$((TESTS_FOUND + 1))
     fi
 
-    # v1.1.5 feature tests
+    # Feature tests
     if [ -f "tests/integration/core/stats.py" ]; then
-        echo -e "${GREEN}✓ tests/integration/core/stats.py (16 tests - v1.1.5)${NC}"
+        echo -e "${GREEN}✓ tests/integration/core/stats.py (16 tests)${NC}"
         TESTS_FOUND=$((TESTS_FOUND + 1))
     fi
     if [ -f "tests/integration/core/help.py" ]; then
-        echo -e "${GREEN}✓ tests/integration/core/help.py (15 tests - v1.1.5)${NC}"
+        echo -e "${GREEN}✓ tests/integration/core/help.py (15 tests)${NC}"
         TESTS_FOUND=$((TESTS_FOUND + 1))
     fi
     if [ -f "tests/integration/ircx/services.py" ]; then
-        echo -e "${GREEN}✓ tests/integration/ircx/services.py (13 tests - v1.1.5)${NC}"
+        echo -e "${GREEN}✓ tests/integration/ircx/services.py (13 tests)${NC}"
         TESTS_FOUND=$((TESTS_FOUND + 1))
     fi
 
@@ -298,14 +303,18 @@ main() {
         echo ""
     } >> "$LOG_FILE"
 
-    # Check if server is running, start if needed
-    if ! check_server; then
+    # Check if server is running
+    if check_server; then
+        echo -e "${YELLOW}⚠️  WARNING: Server already running. Tests require specific config settings.${NC}"
+        echo -e "${YELLOW}   To ensure correct test config, stop the existing server first:${NC}"
+        echo -e "${YELLOW}   pkill -f 'python.*pyircx.py' && sleep 2${NC}"
+        echo ""
+        echo -e "${BLUE}Attempting to use existing server instance...${NC}"
+        echo "- Server: Using existing instance (WARNING: may have incorrect config)" >> "$LOG_FILE"
+    else
         echo -e "${YELLOW}Starting test server automatically...${NC}"
         echo "- Server: Started automatically (PID: will be set)" >> "$LOG_FILE"
         start_test_server
-    else
-        echo -e "${BLUE}Using existing server instance${NC}"
-        echo "- Server: Using existing instance" >> "$LOG_FILE"
     fi
 
     echo ""
@@ -338,11 +347,9 @@ main() {
         fi
     fi
 
-    # AUTH command tests (v1.1.8)
+    # AUTH command tests
     if [ -f "tests/integration/staff/authentication.py" ]; then
         TOTAL_SUITES=$((TOTAL_SUITES + 1))
-        echo ""
-        echo -e "${BLUE}=== v1.1.8 Feature Tests ===${NC}"
         if run_test_suite "tests/integration/staff/authentication.py" "AUTH Command & MFA Tests (18 tests)"; then
             PASSED_SUITES=$((PASSED_SUITES + 1))
         else
@@ -370,11 +377,9 @@ main() {
         fi
     fi
 
-    # v1.1.5 STATS system tests
+    # STATS system tests
     if [ -f "tests/integration/core/stats.py" ]; then
         TOTAL_SUITES=$((TOTAL_SUITES + 1))
-        echo ""
-        echo -e "${BLUE}=== v1.1.5 Feature Tests ===${NC}"
         if run_test_suite "tests/integration/core/stats.py" "STATS System Tests (16 tests)"; then
             PASSED_SUITES=$((PASSED_SUITES + 1))
         else
@@ -382,7 +387,7 @@ main() {
         fi
     fi
 
-    # v1.1.5 HELP system tests
+    # HELP system tests
     if [ -f "tests/integration/core/help.py" ]; then
         TOTAL_SUITES=$((TOTAL_SUITES + 1))
         if run_test_suite "tests/integration/core/help.py" "HELP System Tests (15 tests)"; then
@@ -392,7 +397,7 @@ main() {
         fi
     fi
 
-    # v1.1.5 service improvements tests
+    # Service improvements tests
     if [ -f "tests/integration/ircx/services.py" ]; then
         TOTAL_SUITES=$((TOTAL_SUITES + 1))
         if run_test_suite "tests/integration/ircx/services.py" "Service Improvements Tests (13 tests)"; then
@@ -443,11 +448,12 @@ main() {
         echo "  - IRC/IRCX Protocol (115 tests)"
         echo "  - Core Commands (28 tests - JOIN/PART/QUIT/INVITE/MODE/TOPIC/etc.)"
         echo "  - Staff Authentication (39 tests)"
+        echo "  - AUTH Command & MFA (18 tests)"
         echo "  - Server Linking (4 tests)"
         echo "  - Access Control (10 tests)"
-        echo "  - v1.1.5 STATS System (16 tests)"
-        echo "  - v1.1.5 HELP System (15 tests)"
-        echo "  - v1.1.5 Service Improvements (13 tests)"
+        echo "  - STATS System (16 tests)"
+        echo "  - HELP System (15 tests)"
+        echo "  - Service Improvements (13 tests)"
         echo ""
 
         {
@@ -457,11 +463,12 @@ main() {
             echo "- IRC/IRCX Protocol (115 tests)"
             echo "- Core Commands (28 tests - JOIN/PART/QUIT/INVITE/MODE/TOPIC/etc.)"
             echo "- Staff Authentication (39 tests)"
+            echo "- AUTH Command & MFA (18 tests)"
             echo "- Server Linking (4 tests)"
             echo "- Access Control (10 tests)"
-            echo "- v1.1.5 STATS System (16 tests)"
-            echo "- v1.1.5 HELP System (15 tests)"
-            echo "- v1.1.5 Service Improvements (13 tests)"
+            echo "- STATS System (16 tests)"
+            echo "- HELP System (15 tests)"
+            echo "- Service Improvements (13 tests)"
             echo ""
             echo "---"
             echo ""

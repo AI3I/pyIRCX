@@ -9,7 +9,7 @@ channel persistence, flood protection, and staff management features.
 # Version info - updated with each release
 __version__ = "2.0.0"
 __version_label__ = "pyIRCX"
-__created__ = "Sat Jan 24 05:54:22 PM EST 2026"
+__created__ = "Sat Jan 25 02:24:37 PM EST 2026"
 
 import asyncio
 import aiosqlite
@@ -2161,7 +2161,10 @@ class pyIRCXServer:
         if not user.has_mode('a'):  # ADMIN bypasses
             user_hostmask = user.prefix()
             # Check DENY rules first
-            for pattern, set_by, _, reason in self.access_list['DENY']:
+            for pattern, set_by, set_at, timeout, reason in self.access_list['DENY']:
+                # Check if entry has expired
+                if timeout > 0 and time.time() > timeout:
+                    continue
                 if fnmatch.fnmatch(user_hostmask, pattern) or fnmatch.fnmatch(user.ip or '', pattern):
                     reason_msg = f" ({reason})" if reason else ""
                     await user.send(self.get_reply("481", user, message=SERVER_MESSAGES['access_denied_with_reason'].format(reason=reason_msg)))
@@ -6464,7 +6467,7 @@ class pyIRCXServer:
                 await self.send_server_message(user, "help_staff_topic")
             await self.send_server_message(user, "help_try_command")
 
-    async def handle_info(self, user):
+    async def handle_info(self, user, params=None):
         """Handle INFO command - return server information (RFC 2812)"""
         info_lines = [
             f"pyIRCX Server version {__version__}",
@@ -6492,7 +6495,7 @@ class pyIRCXServer:
             await user.send(self.get_reply("371", user, info=line))
         await user.send(self.get_reply("374", user))
 
-    async def handle_motd(self, user):
+    async def handle_motd(self, user, params=None):
         """Handle MOTD command - display message of the day"""
         await user.send(self.get_reply("375", user))
         # Read MOTD from config (no hardcoded default - should be in config file)
@@ -6507,7 +6510,7 @@ class pyIRCXServer:
                 await user.send(self.get_reply("372", user, text=line))
         await user.send(self.get_reply("376", user))
 
-    async def handle_lusers(self, user):
+    async def handle_lusers(self, user, params=None):
         """Handle LUSERS command - display user statistics"""
         # Count local users (not virtual, not remote)
         local_users = sum(1 for u in self.users.values() if not u.is_virtual and not (u.is_remote))

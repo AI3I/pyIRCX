@@ -1,6 +1,6 @@
 # pyIRCX API Reference
 
-**Version:** 1.1.8
+**Version:** 2.0.0
 **Last Updated:** 2026-01-18
 
 This document provides comprehensive reference documentation for the pyIRCX API module (`api.py`), which provides programmatic access to server administration, user management, and configuration functions.
@@ -1963,4 +1963,4 @@ For issues or questions:
 ---
 
 *Last Updated: 2026-01-18*
-*pyIRCX Version: 1.1.8*
+*pyIRCX Version: 2.0.0*

@@ -327,4 +327,4 @@ class TestUserAPI(unittest.TestCase):
 ---
 
 *Last updated: 2026-01-17*
-*Test suite consolidation - v1.1.8*
+*Test suite consolidation - v2.0.0*

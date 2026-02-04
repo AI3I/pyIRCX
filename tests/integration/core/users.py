@@ -69,19 +69,31 @@ class IRCTestClient:
     async def send_raw(self, line: str):
         """Send raw IRC command"""
         if not self.connected:
-            return
-        msg = line + "\r\n"
-        self.writer.write(msg.encode('utf-8'))
-        await self.writer.drain()
-        print(f"[{self.name}] >>> {line}")
+            print(f"[{self.name}] WARNING: Not connected, skipping: {line}")
+            return False
+        try:
+            msg = line + "\r\n"
+            self.writer.write(msg.encode('utf-8'))
+            await self.writer.drain()
+            print(f"[{self.name}] >>> {line}")
+            return True
+        except (ConnectionResetError, BrokenPipeError, OSError) as e:
+            print(f"[{self.name}] ERROR: Connection lost while sending: {e}")
+            self.connected = False
+            return False
     
     async def read_lines(self, timeout: float = 1.0) -> List[str]:
         """Read all available lines"""
+        if not self.connected:
+            return []
         lines = []
         try:
             while True:
                 line = await asyncio.wait_for(self.reader.readline(), timeout=0.1)
                 if not line:
+                    # Empty line means connection closed
+                    print(f"[{self.name}] Connection closed by server")
+                    self.connected = False
                     break
                 decoded = line.decode('utf-8', errors='replace').strip()
                 if decoded:
@@ -89,7 +101,10 @@ class IRCTestClient:
                     print(f"[{self.name}] <<< {decoded}")
         except asyncio.TimeoutError:
             pass
-        
+        except (ConnectionResetError, BrokenPipeError, OSError) as e:
+            print(f"[{self.name}] ERROR: Connection lost while reading: {e}")
+            self.connected = False
+
         self.buffer.extend(lines)
         return lines
     
@@ -109,10 +124,10 @@ class IRCTestClient:
         if self.connected:
             try:
                 await self.send_raw("QUIT :Test completed")
-                await asyncio.sleep(0.05)  # Give server time to process QUIT
+                await asyncio.sleep(0.2)  # Give server time to process QUIT
                 self.writer.close()
                 await self.writer.wait_closed()
-                await asyncio.sleep(0.05)  # Allow connection cleanup
+                await asyncio.sleep(0.3)  # Allow connection cleanup and throttle window
             except Exception:
                 pass  # Connection already closed
             self.connected = False
@@ -159,8 +174,9 @@ class TestRunner:
                 import traceback
                 traceback.print_exc()
 
-            # Brief delay between tests for cleanup
-            await asyncio.sleep(0.05)
+            # Delay between tests to avoid connection throttling
+            # Server allows 3 connections per 10 seconds by default
+            await asyncio.sleep(0.5)
         
         # Summary
         print("\n" + "="*70)
@@ -534,13 +550,15 @@ async def test_ban_mode_set():
 
     await client.connect("BanOwner")
     await client.send_raw("JOIN #banchan")
-    await asyncio.sleep(0.2)
+    await asyncio.sleep(0.3)
 
     client.buffer.clear()
     # Set a ban
     await client.send_raw("MODE #banchan +b *!*@badhost.com")
     assert await client.expect("MODE #banchan +b"), "Ban not set"
 
+    # Wait for MODE rate limit cooldown (0.5s)
+    await asyncio.sleep(0.6)
     client.buffer.clear()
     # List bans
     await client.send_raw("MODE #banchan b")
@@ -708,16 +726,17 @@ async def test_mode_display_params():
 
     await client.connect("ModeParams")
     await client.send_raw("JOIN #modeparams")
-    await asyncio.sleep(0.2)
+    await asyncio.sleep(0.3)
 
     # Set key and limit
     await client.send_raw("MODE #modeparams +kl secret 50")
-    await asyncio.sleep(0.2)
+    # Wait for MODE rate limit cooldown (0.5s)
+    await asyncio.sleep(0.6)
 
     # Query modes
     client.buffer.clear()
     await client.send_raw("MODE #modeparams")
-    await asyncio.sleep(0.3)
+    await asyncio.sleep(0.5)
     await client.read_lines()
 
     # Find the MODE reply - use the LAST 324 (most recent)
@@ -806,7 +825,9 @@ async def test_knock_rate_limit():
     # Second knock immediately should be rate limited
     user.buffer.clear()
     await user.send_raw("KNOCK #ratechan")
-    assert await user.expect("712"), "Second KNOCK should be rate limited (712)"
+    # Server may return 712 (KNOCK-specific) or 830 (general rate limit)
+    has_rate_limit = await user.expect("712") or await user.expect("830")
+    assert has_rate_limit, "Second KNOCK should be rate limited (712 or 830)"
 
     await owner.disconnect()
     await user.disconnect()
@@ -818,20 +839,29 @@ async def test_prop_command():
     client = IRCTestClient("test_prop")
 
     await client.connect("PropUser")
-    await client.send_raw("JOIN #propchan")
+    # Enable IRCX mode - required for PROP command
+    await client.send_raw("IRCX")
     await asyncio.sleep(0.2)
+    await client.read_lines()
+
+    await client.send_raw("JOIN #propchan")
+    await asyncio.sleep(0.3)
 
     # Set a property
     client.buffer.clear()
     await client.send_raw("PROP #propchan TOPIC :Welcome to the channel!")
     assert await client.expect("819"), "No PROP set confirmation (819)"
 
+    # Wait for PROP rate limit cooldown (1.0s)
+    await asyncio.sleep(1.1)
     # Get the property
     client.buffer.clear()
     await client.send_raw("PROP #propchan TOPIC")
     assert await client.expect("817"), "No PROP value reply (817)"
     assert await client.expect("Welcome"), "Property value not returned"
 
+    # Wait for PROP rate limit cooldown (1.0s)
+    await asyncio.sleep(1.1)
     # List all properties
     client.buffer.clear()
     await client.send_raw("PROP #propchan")
@@ -847,6 +877,11 @@ async def test_prop_memberkey():
     user = IRCTestClient("test_memberkey_user")
 
     await owner.connect("MemberkeyOwner")
+    # Enable IRCX mode - required for PROP command
+    await owner.send_raw("IRCX")
+    await asyncio.sleep(0.2)
+    await owner.read_lines()
+
     await owner.send_raw("JOIN #memberkeychan")
     await asyncio.sleep(0.2)
 
@@ -877,6 +912,9 @@ async def test_prop_hostkey_grants_op():
     user = IRCTestClient("test_hostkey2_user")
 
     await owner.connect("HostkeyOwner2")
+    # Enable IRCX mode - required for PROP command
+    await owner.send_raw("IRCX")
+    await asyncio.sleep(0.1)
     await owner.send_raw("JOIN #hostkeychan2")
     await asyncio.sleep(0.2)
 
@@ -928,6 +966,9 @@ async def test_prop_onjoin():
     user = IRCTestClient("test_onjoin_user")
 
     await owner.connect("OnjoinOwner")
+    # Enable IRCX mode - required for PROP command
+    await owner.send_raw("IRCX")
+    await asyncio.sleep(0.1)
     await owner.send_raw("JOIN #onjoinchan")
     await asyncio.sleep(0.2)
 
@@ -957,6 +998,9 @@ async def test_prop_onpart():
     user = IRCTestClient("test_onpart_user")
 
     await owner.connect("OnpartOwner")
+    # Enable IRCX mode - required for PROP command
+    await owner.send_raw("IRCX")
+    await asyncio.sleep(0.1)
     await owner.send_raw("JOIN #onpartchan")
     await asyncio.sleep(0.2)
 
@@ -1082,12 +1126,15 @@ async def test_access_deny_blocks():
     user = IRCTestClient("test_access_deny_user")
 
     await owner.connect("AccessDenyOwner")
+    # Enable IRCX mode - required for ACCESS command
+    await owner.send_raw("IRCX")
+    await asyncio.sleep(0.1)
     await owner.send_raw("JOIN #accessdeny")
-    await asyncio.sleep(0.2)
+    await asyncio.sleep(0.3)
 
-    # Add DENY entry for the user
+    # Add DENY entry for the user (ACCESS has 2.0s cooldown)
     await owner.send_raw("ACCESS #accessdeny ADD DENY AccessDenyUser")
-    await asyncio.sleep(0.2)
+    await asyncio.sleep(2.2)
 
     await user.connect("AccessDenyUser")
     user.buffer.clear()
@@ -1107,14 +1154,17 @@ async def test_access_grant_bypass():
     user = IRCTestClient("test_access_grant_user")
 
     await owner.connect("AccessGrantOwner")
+    # Enable IRCX mode - required for ACCESS command
+    await owner.send_raw("IRCX")
+    await asyncio.sleep(0.1)
     await owner.send_raw("JOIN #accessgrant")
-    await asyncio.sleep(0.2)
+    await asyncio.sleep(0.3)
 
     # Set invite-only and add GRANT for user
     await owner.send_raw("MODE #accessgrant +i")
-    await asyncio.sleep(0.2)
+    await asyncio.sleep(0.6)  # MODE cooldown
     await owner.send_raw("ACCESS #accessgrant ADD GRANT AccessGrantUser")
-    await asyncio.sleep(0.2)
+    await asyncio.sleep(2.2)  # ACCESS cooldown
 
     await user.connect("AccessGrantUser")
     user.buffer.clear()
@@ -1134,17 +1184,20 @@ async def test_access_host_grants_op():
     user = IRCTestClient("test_access_host_user")
 
     await owner.connect("AccessHostOwner")
+    # Enable IRCX mode - required for ACCESS command
+    await owner.send_raw("IRCX")
+    await asyncio.sleep(0.1)
     await owner.send_raw("JOIN #accesshost")
-    await asyncio.sleep(0.2)
+    await asyncio.sleep(0.3)
 
-    # Add HOST entry for user
+    # Add HOST entry for user (ACCESS has 2.0s cooldown)
     await owner.send_raw("ACCESS #accesshost ADD HOST AccessHostUser")
-    await asyncio.sleep(0.2)
+    await asyncio.sleep(2.2)
 
     await user.connect("AccessHostUser")
     user.buffer.clear()
     await user.send_raw("JOIN #accesshost")
-    await asyncio.sleep(0.3)
+    await asyncio.sleep(0.5)
     await user.read_lines()
 
     # Should receive +o
@@ -1163,17 +1216,20 @@ async def test_access_voice_grants_voice():
     user = IRCTestClient("test_access_voice_user")
 
     await owner.connect("AccessVoiceOwner")
+    # Enable IRCX mode - required for ACCESS command
+    await owner.send_raw("IRCX")
+    await asyncio.sleep(0.1)
     await owner.send_raw("JOIN #accessvoice")
-    await asyncio.sleep(0.2)
+    await asyncio.sleep(0.3)
 
-    # Add VOICE entry for user
+    # Add VOICE entry for user (ACCESS has 2.0s cooldown)
     await owner.send_raw("ACCESS #accessvoice ADD VOICE AccessVoiceUser")
-    await asyncio.sleep(0.2)
+    await asyncio.sleep(2.2)
 
     await user.connect("AccessVoiceUser")
     user.buffer.clear()
     await user.send_raw("JOIN #accessvoice")
-    await asyncio.sleep(0.3)
+    await asyncio.sleep(0.5)
     await user.read_lines()
 
     # Should receive +v
@@ -1935,12 +1991,13 @@ async def test_rfc_mode_query():
 
     # Set some modes
     await client.send_raw("MODE #modequery +nt")
-    await asyncio.sleep(0.2)
+    # Wait for MODE rate limit cooldown (0.5s)
+    await asyncio.sleep(0.6)
 
     # Query channel modes
     client.buffer.clear()
     await client.send_raw("MODE #modequery")
-    await asyncio.sleep(0.3)
+    await asyncio.sleep(0.5)
     await client.read_lines()
 
     # 324 RPL_CHANNELMODEIS format: :server 324 nick #channel +modes [params]
@@ -1953,10 +2010,12 @@ async def test_rfc_mode_query():
 
     assert has_324, "No RPL_CHANNELMODEIS (324) received"
 
+    # Wait for MODE rate limit cooldown (0.5s)
+    await asyncio.sleep(0.6)
     # Query user modes
     client.buffer.clear()
     await client.send_raw("MODE ModeQueryTest")
-    await asyncio.sleep(0.3)
+    await asyncio.sleep(0.5)
     await client.read_lines()
 
     # 221 RPL_UMODEIS format: :server 221 nick +modes
@@ -2213,6 +2272,10 @@ async def test_ircx_whisper():
     await client2.connect("WhisperTarget")
     await client3.connect("WhisperBystander")
 
+    # Enable IRCX mode - required for WHISPER command
+    await client1.send_raw("IRCX")
+    await asyncio.sleep(0.1)
+
     # All join same channel
     await client1.send_raw("JOIN #whisperchan")
     await asyncio.sleep(0.2)
@@ -2264,6 +2327,9 @@ async def test_ircx_prop_ownerkey():
     await client1.connect("OwnerKeyOwner")
     await client2.connect("OwnerKeyUser")
 
+    # Enable IRCX mode - required for PROP command
+    await client1.send_raw("IRCX")
+    await asyncio.sleep(0.1)
     await client1.send_raw("JOIN #ownerkeytest")
     await asyncio.sleep(0.2)
 
@@ -2417,9 +2483,12 @@ async def test_mode_moderated():
     await asyncio.sleep(0.3)
     await client2.read_lines()
 
-    # Should get 404 ERR_CANNOTSENDTOCHAN
-    has_error = any(" 404 " in line for line in client2.buffer)
-    print(f"   Moderated blocked message (404): {has_error}")
+    # Should get 404 ERR_CANNOTSENDTOCHAN or 841/842 (IRCX moderated/no external error)
+    has_404 = any(" 404 " in line for line in client2.buffer)
+    has_841 = any(" 841 " in line for line in client2.buffer)
+    has_842 = any(" 842 " in line for line in client2.buffer)
+    has_error = has_404 or has_841 or has_842
+    print(f"   Moderated blocked message (404/841/842): {has_error}")
 
     # Give voice and try again
     await client1.send_raw("MODE #modtest +v ModUser")
@@ -2462,9 +2531,11 @@ async def test_mode_no_external():
     await asyncio.sleep(0.3)
     await client2.read_lines()
 
-    # Should get 404 ERR_CANNOTSENDTOCHAN
-    has_error = any(" 404 " in line for line in client2.buffer)
-    print(f"   External message blocked (404): {has_error}")
+    # Should get 404 ERR_CANNOTSENDTOCHAN or 842 (IRCX no external messages)
+    has_404 = any(" 404 " in line for line in client2.buffer)
+    has_842 = any(" 842 " in line for line in client2.buffer)
+    has_error = has_404 or has_842
+    print(f"   External message blocked (404/842): {has_error}")
 
     assert has_error, "+n should block external messages"
 
@@ -3177,18 +3248,19 @@ async def test_multi_mode():
 
     await client.connect("MultiModeTest")
     await client.send_raw("JOIN #multimode")
-    await asyncio.sleep(0.2)
+    await asyncio.sleep(0.3)
 
     # Set multiple modes at once
     client.buffer.clear()
     await client.send_raw("MODE #multimode +ntms")
-    await asyncio.sleep(0.2)
+    # Wait for MODE rate limit cooldown (0.5s)
+    await asyncio.sleep(0.6)
     await client.read_lines()
 
     # Query modes
     client.buffer.clear()
     await client.send_raw("MODE #multimode")
-    await asyncio.sleep(0.2)
+    await asyncio.sleep(0.5)
     await client.read_lines()
 
     mode_line = None
@@ -3215,16 +3287,17 @@ async def test_ban_list():
 
     await client.connect("BanListTest")
     await client.send_raw("JOIN #banlisttest")
-    await asyncio.sleep(0.2)
+    await asyncio.sleep(0.3)
 
     # Set a ban
     await client.send_raw("MODE #banlisttest +b evil!*@*")
-    await asyncio.sleep(0.2)
+    # Wait for MODE rate limit cooldown (0.5s)
+    await asyncio.sleep(0.6)
 
     # Query ban list
     client.buffer.clear()
     await client.send_raw("MODE #banlisttest +b")
-    await asyncio.sleep(0.3)
+    await asyncio.sleep(0.5)
     await client.read_lines()
 
     # Should get 367 (ban list) and 368 (end of ban list)
@@ -3248,16 +3321,17 @@ async def test_invite_list():
 
     await client.connect("InviteListTest")
     await client.send_raw("JOIN #invlisttest")
-    await asyncio.sleep(0.2)
+    await asyncio.sleep(0.3)
 
     # Set an invite exception
     await client.send_raw("MODE #invlisttest +I friend!*@*")
-    await asyncio.sleep(0.2)
+    # Wait for MODE rate limit cooldown (0.5s)
+    await asyncio.sleep(0.6)
 
     # Query invite list
     client.buffer.clear()
     await client.send_raw("MODE #invlisttest +I")
-    await asyncio.sleep(0.3)
+    await asyncio.sleep(0.5)
     await client.read_lines()
 
     # Should get 346 (invite list) and 347 (end)
@@ -3277,16 +3351,17 @@ async def test_except_list():
 
     await client.connect("ExceptListTest")
     await client.send_raw("JOIN #exclisttest")
-    await asyncio.sleep(0.2)
+    await asyncio.sleep(0.3)
 
     # Set a ban exception
     await client.send_raw("MODE #exclisttest +e good!*@*")
-    await asyncio.sleep(0.2)
+    # Wait for MODE rate limit cooldown (0.5s)
+    await asyncio.sleep(0.6)
 
     # Query exception list
     client.buffer.clear()
     await client.send_raw("MODE #exclisttest +e")
-    await asyncio.sleep(0.3)
+    await asyncio.sleep(0.5)
     await client.read_lines()
 
     # Should get 348 (except list) and 349 (end)
@@ -3495,6 +3570,10 @@ async def test_whisper_privacy():
     await client1.connect("WhisperSender")
     await client2.connect("WhisperRecv")
     await client3.connect("WhisperSpy")
+
+    # Enable IRCX mode - required for WHISPER command
+    await client1.send_raw("IRCX")
+    await asyncio.sleep(0.1)
 
     # All join same channel
     await client1.send_raw("JOIN #whisperpriv")
@@ -3803,14 +3882,17 @@ async def test_error_cannot_send():
     await asyncio.sleep(0.3)
     await client2.read_lines()
 
+    # Server may return 404 (standard IRC) or 842 (IRCX-specific for +n mode)
     has_404 = any(" 404 " in line for line in client2.buffer)
+    has_842 = any(" 842 " in line for line in client2.buffer)
     print(f"   404 (CANNOTSENDTOCHAN): {has_404}")
+    print(f"   842 (IRCX no external): {has_842}")
 
     for line in client2.buffer:
-        if " 404 " in line:
+        if " 404 " in line or " 842 " in line:
             print(f"   {line[:80]}...")
 
-    assert has_404, "Should return 404 for blocked message"
+    assert has_404 or has_842, "Should return 404 or 842 for blocked message"
 
     await client1.disconnect()
     await client2.disconnect()
@@ -3850,10 +3932,39 @@ async def test_error_nick_in_use():
     await client2.disconnect()
 
 
+async def verify_server_config():
+    """Verify server has test-friendly settings"""
+    print("Checking server configuration...")
+
+    client = IRCTestClient("config_check")
+    if not await client.connect("ConfigCheck"):
+        print("⚠️  Could not verify server config")
+        return True  # Continue anyway
+
+    # Request STATS v for version/config info
+    await client.send_raw("STATS v")
+    await asyncio.sleep(0.3)
+    await client.read_lines()
+
+    # Check if connection throttle info appears
+    throttle_enabled = any("throttle" in line.lower() and "true" in line.lower()
+                          for line in client.buffer)
+
+    await client.disconnect()
+
+    if throttle_enabled:
+        print("⚠️  WARNING: Server has connection throttling ENABLED")
+        print("   Tests may fail. Set enable_connection_throttle: false in config")
+        return False
+
+    print("✅ Server config looks OK")
+    return True
+
+
 async def main():
     """Main test entry point"""
     print("\n⚠️  Make sure pyIRCX server is running on localhost:6667\n")
-    
+
     # Test server connection first
     try:
         reader, writer = await asyncio.wait_for(
@@ -3867,10 +3978,16 @@ async def main():
         print(f"❌ Cannot connect to server: {e}")
         print("Please start the pyIRCX server first!")
         return False
-    
+
+    # Verify server config
+    await verify_server_config()
+
+    # Brief pause before running tests to allow any lingering connections to clear
+    await asyncio.sleep(1.0)
+
     # Run all tests
     success = await runner.run_all()
-    
+
     return success
 
 

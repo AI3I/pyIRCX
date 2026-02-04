@@ -12,16 +12,17 @@ Usage:
 """
 
 import sqlite3
-import hashlib
 import argparse
 import os
 import sys
 import time
 
+import bcrypt
+
 
 def hash_password(password: str) -> str:
-    """Hash password using SHA-256"""
-    return hashlib.sha256(password.encode()).hexdigest()
+    """Hash password using bcrypt (matches server authentication)"""
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
 
 def setup_test_accounts(db_path: str):
@@ -118,18 +119,49 @@ def setup_test_accounts(db_path: str):
         return False
 
 
+def find_database():
+    """Find database file in common locations"""
+    # Check common locations in order of preference
+    locations = [
+        # Local development (relative to script location)
+        os.path.join(os.path.dirname(__file__), '..', '..', '..', 'pyircx.db'),
+        # Current working directory
+        'pyircx.db',
+        # System install
+        '/opt/pyircx/pyircx.db',
+    ]
+
+    for loc in locations:
+        path = os.path.abspath(loc)
+        if os.path.exists(path):
+            return path
+
+    return None
+
+
 def main():
     parser = argparse.ArgumentParser(description='Setup test accounts for pyIRCX testing')
-    parser.add_argument('--db', default='/opt/pyircx/pyircx.db',
-                       help='Path to pyIRCX database (default: /opt/pyircx/pyircx.db)')
+    parser.add_argument('--db', default=None,
+                       help='Path to pyIRCX database (auto-detected if not specified)')
 
     args = parser.parse_args()
+
+    # Auto-detect database if not specified
+    db_path = args.db
+    if db_path is None:
+        db_path = find_database()
+        if db_path is None:
+            print("❌ Could not find pyircx.db")
+            print("Searched: ./pyircx.db, ../../../pyircx.db, /opt/pyircx/pyircx.db")
+            print("Please specify path with --db")
+            sys.exit(1)
+        print(f"📍 Auto-detected database: {db_path}")
 
     print("="*60)
     print("pyIRCX Test Account Setup")
     print("="*60)
 
-    success = setup_test_accounts(args.db)
+    success = setup_test_accounts(db_path)
     sys.exit(0 if success else 1)
 
 

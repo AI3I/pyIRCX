@@ -44,6 +44,65 @@ python3 tests/integration/load/stress_test.py --quick  # Performance tests
 
 ---
 
+## Prerequisites
+
+### 1. Running Server
+
+Tests require a pyIRCX server running on `localhost:6667`:
+
+```bash
+# Start the server
+python3 pyircx.py --config pyircx_config.json
+
+# Or use systemd
+sudo systemctl start pyircx
+```
+
+### 2. Test Accounts (Required for Staff Tests)
+
+Many tests require staff accounts. Run the setup script to create them:
+
+```bash
+python3 tests/integration/setup_test_accounts.py
+```
+
+This creates the following test accounts with password `testpass`:
+
+| Username | Level | Description |
+|----------|-------|-------------|
+| `admin` | ADMIN | Full administrative privileges |
+| `sysop` | SYSOP | System operator privileges |
+| `guide` | GUIDE | Limited staff privileges |
+
+**Important:** On remote servers, run `setup_test_accounts.py` on the server itself, or manually create accounts with the expected password.
+
+### 3. Connection Throttling & Rate Limiting
+
+The server has connection throttling and rate limiting enabled by default:
+
+- **Connection Throttle**: 3 connections per 10 seconds per IP (causes connection resets)
+- **Command Rate Limit**: Various per-command cooldowns (causes `830` errors)
+
+Tests include appropriate delays, but if you see connection errors or `830 (rate limited)` errors:
+
+**Option 1: Recommended Server Config for Testing**
+```yaml
+security:
+  enable_connection_throttle: false  # Disable for testing
+  connection_throttle: 100           # Or increase limit
+  throttle_window: 1.0               # Or reduce window
+```
+
+**Option 2: Increase Test Delays**
+- Edit `tests/integration/core/users.py` and increase `asyncio.sleep()` values
+- Tests already include 0.5s inter-test delays
+
+**Option 3: Use Staff Accounts**
+- Staff accounts have relaxed rate limits
+- Run `setup_test_accounts.py` first
+
+---
+
 ## Test Suites
 
 ### Core IRC Functionality

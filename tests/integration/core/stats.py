@@ -15,7 +15,8 @@ import sys
 from typing import List
 
 # Import test client from users.py
-sys.path.insert(0, '.')
+import os
+sys.path.insert(0, os.path.dirname(__file__))
 from users import IRCTestClient, TestRunner
 
 # Create test runner instance

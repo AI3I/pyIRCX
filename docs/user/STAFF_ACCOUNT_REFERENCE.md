@@ -529,4 +529,4 @@ No database migration needed - existing staff accounts work with AUTH.
 ---
 
 *Last updated: 2026-01-17*
-*AUTH command implementation - v1.1.8+*
+*AUTH command implementation - v2.0.0+*

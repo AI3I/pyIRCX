@@ -23,7 +23,8 @@ import sys
 from typing import List
 
 # Import test client from users.py
-sys.path.insert(0, '.')
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'core'))
 from users import IRCTestClient, TestRunner
 
 # Create test runner instance
@@ -40,6 +41,11 @@ async def test_channel_owner_access():
     client = IRCTestClient("access_owner")
 
     await client.connect("AccessOwner")
+    # Enable IRCX mode first - required for ACCESS command
+    await client.send_raw("IRCX")
+    await asyncio.sleep(0.2)
+    await client.read_lines()
+
     await client.send_raw("JOIN #testowner")
     await asyncio.sleep(0.3)
     await client.read_lines()
@@ -75,6 +81,10 @@ async def test_channel_host_access():
     client = IRCTestClient("access_host")
 
     await client.connect("AccessHost")
+    await client.send_raw("IRCX")
+    await asyncio.sleep(0.2)
+    await client.read_lines()
+
     await client.send_raw("JOIN #testhost")
     await asyncio.sleep(0.3)
     await client.read_lines()
@@ -109,6 +119,10 @@ async def test_channel_voice_access():
     client = IRCTestClient("access_voice")
 
     await client.connect("AccessVoice")
+    await client.send_raw("IRCX")
+    await asyncio.sleep(0.2)
+    await client.read_lines()
+
     await client.send_raw("JOIN #testvoice")
     await asyncio.sleep(0.3)
     await client.read_lines()
@@ -143,6 +157,10 @@ async def test_channel_deny_access():
     client = IRCTestClient("access_deny")
 
     await client.connect("AccessDeny")
+    await client.send_raw("IRCX")
+    await asyncio.sleep(0.2)
+    await client.read_lines()
+
     await client.send_raw("JOIN #testdeny")
     await asyncio.sleep(0.3)
     await client.read_lines()
@@ -181,6 +199,10 @@ async def test_access_remove():
     client = IRCTestClient("access_remove")
 
     await client.connect("AccessRemove")
+    await client.send_raw("IRCX")
+    await asyncio.sleep(0.2)
+    await client.read_lines()
+
     await client.send_raw("JOIN #testremove")
     await asyncio.sleep(0.3)
     await client.read_lines()
@@ -221,6 +243,10 @@ async def test_access_clear():
     client = IRCTestClient("access_clear")
 
     await client.connect("AccessClear")
+    await client.send_raw("IRCX")
+    await asyncio.sleep(0.2)
+    await client.read_lines()
+
     await client.send_raw("JOIN #testclear")
     await asyncio.sleep(0.3)
     await client.read_lines()
@@ -269,6 +295,10 @@ async def test_service_deny_protection():
     client = IRCTestClient("access_service")
 
     await client.connect("AccessService")
+    await client.send_raw("IRCX")
+    await asyncio.sleep(0.2)
+    await client.read_lines()
+
     await client.send_raw("JOIN #testservice")
     await asyncio.sleep(0.3)
     await client.read_lines()
@@ -302,11 +332,15 @@ async def test_wildcard_patterns():
     client = IRCTestClient("access_wildcard")
 
     await client.connect("AccessWildcard")
+    await client.send_raw("IRCX")
+    await asyncio.sleep(0.2)
+    await client.read_lines()
+
     await client.send_raw("JOIN #testwildcard")
     await asyncio.sleep(0.3)
     await client.read_lines()
 
-    # Test various wildcard patterns
+    # Test various wildcard patterns (with delays to avoid rate limiting)
     patterns = [
         "*!*@*.example.com",
         "User*!*@*",
@@ -316,9 +350,11 @@ async def test_wildcard_patterns():
 
     for pattern in patterns:
         await client.send_raw(f"ACCESS #testwildcard ADD VOICE {pattern}")
-        await asyncio.sleep(0.2)
+        await asyncio.sleep(0.6)  # Increased delay to avoid rate limiting
+        await client.read_lines()
 
-    await client.read_lines()
+    # Wait for rate limit cooldown before listing
+    await asyncio.sleep(1.0)
 
     # List all entries
     client.buffer.clear()
@@ -354,12 +390,16 @@ async def test_server_access_grant():
 
     await client.connect("AccessServerGrant", staff_account="admin")
     await asyncio.sleep(0.3)
-    await asyncio.sleep(0.5)
     await client.read_lines()
 
-    # Try to add GRANT entry
+    # Enable IRCX mode
+    await client.send_raw("IRCX")
+    await asyncio.sleep(0.2)
+    await client.read_lines()
+
+    # Try to add GRANT entry (use $ for server access)
     client.buffer.clear()
-    await client.send_raw("ACCESS SERVER ADD GRANT AdminUser!*@*")
+    await client.send_raw("ACCESS $ ADD GRANT AdminUser!*@*")
     await asyncio.sleep(0.3)
     await client.read_lines()
 
@@ -369,7 +409,7 @@ async def test_server_access_grant():
 
     # List GRANT entries
     client.buffer.clear()
-    await client.send_raw("ACCESS SERVER LIST GRANT")
+    await client.send_raw("ACCESS $ LIST GRANT")
     await asyncio.sleep(0.3)
     await client.read_lines()
 
@@ -389,12 +429,16 @@ async def test_server_access_deny():
 
     await client.connect("AccessServerDeny", staff_account="admin")
     await asyncio.sleep(0.3)
-    await asyncio.sleep(0.5)
     await client.read_lines()
 
-    # Try to add DENY entry
+    # Enable IRCX mode
+    await client.send_raw("IRCX")
+    await asyncio.sleep(0.2)
+    await client.read_lines()
+
+    # Try to add DENY entry (use $ for server access)
     client.buffer.clear()
-    await client.send_raw("ACCESS SERVER ADD DENY BannedUser!*@*")
+    await client.send_raw("ACCESS $ ADD DENY BannedUser!*@*")
     await asyncio.sleep(0.3)
     await client.read_lines()
 
@@ -404,7 +448,7 @@ async def test_server_access_deny():
 
     # List DENY entries
     client.buffer.clear()
-    await client.send_raw("ACCESS SERVER LIST DENY")
+    await client.send_raw("ACCESS $ LIST DENY")
     await asyncio.sleep(0.3)
     await client.read_lines()
 

@@ -19,43 +19,70 @@ class IRCTestClient:
         self.reader = None
         self.writer = None
         self.buffer = []
+        self.connected = False
 
     async def connect(self, nickname, username=None):
         """Connect to IRC server"""
-        self.reader, self.writer = await asyncio.open_connection(self.host, self.port)
-        await self.send_raw(f"NICK {nickname}")
-        await self.send_raw(f"USER {username or nickname} 0 * :{nickname}")
-        await asyncio.sleep(0.5)
-        await self.read_lines()
-        self.buffer.clear()
+        try:
+            self.reader, self.writer = await asyncio.open_connection(self.host, self.port)
+            self.connected = True
+            await self.send_raw(f"NICK {nickname}")
+            await self.send_raw(f"USER {username or nickname} 0 * :{nickname}")
+            await asyncio.sleep(0.5)
+            await self.read_lines()
+            self.buffer.clear()
+            return True
+        except Exception as e:
+            print(f"   Connection failed: {e}")
+            return False
 
     async def send_raw(self, message):
         """Send raw IRC command"""
-        self.writer.write((message + "\r\n").encode())
-        await self.writer.drain()
+        if not self.connected:
+            print(f"   WARNING: Not connected, skipping: {message}")
+            return False
+        try:
+            self.writer.write((message + "\r\n").encode())
+            await self.writer.drain()
+            return True
+        except (ConnectionResetError, BrokenPipeError, OSError) as e:
+            print(f"   ERROR: Connection lost while sending: {e}")
+            self.connected = False
+            return False
 
     async def read_lines(self, timeout=1.0):
         """Read available lines"""
+        if not self.connected:
+            return []
         try:
             while True:
                 line = await asyncio.wait_for(self.reader.readline(), timeout=0.1)
                 if not line:
+                    print("   Connection closed by server")
+                    self.connected = False
                     break
                 decoded = line.decode('utf-8', errors='replace').strip()
                 self.buffer.append(decoded)
                 print(f"   <<< {decoded}")
         except asyncio.TimeoutError:
             pass
+        except (ConnectionResetError, BrokenPipeError, OSError) as e:
+            print(f"   ERROR: Connection lost while reading: {e}")
+            self.connected = False
+        return self.buffer
 
     async def disconnect(self):
         """Disconnect from server"""
-        if self.writer:
+        if self.connected and self.writer:
             try:
                 await self.send_raw("QUIT :Test done")
+                await asyncio.sleep(0.2)  # Give server time to process QUIT
                 self.writer.close()
                 await self.writer.wait_closed()
+                await asyncio.sleep(0.3)  # Allow connection cleanup and throttle window
             except Exception:
                 pass  # Connection already closed
+            self.connected = False
 
 
 class TestRunner:
@@ -89,6 +116,9 @@ class TestRunner:
                 import traceback
                 traceback.print_exc()
                 self.failed += 1
+
+            # Delay between tests to avoid connection throttling
+            await asyncio.sleep(0.5)
 
         print(f"\n{'='*70}")
         print(f"RESULTS: {self.passed} passed, {self.failed} failed")

@@ -7,7 +7,7 @@ This guide explains how to run the comprehensive test suites for pyIRCX.
 pyIRCX includes **243 comprehensive tests** covering all major functionality:
 
 - **206 Core IRC/IRCX Tests** (5 suites) - IRC protocol, commands, modes, access control
-- **44 v1.1.5 Feature Tests** (3 suites) - STATS, HELP, and Services enhancements
+- **44 v2.0.0 Feature Tests** (3 suites) - STATS, HELP, and Services enhancements
 - **All suites automated with Markdown logging**
 
 **Current Status: 243/243 tests passing (100%)**
@@ -55,7 +55,7 @@ pyIRCX includes **243 comprehensive tests** covering all major functionality:
    - Wildcard patterns
    - Service protection
 
-### v1.1.5 Features (3 suites, 44 tests)
+### v2.0.0 Features (3 suites, 44 tests)
 
 6. **tests/integration/stats.py** - 16 tests
    - STATS p (peak usage)
@@ -69,7 +69,7 @@ pyIRCX includes **243 comprehensive tests** covering all major functionality:
 
 7. **tests/integration/help.py** - 15 tests
    - HELP main menu
-   - HELP REGISTER (new topic for v1.1.5)
+   - HELP REGISTER (new topic for v2.0.0)
    - HELP COMMANDS (with Registration category)
    - HELP CHANNEL, IRCX, USERMODES, CHANMODES, SERVICES
    - HELP STAFF (privilege-restricted)
@@ -89,9 +89,9 @@ pyIRCX includes **243 comprehensive tests** covering all major functionality:
 | Staff System | 39 | Authentication, privileges, staff commands |
 | Server Linking | 4 | Network topology, server-to-server |
 | Access Control | 10 | Channel/server access lists, permissions |
-| STATS (v1.1.5) | 16 | All new STATS flags, no-limit fixes |
-| HELP (v1.1.5) | 15 | HELP REGISTER, all topics |
-| Services (v1.1.5) | 13 | Registrar/ServiceBot improvements |
+| STATS (v2.0.0) | 16 | All new STATS flags, no-limit fixes |
+| HELP (v2.0.0) | 15 | HELP REGISTER, all topics |
+| Services (v2.0.0) | 13 | Registrar/ServiceBot improvements |
 | **TOTAL** | **243** | **Comprehensive** |
 
 ## Prerequisites
@@ -171,7 +171,7 @@ python3 staff.py          # 39 tests
 python3 links.py          # 4 tests
 python3 access.py         # 10 tests
 
-# v1.1.5 Features
+# v2.0.0 Features
 python3 stats.py          # 16 tests
 python3 help.py           # 15 tests
 python3 services.py       # 13 tests
@@ -235,7 +235,7 @@ await client.send_raw("IDENTIFY admin testpass")
    - ✅ Verified: All multi-user tests (JOIN/PART/MODE/TOPIC/KICK)
    - ✅ No hanging or timeout issues
 
-3. **ServiceBot case-insensitive routing** (v1.1.5)
+3. **ServiceBot case-insensitive routing** (v2.0.0)
    - ✅ Verified: test_servicebot_help_lowercase
    - ✅ Tests: Uppercase/lowercase/mixedcase routing
 
@@ -495,6 +495,6 @@ If tests fail unexpectedly:
 ---
 
 **Last Updated:** 2026-01-16
-**Test Suite Version:** 1.1.7
-**pyIRCX Version:** 1.1.7
+**Test Suite Version:** 2.0.0
+**pyIRCX Version:** 2.0.0
 **Total Tests:** 243 across 8 suites

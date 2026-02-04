@@ -14,7 +14,8 @@ import sys
 from typing import List
 
 # Import test client from users.py
-sys.path.insert(0, '.')
+import os
+sys.path.insert(0, os.path.dirname(__file__))
 from users import IRCTestClient, TestRunner
 
 # Create test runner instance
@@ -999,22 +1000,6 @@ async def test_motd():
 
 
 # ==============================================================================
-# Test Runner
-# ==============================================================================
-
-async def main():
-    """Run all core command tests"""
-    print("\n⚠️  Make sure pyIRCX server is running on localhost:6667\n")
-
-    # Test server connection first
-    try:
-        reader, writer = await asyncio.wait_for(
-            asyncio.open_connection("127.0.0.1", 6667),
-            timeout=2.0
-        )
-        writer.close()
-
-# ==============================================================================
 # CREATE Command Tests (IRCX)
 # ==============================================================================
 
@@ -1314,6 +1299,23 @@ async def test_create_mode_normalization():
 
     await client1.disconnect()
     await client2.disconnect()
+
+
+# ==============================================================================
+# Test Runner
+# ==============================================================================
+
+async def main():
+    """Run all core command tests"""
+    print("\n⚠️  Make sure pyIRCX server is running on localhost:6667\n")
+
+    # Test server connection first
+    try:
+        reader, writer = await asyncio.wait_for(
+            asyncio.open_connection("127.0.0.1", 6667),
+            timeout=2.0
+        )
+        writer.close()
         await writer.wait_closed()
         print("✅ Server is reachable\n")
     except Exception as e:
