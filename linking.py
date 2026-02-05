@@ -1726,6 +1726,11 @@ class ServerLinkManager:
         server.add_user(nickname)
 
         logger.info(get_log_message("link_added_remote_user", nickname=nickname, origin_server=origin_server, total_users=len(self.irc_server.users)))
+        # Notify local watchers about remote user online
+        try:
+            await self.irc_server.notify_watchers_online(user)
+        except Exception:
+            pass
 
         # Forward NICK to all other linked servers (except the one it came from)
         nick_msg = (
@@ -2038,6 +2043,11 @@ class ServerLinkManager:
                     if channel:
                         channel.members.pop(nickname, None)
                 server.remove_user(nickname)
+                # Notify local watchers about remote user offline
+                try:
+                    await self.irc_server.notify_watchers_offline(user)
+                except Exception:
+                    pass
                 await self.broadcast_to_local(line, exclude_server=server.name)
                 # Forward QUIT to other linked servers ONLY if we're trunk
                 if self.server_role == 'trunk':
@@ -2520,6 +2530,10 @@ class ServerLinkManager:
         for nickname in list(server.users):
             user = self.irc_server.users.pop(nickname, None)
             if user:
+                try:
+                    await self.irc_server.notify_watchers_offline(user)
+                except Exception:
+                    pass
                 quit_msg = f":{nickname} QUIT :{server.name} {self.irc_server.servername}"
                 # Remove from all channels
                 for chan_name in list(user.channels):

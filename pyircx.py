@@ -4728,6 +4728,54 @@ class pyIRCXServer:
 
             # Cannot add services to DENY lists
             if level == 'DENY':
+                def mask_targets_service(mask_value: str) -> bool:
+                    nick_pattern = mask_value.split('!', 1)[0].strip() if mask_value else ''
+                    if not nick_pattern:
+                        return False
+
+                    # Known service nicknames (even if not currently connected)
+                    service_nicks = {
+                        self.system_nick,
+                        'System',
+                        'God',
+                        'Registrar',
+                        'Messenger',
+                        'NewsFlash',
+                        'OperServ',
+                        'HelpServ',
+                        'InfoServ',
+                        'BotServ',
+                        'HostServ',
+                        'StatServ',
+                        'Global',
+                        'ALIS',
+                        'Services',
+                        'ServiceBot',
+                    }
+
+                    # Include configured ServiceBots
+                    try:
+                        bot_count = CONFIG.get('services', 'servicebot_count', default=10)
+                        for i in range(1, int(bot_count) + 1):
+                            service_nicks.add(f"ServiceBot{i:02d}")
+                    except Exception:
+                        pass
+
+                    # Include any connected service users
+                    for nick, u in self.users.items():
+                        if u.is_service():
+                            service_nicks.add(nick)
+
+                    nick_pattern_lower = nick_pattern.lower()
+                    for nick in service_nicks:
+                        if fnmatch.fnmatch(nick.lower(), nick_pattern_lower):
+                            return True
+                    return False
+
+                if mask_targets_service(mask):
+                    await user.send(self.get_reply("825", user, target=mask))
+                    return
+
                 for nick, u in self.users.items():
                     if u.is_service():
                         user_mask = f"{nick}!{u.username}@{u.host}"

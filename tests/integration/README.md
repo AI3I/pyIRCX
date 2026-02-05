@@ -48,7 +48,7 @@ python3 tests/integration/load/stress_test.py --quick  # Performance tests
 
 ### 1. Running Server
 
-Tests require a pyIRCX server running on `localhost:6667`:
+Tests require pyIRCX servers running. When using `run_tests.sh`, the harness starts a trunk + 2 branches automatically.
 
 ```bash
 # Start the server
@@ -63,7 +63,7 @@ sudo systemctl start pyircx
 Many tests require staff accounts. Run the setup script to create them:
 
 ```bash
-python3 tests/integration/setup_test_accounts.py
+python3 tests/integration/setup_test_accounts.py  # or run_tests.sh will create them for you
 ```
 
 This creates the following test accounts with password `testpass`:
@@ -302,17 +302,21 @@ await client.disconnect()
 
 Tests expect the following servers running:
 
-- **Trunk Server**: 127.0.0.1:6667 (services hub)
+- **Trunk Server**: 127.0.0.1:6666 (services hub; leaves 6667 free for installed instance)
 - **Branch Server 1**: 127.0.0.1:6668
 - **Branch Server 2**: 127.0.0.1:6669 (for multi-branch tests)
+
+You can override host/ports via env vars: `PYIRCX_TEST_HOST`, `PYIRCX_TEST_TRUNK_PORT`, `PYIRCX_TEST_BRANCH1_PORT`, `PYIRCX_TEST_BRANCH2_PORT`.
+If your local environment hangs on `aiosqlite` or thread executors, set `PYIRCX_SYNC_DB=1` and `PYIRCX_NO_THREADS=1` to force synchronous sqlite3/bcrypt for tests.
 
 ### Test Accounts
 
 Tests use these pre-configured staff accounts:
 
-- **admin/changeme** (ADMIN)
+- **admin/testpass** (ADMIN)
 - **sysop/testpass** (SYSOP)
 - **guide/testpass** (GUIDE)
+- **mfatest/testpass** (SYSOP)
 
 ### Configuration
 
@@ -428,7 +432,7 @@ jobs:
 
 ### Tests Fail to Connect
 
-**Problem:** `Connection refused to 127.0.0.1:6667`
+**Problem:** `Connection refused to 127.0.0.1:6667` (or your custom ports)
 
 **Solution:**
 ```bash
@@ -436,7 +440,10 @@ jobs:
 python3 pyircx.py
 
 # Or with config
-python3 pyircx.py config_trunk.json
+python3 pyircx.py --config pyircx_config.json
+
+# Or use the harness to start trunk+branches
+./run_tests.sh
 ```
 
 ### Tests Time Out

@@ -54,6 +54,7 @@ def setup_test_accounts(db_path: str):
             ('admin', 'testpass', 'ADMIN', 'Test Admin Account'),
             ('sysop', 'testpass', 'SYSOP', 'Test Sysop Account'),
             ('guide', 'testpass', 'GUIDE', 'Test Guide Account'),
+            ('mfatest', 'testpass', 'SYSOP', 'Test MFA Account'),
         ]
 
         print("\n🔧 Creating/updating test accounts...")
@@ -85,7 +86,7 @@ def setup_test_accounts(db_path: str):
 
         # Verify accounts
         print("\n✅ Verification:")
-        cursor.execute("SELECT username, level FROM users WHERE username IN ('admin', 'sysop', 'guide')")
+        cursor.execute("SELECT username, level FROM users WHERE username IN ('admin', 'sysop', 'guide', 'mfatest')")
         for row in cursor.fetchall():
             print(f"  ✓ {row[0]}: {row[1]}")
 
@@ -98,6 +99,7 @@ def setup_test_accounts(db_path: str):
         print("  admin/testpass  (ADMIN)")
         print("  sysop/testpass  (SYSOP)")
         print("  guide/testpass  (GUIDE)")
+        print("  mfatest/testpass  (SYSOP)")
         print("\nAuthentication in tests:")
         print("  PASS testpass")
         print("  NICK admin")
@@ -147,7 +149,7 @@ def main():
     args = parser.parse_args()
 
     # Auto-detect database if not specified
-    db_path = args.db
+    db_path = args.db or os.environ.get("PYIRCX_TEST_DB_TRUNK")
     if db_path is None:
         db_path = find_database()
         if db_path is None:

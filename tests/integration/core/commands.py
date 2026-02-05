@@ -16,7 +16,7 @@ from typing import List
 # Import test client from users.py
 import os
 sys.path.insert(0, os.path.dirname(__file__))
-from users import IRCTestClient, TestRunner
+from users import IRCTestClient, TestRunner, TEST_HOST, TEST_TRUNK_PORT
 
 # Create test runner instance
 runner = TestRunner()
@@ -1312,7 +1312,7 @@ async def main():
     # Test server connection first
     try:
         reader, writer = await asyncio.wait_for(
-            asyncio.open_connection("127.0.0.1", 6667),
+            asyncio.open_connection(TEST_HOST, TEST_TRUNK_PORT),
             timeout=2.0
         )
         writer.close()

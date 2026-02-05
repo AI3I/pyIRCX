@@ -48,10 +48,15 @@ AUTO_CREATE_ACCOUNTS = True
 # ==============================================================================
 
 
+TEST_HOST = os.environ.get("PYIRCX_TEST_HOST", "127.0.0.1")
+TEST_TRUNK_PORT = int(os.environ.get("PYIRCX_TEST_TRUNK_PORT", os.environ.get("PYIRCX_TEST_PORT", "6667")))
+TEST_DB_PATH = os.environ.get("PYIRCX_TEST_DB_TRUNK")
+
+
 class IRCTestClient:
     """Simple IRC test client with optional SSL support"""
 
-    def __init__(self, name: str, host: str = "127.0.0.1", port: int = 6667, use_ssl: bool = False):
+    def __init__(self, name: str, host: str = TEST_HOST, port: int = TEST_TRUNK_PORT, use_ssl: bool = False):
         self.name = name
         self.host = host
         self.port = port
@@ -401,7 +406,7 @@ async def test_auth_enable_mfa():
 
     # Clean up - disable MFA for next test
     try:
-        db_path = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'pyircx.db')
+        db_path = TEST_DB_PATH or os.path.join(os.path.dirname(__file__), '..', '..', '..', 'pyircx.db')
         async with aiosqlite.connect(db_path) as db:
             await db.execute(
                 "UPDATE users SET mfa_enabled = 0, mfa_secret = NULL WHERE username = ?",
@@ -645,7 +650,7 @@ async def test_auth_lockout():
 
     # Clean up lockout for next tests
     try:
-        db_path = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'pyircx.db')
+        db_path = TEST_DB_PATH or os.path.join(os.path.dirname(__file__), '..', '..', '..', 'pyircx.db')
         async with aiosqlite.connect(db_path) as db:
             # Clear lockout (implementation detail - may need adjustment)
             await db.execute("DELETE FROM auth_failures WHERE username = ?", ("testlockout",))
@@ -754,7 +759,7 @@ async def create_test_accounts():
     try:
         # Use the same database as the server (pyircx.db in project root)
         import os
-        db_path = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'pyircx.db')
+        db_path = TEST_DB_PATH or os.path.join(os.path.dirname(__file__), '..', '..', '..', 'pyircx.db')
         async with aiosqlite.connect(db_path) as db:
             for config in [ADMIN_CONFIG, SYSOP_CONFIG, MFA_TEST_CONFIG]:
                 username = config['username']
@@ -784,7 +789,7 @@ async def main():
 
     try:
         reader, writer = await asyncio.wait_for(
-            asyncio.open_connection("127.0.0.1", 6667),
+            asyncio.open_connection(TEST_HOST, TEST_TRUNK_PORT),
             timeout=2.0
         )
         writer.close()

@@ -10,10 +10,19 @@ import json
 import tempfile
 import os
 import signal
+from pathlib import Path
+
+# Ensure repo root is on sys.path so `import linking` works
+REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+TEST_HOST = os.environ.get("PYIRCX_TEST_HOST", "127.0.0.1")
+TEST_TRUNK_PORT = int(os.environ.get("PYIRCX_TEST_TRUNK_PORT", os.environ.get("PYIRCX_TEST_PORT", "6667")))
 
 class IRCTestClient:
     """Simple IRC test client"""
-    def __init__(self, host="127.0.0.1", port=6667):
+    def __init__(self, host=TEST_HOST, port=TEST_TRUNK_PORT):
         self.host = host
         self.port = port
         self.reader = None
@@ -132,7 +141,7 @@ runner = TestRunner()
 @runner.test("LINKS Command - Single Server")
 async def test_links_single():
     """Test LINKS command on single server"""
-    client = IRCTestClient("127.0.0.1", 6667)
+    client = IRCTestClient(TEST_HOST, TEST_TRUNK_PORT)
     await client.connect("LinksTest")
     
     await client.send_raw("LINKS")
@@ -151,7 +160,7 @@ async def test_links_single():
 @runner.test("CONNECT Command - Permission Check")
 async def test_connect_permission():
     """Test CONNECT requires admin/sysop privileges"""
-    client = IRCTestClient("127.0.0.1", 6667)
+    client = IRCTestClient(TEST_HOST, TEST_TRUNK_PORT)
     await client.connect("PermTest")
     
     await client.send_raw("CONNECT test.server")
@@ -205,12 +214,12 @@ async def main():
     # Test server connection
     try:
         reader, writer = await asyncio.wait_for(
-            asyncio.open_connection("127.0.0.1", 6667),
+            asyncio.open_connection(TEST_HOST, TEST_TRUNK_PORT),
             timeout=2.0
         )
         writer.close()
         await writer.wait_closed()
-        print("✅ Server is reachable on 127.0.0.1:6667\n")
+        print(f"✅ Server is reachable on {TEST_HOST}:{TEST_TRUNK_PORT}\n")
     except Exception as e:
         print(f"❌ Cannot connect to server: {e}")
         print("Please start the pyIRCX server first!")

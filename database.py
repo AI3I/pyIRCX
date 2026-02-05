@@ -9,6 +9,8 @@ This module contains:
 
 import asyncio
 import logging
+import os
+import sqlite3
 
 import aiosqlite
 import bcrypt
@@ -16,6 +18,13 @@ import bcrypt
 from responses import get_log_message
 
 logger = logging.getLogger('pyIRCX')
+USE_THREADS = os.environ.get("PYIRCX_NO_THREADS") != "1"
+
+
+async def run_blocking(func, *args, **kwargs):
+    if USE_THREADS:
+        return await asyncio.to_thread(func, *args, **kwargs)
+    return func(*args, **kwargs)
 
 
 class DatabasePool:
@@ -27,15 +36,56 @@ class DatabasePool:
         self._pool = asyncio.Queue(maxsize=pool_size)
         self._initialized = False
         self._lock = asyncio.Lock()
+        self._sync = os.environ.get("PYIRCX_SYNC_DB") == "1"
+        self._connect_timeout = float(os.environ.get("PYIRCX_ASYNC_DB_TIMEOUT", "5"))
 
     async def initialize(self):
         """Initialize the connection pool"""
         async with self._lock:
             if self._initialized:
                 return
+            use_sync = self._sync
             for _ in range(self.pool_size):
-                conn = await aiosqlite.connect(self.db_path)
-                await self._pool.put(conn)
+                if use_sync:
+                    conn = await run_blocking(
+                        sqlite3.connect,
+                        self.db_path,
+                        check_same_thread=False
+                    )
+                    conn.row_factory = sqlite3.Row
+                    conn.execute("PRAGMA foreign_keys = ON")
+                    await self._pool.put(SyncConnection(conn))
+                    continue
+
+                try:
+                    conn = await asyncio.wait_for(
+                        aiosqlite.connect(self.db_path),
+                        timeout=self._connect_timeout
+                    )
+                except Exception as e:
+                    logger.warning(
+                        "aiosqlite connect failed or timed out; "
+                        "falling back to sqlite3 for this process: %s",
+                        e
+                    )
+                    use_sync = True
+                    # Drain any partially created async connections
+                    while not self._pool.empty():
+                        existing = await self._pool.get()
+                        try:
+                            await existing.close()
+                        except Exception:
+                            pass
+                    conn = await run_blocking(
+                        sqlite3.connect,
+                        self.db_path,
+                        check_same_thread=False
+                    )
+                    conn.row_factory = sqlite3.Row
+                    conn.execute("PRAGMA foreign_keys = ON")
+                    await self._pool.put(SyncConnection(conn))
+                else:
+                    await self._pool.put(conn)
             self._initialized = True
             logger.info(get_log_message("db_async_pool_ready", size=self.pool_size))
 
@@ -117,16 +167,88 @@ class _PooledConnection:
         return False
 
 
+class SyncExecute:
+    """Awaitable + async context manager for sqlite3 execute."""
+
+    def __init__(self, conn, query, params):
+        self._conn = conn
+        self._query = query
+        self._params = params
+        self._cursor = None
+        self._executed = False
+
+    async def _run(self):
+        if not self._executed:
+            cursor = await run_blocking(self._conn.execute, self._query, self._params)
+            self._cursor = SyncCursor(cursor)
+            self._executed = True
+        return self._cursor
+
+    def __await__(self):
+        return self._run().__await__()
+
+    async def __aenter__(self):
+        return await self._run()
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        if self._cursor:
+            await self._cursor.close()
+        return False
+
+
+class SyncCursor:
+    """Async wrapper for sqlite3.Cursor."""
+
+    def __init__(self, cursor):
+        self._cursor = cursor
+
+    async def fetchone(self):
+        return await run_blocking(self._cursor.fetchone)
+
+    async def fetchall(self):
+        return await run_blocking(self._cursor.fetchall)
+
+    async def close(self):
+        await run_blocking(self._cursor.close)
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        row = await run_blocking(self._cursor.fetchone)
+        if row is None:
+            raise StopAsyncIteration
+        return row
+
+
+class SyncConnection:
+    """Async-compatible wrapper for sqlite3.Connection."""
+
+    def __init__(self, conn):
+        self._conn = conn
+
+    def execute(self, query, params=()):
+        return SyncExecute(self._conn, query, params)
+
+    async def commit(self):
+        await run_blocking(self._conn.commit)
+
+    async def close(self):
+        await run_blocking(self._conn.close)
+
+
 async def check_password_async(password: str, password_hash: str) -> bool:
     """Non-blocking bcrypt password check using executor"""
     loop = asyncio.get_event_loop()
     try:
-        return await loop.run_in_executor(
-            None,
-            bcrypt.checkpw,
-            password.encode(),
-            password_hash.encode()
-        )
+        if USE_THREADS:
+            return await loop.run_in_executor(
+                None,
+                bcrypt.checkpw,
+                password.encode(),
+                password_hash.encode()
+            )
+        return bcrypt.checkpw(password.encode(), password_hash.encode())
     except Exception:
         return False
 
@@ -134,11 +256,15 @@ async def check_password_async(password: str, password_hash: str) -> bool:
 async def hash_password_async(password: str) -> str:
     """Non-blocking bcrypt password hashing using executor"""
     loop = asyncio.get_event_loop()
-    salt = await loop.run_in_executor(None, bcrypt.gensalt)
-    hashed = await loop.run_in_executor(
-        None,
-        bcrypt.hashpw,
-        password.encode(),
-        salt
-    )
+    if USE_THREADS:
+        salt = await loop.run_in_executor(None, bcrypt.gensalt)
+        hashed = await loop.run_in_executor(
+            None,
+            bcrypt.hashpw,
+            password.encode(),
+            salt
+        )
+    else:
+        salt = bcrypt.gensalt()
+        hashed = bcrypt.hashpw(password.encode(), salt)
     return hashed.decode()

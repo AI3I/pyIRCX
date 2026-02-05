@@ -264,7 +264,7 @@ HELP_TOPICS = {
             "Usage: /MODE <target> [+/-modes] [parameters]",
             "Set or view modes on yourself or a channel.",
             "User mode examples:",
-            "  /MODE nickname - View your current modes",
+            "  /MODE {nickname} - View your current modes",
             "  /MODE nickname +i - Set yourself invisible",
             "  /MODE nickname -i - Remove invisible mode",
             "Channel mode examples:",

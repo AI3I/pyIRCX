@@ -44,22 +44,22 @@ The stress test simulates realistic IRC usage with:
 
 ### Quick Test (50 users, 1 minute)
 ```bash
-python3 testing/stress_test.py --quick
+python3 tests/integration/load/stress_test.py --quick
 ```
 
 ### Standard Test (100 users, 5 minutes)
 ```bash
-python3 testing/stress_test.py
+python3 tests/integration/load/stress_test.py
 ```
 
 ### Custom Test
 ```bash
-python3 testing/stress_test.py --users 200 --staff 10 --channels 30 --duration 600
+python3 tests/integration/load/stress_test.py --users 200 --staff 10 --channels 30 --duration 600
 ```
 
 ### Heavy Load Test (500 users, 10 minutes)
 ```bash
-python3 testing/stress_test.py --heavy
+python3 tests/integration/load/stress_test.py --heavy
 ```
 
 ---
@@ -86,6 +86,8 @@ Stress test expects these servers running:
 - **Trunk**: 127.0.0.1:6667 (services hub)
 - **Branch 1**: 127.0.0.1:6668
 - **Branch 2**: 127.0.0.1:6669
+
+You can override host/ports via env vars: `PYIRCX_TEST_HOST`, `PYIRCX_TEST_TRUNK_PORT`, `PYIRCX_TEST_BRANCH1_PORT`, `PYIRCX_TEST_BRANCH2_PORT`.
 
 ### Server Configuration
 
@@ -209,7 +211,7 @@ Document your stress test results:
 
 ```bash
 # Run stress test and save output
-python3 testing/stress_test.py --heavy 2>&1 | tee stress_test_results.txt
+python3 tests/integration/load/stress_test.py --heavy 2>&1 | tee stress_test_results.txt
 
 # Check server resource usage during test
 # Terminal 1: Run stress test

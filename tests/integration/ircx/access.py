@@ -25,7 +25,7 @@ from typing import List
 # Import test client from users.py
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'core'))
-from users import IRCTestClient, TestRunner
+from users import IRCTestClient, TestRunner, TEST_HOST, TEST_TRUNK_PORT
 
 # Create test runner instance
 runner = TestRunner()
@@ -350,11 +350,11 @@ async def test_wildcard_patterns():
 
     for pattern in patterns:
         await client.send_raw(f"ACCESS #testwildcard ADD VOICE {pattern}")
-        await asyncio.sleep(0.6)  # Increased delay to avoid rate limiting
+        await asyncio.sleep(2.2)  # ACCESS has ~2s cooldown
         await client.read_lines()
 
     # Wait for rate limit cooldown before listing
-    await asyncio.sleep(1.0)
+    await asyncio.sleep(2.2)
 
     # List all entries
     client.buffer.clear()
@@ -472,7 +472,7 @@ async def main():
     # Test server connection first
     try:
         reader, writer = await asyncio.wait_for(
-            asyncio.open_connection("127.0.0.1", 6667),
+            asyncio.open_connection(TEST_HOST, TEST_TRUNK_PORT),
             timeout=2.0
         )
         writer.close()

@@ -5,15 +5,20 @@ Tests all major functionality including IRC and IRCX features
 """
 
 import asyncio
+import os
 import time
 import sys
 import ssl
 from typing import List
 
+TEST_HOST = os.environ.get("PYIRCX_TEST_HOST", "127.0.0.1")
+TEST_TRUNK_PORT = int(os.environ.get("PYIRCX_TEST_TRUNK_PORT", os.environ.get("PYIRCX_TEST_PORT", "6667")))
+
+
 class IRCTestClient:
     """Simple IRC test client with optional SSL support"""
 
-    def __init__(self, name: str, host: str = "127.0.0.1", port: int = 6667, use_ssl: bool = False):
+    def __init__(self, name: str, host: str = TEST_HOST, port: int = TEST_TRUNK_PORT, use_ssl: bool = False):
         self.name = name
         self.host = host
         self.port = port
@@ -3968,7 +3973,7 @@ async def main():
     # Test server connection first
     try:
         reader, writer = await asyncio.wait_for(
-            asyncio.open_connection("127.0.0.1", 6667),
+            asyncio.open_connection(TEST_HOST, TEST_TRUNK_PORT),
             timeout=2.0
         )
         writer.close()

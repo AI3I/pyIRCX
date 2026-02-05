@@ -18,6 +18,39 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'core'))
 from users import IRCTestClient, TestRunner
 
+TEST_HOST = os.environ.get("PYIRCX_TEST_HOST", "127.0.0.1")
+TRUNK_PORT = int(os.environ.get("PYIRCX_TEST_TRUNK_PORT", "6667"))
+BRANCH1_PORT = int(os.environ.get("PYIRCX_TEST_BRANCH1_PORT", "6668"))
+BRANCH2_PORT = int(os.environ.get("PYIRCX_TEST_BRANCH2_PORT", "6669"))
+
+
+async def auth_admin(client: IRCTestClient, username: str = "admin", password: str = "testpass") -> bool:
+    """Authenticate a client as ADMIN via AUTH."""
+    await client.send_raw(f"AUTH {username} {password}")
+    await asyncio.sleep(0.8)
+    await client.read_lines()
+    for line in client.buffer:
+        if " MODE " in line and "+a" in line:
+            return True
+        if " 381 " in line or " 386 " in line:
+            return True
+    return False
+
+
+async def enable_caps(client: IRCTestClient, caps: List[str]) -> bool:
+    """Enable IRCv3 capabilities after connect."""
+    caps_str = " ".join(caps)
+    await client.send_raw("CAP LS 302")
+    await asyncio.sleep(0.2)
+    await client.read_lines()
+    await client.send_raw(f"CAP REQ :{caps_str}")
+    await asyncio.sleep(0.2)
+    await client.read_lines()
+    await client.send_raw("CAP END")
+    await asyncio.sleep(0.2)
+    await client.read_lines()
+    return any("CAP * ACK" in line and all(c in line for c in caps) for line in client.buffer)
+
 # Create test runner instance
 runner = TestRunner()
 
@@ -29,29 +62,17 @@ runner = TestRunner()
 async def test_branch_staff_auth_routing():
     """Test staff authentication routing from branch to trunk"""
     # Connect to branch server (port 6668)
-    client = IRCTestClient("branch_staff", host="127.0.0.1", port=6668)
-    
-    # Use PASS for staff authentication
-    await client.send_raw("PASS changeme")
+    client = IRCTestClient("branch_staff", host=TEST_HOST, port=BRANCH1_PORT)
     await client.connect("testadmin", "admin")
-    
-    # Wait for auth response
-    await asyncio.sleep(1)
-    
-    # Check for admin mode
-    has_admin = False
-    for line in client.buffer:
-        if 'MODE' in line and '+a' in line:
-            has_admin = True
-        if '381' in line:  # IRC admin notice
-            has_admin = True
-    
+
+    # AUTH should route to trunk and grant admin mode
+    has_admin = await auth_admin(client)
     assert has_admin, "Staff authentication should route to trunk and grant admin mode"
 
 @runner.test("Service commands route from branch to trunk")
 async def test_service_routing():
     """Test service command routing from branch to trunk"""
-    client = IRCTestClient("service_test", host="127.0.0.1", port=6668)
+    client = IRCTestClient("service_test", host=TEST_HOST, port=BRANCH1_PORT)
     await client.connect("ServiceTest")
     
     client.buffer.clear()
@@ -76,8 +97,8 @@ async def test_service_routing():
 async def test_cross_server_privmsg():
     """Test private messages between users on different servers"""
     # Connect to trunk (6667) and branch (6668)
-    trunk_user = IRCTestClient("trunk_user", host="127.0.0.1", port=6667)
-    branch_user = IRCTestClient("branch_user", host="127.0.0.1", port=6668)
+    trunk_user = IRCTestClient("trunk_user", host=TEST_HOST, port=TRUNK_PORT)
+    branch_user = IRCTestClient("branch_user", host=TEST_HOST, port=BRANCH1_PORT)
     
     await trunk_user.connect("TrunkUser")
     await branch_user.connect("BranchUser")
@@ -101,8 +122,8 @@ async def test_cross_server_privmsg():
 @runner.test("Users see each other across servers")
 async def test_cross_server_channels():
     """Test channel operations with users from different servers"""
-    trunk_user = IRCTestClient("chan_trunk", host="127.0.0.1", port=6667)
-    branch_user = IRCTestClient("chan_branch", host="127.0.0.1", port=6668)
+    trunk_user = IRCTestClient("chan_trunk", host=TEST_HOST, port=TRUNK_PORT)
+    branch_user = IRCTestClient("chan_branch", host=TEST_HOST, port=BRANCH1_PORT)
     
     await trunk_user.connect("ChanTrunk")
     await branch_user.connect("ChanBranch")
@@ -129,8 +150,8 @@ async def test_cross_server_channels():
 @runner.test("QUIT propagates across network")
 async def test_quit_propagation():
     """Test QUIT propagation to all linked servers"""
-    trunk_user = IRCTestClient("quit_trunk", host="127.0.0.1", port=6667)
-    branch_user = IRCTestClient("quit_branch", host="127.0.0.1", port=6668)
+    trunk_user = IRCTestClient("quit_trunk", host=TEST_HOST, port=TRUNK_PORT)
+    branch_user = IRCTestClient("quit_branch", host=TEST_HOST, port=BRANCH1_PORT)
     
     await trunk_user.connect("QuitTrunk")
     await branch_user.connect("QuitBranch")
@@ -163,8 +184,8 @@ async def test_quit_propagation():
 @runner.test("TOPIC propagates across servers")
 async def test_topic_propagation():
     """Test TOPIC changes propagate to all servers"""
-    trunk_user = IRCTestClient("topic_trunk", host="127.0.0.1", port=6667)
-    branch_user = IRCTestClient("topic_branch", host="127.0.0.1", port=6668)
+    trunk_user = IRCTestClient("topic_trunk", host=TEST_HOST, port=TRUNK_PORT)
+    branch_user = IRCTestClient("topic_branch", host=TEST_HOST, port=BRANCH1_PORT)
     
     await trunk_user.connect("TopicTrunk")
     await branch_user.connect("TopicBranch")
@@ -193,9 +214,9 @@ async def test_topic_propagation():
 @runner.test("KICK propagates across servers")
 async def test_kick_propagation():
     """Test KICK propagates to all servers"""
-    trunk_user = IRCTestClient("kick_trunk", host="127.0.0.1", port=6667)
-    branch_user = IRCTestClient("kick_branch", host="127.0.0.1", port=6668)
-    branch_victim = IRCTestClient("kick_victim", host="127.0.0.1", port=6668)
+    trunk_user = IRCTestClient("kick_trunk", host=TEST_HOST, port=TRUNK_PORT)
+    branch_user = IRCTestClient("kick_branch", host=TEST_HOST, port=BRANCH1_PORT)
+    branch_victim = IRCTestClient("kick_victim", host=TEST_HOST, port=BRANCH1_PORT)
     
     await trunk_user.connect("KickTrunk")
     await branch_user.connect("KickBranch")
@@ -227,8 +248,8 @@ async def test_kick_propagation():
 @runner.test("NICK changes propagate across servers")
 async def test_nick_propagation():
     """Test NICK changes propagate to all servers"""
-    trunk_user = IRCTestClient("nick_trunk", host="127.0.0.1", port=6667)
-    branch_user = IRCTestClient("nick_branch", host="127.0.0.1", port=6668)
+    trunk_user = IRCTestClient("nick_trunk", host=TEST_HOST, port=TRUNK_PORT)
+    branch_user = IRCTestClient("nick_branch", host=TEST_HOST, port=BRANCH1_PORT)
     
     await trunk_user.connect("NickTrunk")
     await branch_user.connect("NickBranch")
@@ -252,8 +273,8 @@ async def test_nick_propagation():
 @runner.test("AWAY status propagates across servers")
 async def test_away_propagation():
     """Test AWAY status propagates to all servers"""
-    trunk_user = IRCTestClient("away_trunk", host="127.0.0.1", port=6667)
-    branch_user = IRCTestClient("away_branch", host="127.0.0.1", port=6668)
+    trunk_user = IRCTestClient("away_trunk", host=TEST_HOST, port=TRUNK_PORT)
+    branch_user = IRCTestClient("away_branch", host=TEST_HOST, port=BRANCH1_PORT)
     
     await trunk_user.connect("AwayTrunk")
     await branch_user.connect("AwayBranch")
@@ -281,8 +302,8 @@ async def test_away_propagation():
 @runner.test("WHO shows users from all servers")
 async def test_who_crossserver():
     """Test WHO shows users from all linked servers"""
-    trunk_user = IRCTestClient("who_trunk", host="127.0.0.1", port=6667)
-    branch_user = IRCTestClient("who_branch", host="127.0.0.1", port=6668)
+    trunk_user = IRCTestClient("who_trunk", host=TEST_HOST, port=TRUNK_PORT)
+    branch_user = IRCTestClient("who_branch", host=TEST_HOST, port=BRANCH1_PORT)
     
     await trunk_user.connect("WhoTrunk")
     await branch_user.connect("WhoBranch")
@@ -306,11 +327,384 @@ async def test_who_crossserver():
     
     assert has_both, "WHO should show users from all servers"
 
+@runner.test("USERHOST works across servers")
+async def test_userhost_crossserver():
+    """Test USERHOST across trunk and branch users"""
+    trunk_user = IRCTestClient("userhost_trunk", host=TEST_HOST, port=TRUNK_PORT)
+    branch_user = IRCTestClient("userhost_branch", host=TEST_HOST, port=BRANCH1_PORT)
+
+    await trunk_user.connect("UserhostTrunk")
+    await branch_user.connect("UserhostBranch")
+    await asyncio.sleep(1)
+
+    trunk_user.buffer.clear()
+    await trunk_user.send_raw("USERHOST UserhostBranch")
+    await asyncio.sleep(0.5)
+    await trunk_user.read_lines()
+
+    has_302 = any(" 302 " in line and "UserhostBranch" in line for line in trunk_user.buffer)
+    assert has_302, "USERHOST should return 302 for remote user"
+
+@runner.test("ISON works across servers")
+async def test_ison_crossserver():
+    """Test ISON across trunk and branch users"""
+    trunk_user = IRCTestClient("ison_trunk", host=TEST_HOST, port=TRUNK_PORT)
+    branch_user = IRCTestClient("ison_branch", host=TEST_HOST, port=BRANCH1_PORT)
+
+    await trunk_user.connect("IsonTrunk")
+    await branch_user.connect("IsonBranch")
+    await asyncio.sleep(1)
+
+    trunk_user.buffer.clear()
+    await trunk_user.send_raw("ISON IsonBranch OfflineUser123")
+    await asyncio.sleep(0.5)
+    await trunk_user.read_lines()
+
+    has_303 = any(" 303 " in line and "IsonBranch" in line for line in trunk_user.buffer)
+    assert has_303, "ISON should include remote user"
+
+@runner.test("WHOIS works across servers")
+async def test_whois_crossserver():
+    """Test WHOIS across trunk and branch users"""
+    trunk_user = IRCTestClient("whois_trunk", host=TEST_HOST, port=TRUNK_PORT)
+    branch_user = IRCTestClient("whois_branch", host=TEST_HOST, port=BRANCH1_PORT)
+
+    await trunk_user.connect("WhoisTrunk")
+    await branch_user.connect("WhoisBranch")
+
+    await asyncio.sleep(1)
+
+    trunk_user.buffer.clear()
+    await trunk_user.send_raw("WHOIS WhoisBranch")
+    await asyncio.sleep(0.5)
+    await trunk_user.read_lines()
+
+    has_311 = any(" 311 " in line for line in trunk_user.buffer)
+    has_318 = any(" 318 " in line for line in trunk_user.buffer)
+
+    assert has_311 and has_318, "WHOIS should return 311/318 for remote user"
+
+@runner.test("MONITOR notifies across servers")
+async def test_monitor_crossserver():
+    """Test MONITOR/WATCH notifications for remote users"""
+    watcher = IRCTestClient("monitor_watcher", host=TEST_HOST, port=TRUNK_PORT)
+    await watcher.connect("MonitorWatch")
+    await asyncio.sleep(0.5)
+
+    watcher.buffer.clear()
+    await watcher.send_raw("MONITOR + MonitorTarget")
+    await asyncio.sleep(0.5)
+    await watcher.read_lines()
+
+    target = IRCTestClient("monitor_target", host=TEST_HOST, port=BRANCH1_PORT)
+    await target.connect("MonitorTarget")
+    await asyncio.sleep(1)
+
+    # Watcher should get RPL_MONONLINE (600)
+    has_online = any(" 600 " in line and "MonitorTarget" in line for line in watcher.buffer)
+
+    await target.disconnect()
+    await asyncio.sleep(1)
+    await watcher.read_lines()
+
+    has_offline = any(" 601 " in line and "MonitorTarget" in line for line in watcher.buffer)
+
+    assert has_online and has_offline, "MONITOR should notify online/offline for remote users"
+
+@runner.test("SILENCE blocks remote messages")
+async def test_silence_crossserver():
+    """Test SILENCE applies to remote users"""
+    trunk_user = IRCTestClient("silence_trunk", host=TEST_HOST, port=TRUNK_PORT)
+    branch_user = IRCTestClient("silence_branch", host=TEST_HOST, port=BRANCH1_PORT)
+
+    await trunk_user.connect("SilenceTrunk")
+    await branch_user.connect("SilenceBranch")
+    await asyncio.sleep(0.5)
+
+    # Branch user silences trunk user
+    await branch_user.send_raw("SILENCE +SilenceTrunk!*@*")
+    await asyncio.sleep(0.5)
+    await branch_user.read_lines()
+
+    branch_user.buffer.clear()
+    await trunk_user.send_raw("PRIVMSG SilenceBranch :You should not see this")
+    await asyncio.sleep(0.5)
+    await branch_user.read_lines()
+
+    got_msg = any("You should not see this" in line for line in branch_user.buffer)
+    assert not got_msg, "SILENCE should suppress messages from remote users"
+
+@runner.test("IRCv3 message-tags and server-time across servers")
+async def test_message_tags_across_servers():
+    """Test message-tags and server-time tags across links"""
+    trunk_user = IRCTestClient("tags_trunk", host=TEST_HOST, port=TRUNK_PORT)
+    branch_user = IRCTestClient("tags_branch", host=TEST_HOST, port=BRANCH1_PORT)
+
+    await trunk_user.connect("TagsTrunk")
+    await branch_user.connect("TagsBranch")
+    await asyncio.sleep(0.5)
+
+    await enable_caps(trunk_user, ["message-tags", "server-time"])
+    await enable_caps(branch_user, ["message-tags"])
+
+    trunk_user.buffer.clear()
+    await branch_user.send_raw("@+draft/test=1 PRIVMSG TagsTrunk :Tagged message")
+    await asyncio.sleep(0.5)
+    await trunk_user.read_lines()
+
+    has_tag = any("draft/test=1" in line for line in trunk_user.buffer)
+    has_time = any(line.startswith("@time=") for line in trunk_user.buffer)
+
+    assert has_tag, "message-tags should propagate across servers"
+    assert has_time, "server-time tag should be added for receiver"
+
+@runner.test("IRCv3 batch on WHO across servers")
+async def test_batch_who_across_servers():
+    """Test batch capability for WHO response across servers"""
+    trunk_user = IRCTestClient("batch_trunk", host=TEST_HOST, port=TRUNK_PORT)
+    branch_user = IRCTestClient("batch_branch", host=TEST_HOST, port=BRANCH1_PORT)
+
+    await trunk_user.connect("BatchTrunk")
+    await branch_user.connect("BatchBranch")
+    await asyncio.sleep(0.5)
+
+    await enable_caps(trunk_user, ["batch"])
+
+    await trunk_user.send_raw("JOIN #batchchan")
+    await branch_user.send_raw("JOIN #batchchan")
+    await asyncio.sleep(0.5)
+
+    trunk_user.buffer.clear()
+    await trunk_user.send_raw("WHO #batchchan")
+    await asyncio.sleep(0.8)
+    await trunk_user.read_lines()
+
+    has_batch = any(" BATCH +" in line for line in trunk_user.buffer)
+    assert has_batch, "WHO should be batched when batch capability is enabled"
+
+@runner.test("CHATHISTORY includes cross-server messages")
+async def test_chathistory_crossserver():
+    """Test CHATHISTORY returns messages from linked servers"""
+    trunk_user = IRCTestClient("history_trunk", host=TEST_HOST, port=TRUNK_PORT)
+    branch_user = IRCTestClient("history_branch", host=TEST_HOST, port=BRANCH1_PORT)
+
+    await trunk_user.connect("HistoryTrunk")
+    await branch_user.connect("HistoryBranch")
+    await asyncio.sleep(0.5)
+
+    await trunk_user.send_raw("JOIN #histchan")
+    await branch_user.send_raw("JOIN #histchan")
+    await asyncio.sleep(0.5)
+
+    # Enable transcript mode on channel
+    await trunk_user.send_raw("MODE #histchan +y")
+    await asyncio.sleep(0.5)
+
+    await branch_user.send_raw("PRIVMSG #histchan :History from branch")
+    await asyncio.sleep(0.5)
+
+    trunk_user.buffer.clear()
+    await trunk_user.send_raw("CHATHISTORY LATEST #histchan * 5")
+    await asyncio.sleep(0.8)
+    await trunk_user.read_lines()
+
+    has_history = any("History from branch" in line for line in trunk_user.buffer)
+    assert has_history, "CHATHISTORY should include cross-server messages"
+
+@runner.test("Nick collision resolved across servers")
+async def test_nick_collision_across_servers():
+    """Test nick collision handling between trunk and branch"""
+    trunk_user = IRCTestClient("dup_trunk", host=TEST_HOST, port=TRUNK_PORT)
+    branch_user = IRCTestClient("dup_branch", host=TEST_HOST, port=BRANCH1_PORT)
+
+    await trunk_user.connect("DupNick")
+    await asyncio.sleep(0.2)
+    await branch_user.connect("DupNick")
+    await asyncio.sleep(1.0)
+    await trunk_user.read_lines()
+    await branch_user.read_lines()
+
+    # One of the users should be killed/closed
+    trunk_alive = trunk_user.connected
+    branch_alive = branch_user.connected
+    assert trunk_alive != branch_alive, "Nick collision should disconnect one client"
+
+@runner.test("Channel modes enforce across servers")
+async def test_channel_modes_across_servers():
+    """Test +i/+k enforcement across servers"""
+    trunk_user = IRCTestClient("mode2_trunk", host=TEST_HOST, port=TRUNK_PORT)
+    branch_user = IRCTestClient("mode2_branch", host=TEST_HOST, port=BRANCH1_PORT)
+
+    await trunk_user.connect("Mode2Trunk")
+    await branch_user.connect("Mode2Branch")
+    await asyncio.sleep(0.5)
+
+    await trunk_user.send_raw("JOIN #mode2chan")
+    await asyncio.sleep(0.5)
+    await trunk_user.send_raw("MODE #mode2chan +ik keypass")
+    await asyncio.sleep(0.5)
+
+    branch_user.buffer.clear()
+    await branch_user.send_raw("JOIN #mode2chan")
+    await asyncio.sleep(0.5)
+    await branch_user.read_lines()
+    has_475 = any(" 475 " in line for line in branch_user.buffer)
+    has_473 = any(" 473 " in line for line in branch_user.buffer)
+    assert has_475 or has_473, "Invite/key modes should block join without key/invite"
+
+    branch_user.buffer.clear()
+    await branch_user.send_raw("JOIN #mode2chan keypass")
+    await asyncio.sleep(0.5)
+    await branch_user.read_lines()
+    has_join = any("JOIN" in line and "#mode2chan" in line for line in branch_user.buffer)
+    assert has_join, "Join should succeed with key"
+
+@runner.test("WHOIS works across servers")
+async def test_whois_crossserver():
+    """Test WHOIS across trunk and branch users"""
+    trunk_user = IRCTestClient("whois_trunk", host=TEST_HOST, port=TRUNK_PORT)
+    branch_user = IRCTestClient("whois_branch", host=TEST_HOST, port=BRANCH1_PORT)
+
+    await trunk_user.connect("WhoisTrunk")
+    await branch_user.connect("WhoisBranch")
+
+    await asyncio.sleep(1)
+
+    trunk_user.buffer.clear()
+    await trunk_user.send_raw("WHOIS WhoisBranch")
+    await asyncio.sleep(0.5)
+    await trunk_user.read_lines()
+
+    has_311 = any(" 311 " in line for line in trunk_user.buffer)
+    has_318 = any(" 318 " in line for line in trunk_user.buffer)
+
+    assert has_311 and has_318, "WHOIS should return 311/318 for remote user"
+
+@runner.test("LUSERS shows global counts across servers")
+async def test_lusers_global():
+    """Test LUSERS returns global user count with linked servers"""
+    trunk_user = IRCTestClient("lusers_trunk", host=TEST_HOST, port=TRUNK_PORT)
+    branch_user = IRCTestClient("lusers_branch", host=TEST_HOST, port=BRANCH1_PORT)
+
+    await trunk_user.connect("LusersTrunk")
+    await branch_user.connect("LusersBranch")
+    await asyncio.sleep(1)
+
+    trunk_user.buffer.clear()
+    await trunk_user.send_raw("LUSERS")
+    await asyncio.sleep(0.5)
+    await trunk_user.read_lines()
+
+    has_251 = any(" 251 " in line for line in trunk_user.buffer)
+    has_266 = any(" 266 " in line for line in trunk_user.buffer)
+
+    assert has_251 and has_266, "LUSERS should return global counts"
+
+@runner.test("STATS u works with linked servers")
+async def test_stats_u():
+    """Test STATS u returns uptime with linked servers present"""
+    trunk_user = IRCTestClient("stats_trunk", host=TEST_HOST, port=TRUNK_PORT)
+    await trunk_user.connect("StatsTrunk")
+    await asyncio.sleep(0.5)
+
+    trunk_user.buffer.clear()
+    await trunk_user.send_raw("STATS u")
+    await asyncio.sleep(0.5)
+    await trunk_user.read_lines()
+
+    has_242 = any(" 242 " in line for line in trunk_user.buffer)
+    has_219 = any(" 219 " in line for line in trunk_user.buffer)
+    assert has_242 and has_219, "STATS u should return 242/219"
+
+@runner.test("LIST shows channels across servers")
+async def test_list_crossserver():
+    """Test LIST shows channels with users from different servers"""
+    trunk_user = IRCTestClient("list_trunk", host=TEST_HOST, port=TRUNK_PORT)
+    branch_user = IRCTestClient("list_branch", host=TEST_HOST, port=BRANCH1_PORT)
+
+    await trunk_user.connect("ListTrunk")
+    await branch_user.connect("ListBranch")
+    await asyncio.sleep(1)
+
+    await trunk_user.send_raw("JOIN #listchan")
+    await branch_user.send_raw("JOIN #listchan")
+    await asyncio.sleep(1)
+
+    trunk_user.buffer.clear()
+    await trunk_user.send_raw("LIST")
+    await asyncio.sleep(0.8)
+    await trunk_user.read_lines()
+
+    has_list = any("#listchan" in line for line in trunk_user.buffer)
+    assert has_list, "LIST should include cross-server channel"
+
+@runner.test("INVITE works across servers")
+async def test_invite_crossserver():
+    """Test INVITE from trunk to branch user for +i channel"""
+    trunk_user = IRCTestClient("invite_trunk", host=TEST_HOST, port=TRUNK_PORT)
+    branch_user = IRCTestClient("invite_branch", host=TEST_HOST, port=BRANCH1_PORT)
+
+    await trunk_user.connect("InviteTrunk")
+    await branch_user.connect("InviteBranch")
+    await asyncio.sleep(1)
+
+    await trunk_user.send_raw("JOIN #invchan")
+    await asyncio.sleep(0.5)
+    await trunk_user.send_raw("MODE #invchan +i")
+    await asyncio.sleep(0.5)
+
+    branch_user.buffer.clear()
+    await trunk_user.send_raw("INVITE InviteBranch #invchan")
+    await asyncio.sleep(0.5)
+    await branch_user.read_lines()
+
+    has_invite = any("INVITE" in line and "#invchan" in line for line in branch_user.buffer)
+    assert has_invite, "Branch user should receive INVITE"
+
+    branch_user.buffer.clear()
+    await branch_user.send_raw("JOIN #invchan")
+    await asyncio.sleep(0.5)
+    await branch_user.read_lines()
+    has_join = any("JOIN" in line and "#invchan" in line for line in branch_user.buffer)
+    assert has_join, "Branch user should join invite-only channel after INVITE"
+
+@runner.test("KICK and BAN propagate across servers")
+async def test_kick_ban_crossserver():
+    """Test KICK/BAN from trunk affecting branch user"""
+    trunk_user = IRCTestClient("kick_trunk", host=TEST_HOST, port=TRUNK_PORT)
+    branch_user = IRCTestClient("kick_branch", host=TEST_HOST, port=BRANCH1_PORT)
+
+    await trunk_user.connect("KickTrunk")
+    await branch_user.connect("KickBranch")
+    await asyncio.sleep(1)
+
+    await trunk_user.send_raw("JOIN #kickchan")
+    await branch_user.send_raw("JOIN #kickchan")
+    await asyncio.sleep(1)
+
+    branch_user.buffer.clear()
+    await trunk_user.send_raw("KICK #kickchan KickBranch :Test kick")
+    await asyncio.sleep(0.5)
+    await branch_user.read_lines()
+    got_kicked = any("KICK" in line for line in branch_user.buffer)
+    assert got_kicked, "Branch user should be kicked by trunk user"
+
+    # Ban and ensure rejoin is blocked
+    await trunk_user.send_raw("MODE #kickchan +b KickBranch!*@*")
+    await asyncio.sleep(0.5)
+
+    branch_user.buffer.clear()
+    await branch_user.send_raw("JOIN #kickchan")
+    await asyncio.sleep(0.5)
+    await branch_user.read_lines()
+    has_474 = any(" 474 " in line for line in branch_user.buffer)
+    assert has_474, "Branch user should be banned from rejoining"
+
 @runner.test("WHISPER works across servers")
 async def test_whisper_crossserver():
     """Test WHISPER (IRCX private channel message) works across servers"""
-    trunk_user = IRCTestClient("whisper_trunk", host="127.0.0.1", port=6667)
-    branch_user = IRCTestClient("whisper_branch", host="127.0.0.1", port=6668)
+    trunk_user = IRCTestClient("whisper_trunk", host=TEST_HOST, port=TRUNK_PORT)
+    branch_user = IRCTestClient("whisper_branch", host=TEST_HOST, port=BRANCH1_PORT)
     
     await trunk_user.connect("WhisperTrunk")
     await branch_user.connect("WhisperBranch")
@@ -337,27 +731,15 @@ async def test_whisper_crossserver():
     assert has_whisper, "WHISPER should work across servers"
 
 # ==============================================================================
-# Run all tests
-# ==============================================================================
-
-if __name__ == "__main__":
-    print("pyIRCX v2.0.0 Distributed Networking Test Suite")
-    print("=" * 80)
-    print("Testing trunk/branch topology and cross-server operations")
-    print()
-    
-    asyncio.run(runner.run_all())
-
-# ==============================================================================
 # Multi-Branch Network Tests (Trunk + 2 Branches)
 # ==============================================================================
 
 @runner.test("Three-server network topology (trunk + 2 branches)")
 async def test_three_server_topology():
     """Test full network with trunk (6667) + branch1 (6668) + branch2 (6669)"""
-    trunk_user = IRCTestClient("trunk_user", host="127.0.0.1", port=6667)
-    branch1_user = IRCTestClient("branch1_user", host="127.0.0.1", port=6668)
-    branch2_user = IRCTestClient("branch2_user", host="127.0.0.1", port=6669)
+    trunk_user = IRCTestClient("trunk_user", host=TEST_HOST, port=TRUNK_PORT)
+    branch1_user = IRCTestClient("branch1_user", host=TEST_HOST, port=BRANCH1_PORT)
+    branch2_user = IRCTestClient("branch2_user", host=TEST_HOST, port=BRANCH2_PORT)
     
     await trunk_user.connect("TrunkUser")
     await branch1_user.connect("Branch1User")
@@ -395,9 +777,9 @@ async def test_three_server_topology():
 @runner.test("Channel with users from all 3 servers")
 async def test_three_server_channel():
     """Test channel operations with users from trunk + 2 branches"""
-    trunk_user = IRCTestClient("chan3_trunk", host="127.0.0.1", port=6667)
-    branch1_user = IRCTestClient("chan3_b1", host="127.0.0.1", port=6668)
-    branch2_user = IRCTestClient("chan3_b2", host="127.0.0.1", port=6669)
+    trunk_user = IRCTestClient("chan3_trunk", host=TEST_HOST, port=TRUNK_PORT)
+    branch1_user = IRCTestClient("chan3_b1", host=TEST_HOST, port=BRANCH1_PORT)
+    branch2_user = IRCTestClient("chan3_b2", host=TEST_HOST, port=BRANCH2_PORT)
     
     await trunk_user.connect("Chan3Trunk")
     await branch1_user.connect("Chan3B1")
@@ -435,8 +817,8 @@ async def test_three_server_channel():
 @runner.test("TOPIC set from branch1 seen on branch2")
 async def test_branch_to_branch_topic():
     """Test TOPIC set from one branch is seen on other branch"""
-    branch1_user = IRCTestClient("topic_b1", host="127.0.0.1", port=6668)
-    branch2_user = IRCTestClient("topic_b2", host="127.0.0.1", port=6669)
+    branch1_user = IRCTestClient("topic_b1", host=TEST_HOST, port=BRANCH1_PORT)
+    branch2_user = IRCTestClient("topic_b2", host=TEST_HOST, port=BRANCH2_PORT)
     
     await branch1_user.connect("TopicB1")
     await branch2_user.connect("TopicB2")
@@ -462,9 +844,9 @@ async def test_branch_to_branch_topic():
 @runner.test("MODE changes propagate trunk → branches")
 async def test_mode_propagation_network():
     """Test user MODE changes propagate across network"""
-    trunk_user = IRCTestClient("mode_trunk", host="127.0.0.1", port=6667)
-    branch1_user = IRCTestClient("mode_b1", host="127.0.0.1", port=6668)
-    branch2_user = IRCTestClient("mode_b2", host="127.0.0.1", port=6669)
+    trunk_user = IRCTestClient("mode_trunk", host=TEST_HOST, port=TRUNK_PORT)
+    branch1_user = IRCTestClient("mode_b1", host=TEST_HOST, port=BRANCH1_PORT)
+    branch2_user = IRCTestClient("mode_b2", host=TEST_HOST, port=BRANCH2_PORT)
     
     await trunk_user.connect("ModeTrunk")
     await branch1_user.connect("ModeB1")
@@ -524,7 +906,7 @@ async def test_enduser_basic_workflow():
 @runner.test("End User: Register nickname on branch, use on trunk")
 async def test_enduser_register_crossserver():
     """Test user registering nick on branch and using on trunk"""
-    branch_user = IRCTestClient("reg_branch", host="127.0.0.1", port=6668)
+    branch_user = IRCTestClient("reg_branch", host=TEST_HOST, port=BRANCH1_PORT)
     await branch_user.connect("RegUser")
     
     await asyncio.sleep(1)
@@ -540,7 +922,7 @@ async def test_enduser_register_crossserver():
     await branch_user.disconnect()
     await asyncio.sleep(0.5)
     
-    trunk_user = IRCTestClient("reg_trunk", host="127.0.0.1", port=6667)
+    trunk_user = IRCTestClient("reg_trunk", host=TEST_HOST, port=TRUNK_PORT)
     await trunk_user.send_raw("PASS testpass123")
     await trunk_user.connect("RegUser")
     await asyncio.sleep(1)
@@ -612,25 +994,19 @@ async def test_enduser_aliases():
 @runner.test("Staff: Authenticate as ADMIN on branch")
 async def test_staff_admin_on_branch():
     """Test ADMIN authentication on branch server"""
-    admin = IRCTestClient("staff_admin", host="127.0.0.1", port=6668)
-    await admin.send_raw("PASS changeme")
+    admin = IRCTestClient("staff_admin", host=TEST_HOST, port=BRANCH1_PORT)
     await admin.connect("StaffAdmin", "admin")
-    
-    await asyncio.sleep(1)
-    
-    # Should have +a mode
-    has_admin = any('+a' in line or '381' in line for line in admin.buffer)
+
+    has_admin = await auth_admin(admin)
     
     assert has_admin, "Staff should authenticate on branch and get admin mode"
 
 @runner.test("Staff: Use STAFF command from branch")
 async def test_staff_command_from_branch():
     """Test STAFF command routing from branch to trunk"""
-    admin = IRCTestClient("staff_cmd", host="127.0.0.1", port=6668)
-    await admin.send_raw("PASS changeme")
+    admin = IRCTestClient("staff_cmd", host=TEST_HOST, port=BRANCH1_PORT)
     await admin.connect("StaffCmd", "admin")
-    
-    await asyncio.sleep(1)
+    assert await auth_admin(admin), "Admin auth failed"
     admin.buffer.clear()
     
     # Use STAFF LIST command
@@ -645,11 +1021,11 @@ async def test_staff_command_from_branch():
 @runner.test("Staff: KILL user on different server")
 async def test_staff_kill_crossserver():
     """Test KILL propagation across servers"""
-    admin = IRCTestClient("kill_admin", host="127.0.0.1", port=6667)
-    await admin.send_raw("PASS changeme")
+    admin = IRCTestClient("kill_admin", host=TEST_HOST, port=TRUNK_PORT)
     await admin.connect("KillAdmin", "admin")
+    assert await auth_admin(admin), "Admin auth failed"
     
-    victim = IRCTestClient("kill_victim", host="127.0.0.1", port=6668)
+    victim = IRCTestClient("kill_victim", host=TEST_HOST, port=BRANCH1_PORT)
     await victim.connect("KillVictim")
     
     await asyncio.sleep(2)
@@ -669,8 +1045,8 @@ async def test_staff_kill_crossserver():
 async def test_staff_gag():
     """Test GAG prevents user from sending messages"""
     admin = IRCTestClient("gag_admin")
-    await admin.send_raw("PASS changeme")
     await admin.connect("GagAdmin", "admin")
+    assert await auth_admin(admin), "Admin auth failed"
     
     victim = IRCTestClient("gag_victim")
     await victim.connect("GagVictim")
@@ -698,12 +1074,12 @@ async def test_staff_gag():
 async def test_staff_stats_network():
     """Test STATS showing network-wide information"""
     admin = IRCTestClient("stats_admin")
-    await admin.send_raw("PASS changeme")
     await admin.connect("StatsAdmin", "admin")
+    assert await auth_admin(admin), "Admin auth failed"
     
     # Create some users on different servers
-    user1 = IRCTestClient("stats_u1", host="127.0.0.1", port=6668)
-    user2 = IRCTestClient("stats_u2", host="127.0.0.1", port=6669)
+    user1 = IRCTestClient("stats_u1", host=TEST_HOST, port=BRANCH1_PORT)
+    user2 = IRCTestClient("stats_u2", host=TEST_HOST, port=BRANCH2_PORT)
     await user1.connect("StatsU1")
     await user2.connect("StatsU2")
     
@@ -719,49 +1095,11 @@ async def test_staff_stats_network():
 
     assert has_stats, "STATS should aggregate network-wide information"
 
-@runner.test("INVITE propagates cross-server")
-async def test_invite_crossserver():
-    """Test INVITE command works across servers"""
-    # User on trunk invites user on branch to trunk channel
-    trunk_user = IRCTestClient("invite_trunk")
-    branch_user = IRCTestClient("invite_branch", host="127.0.0.1", port=6668)
-
-    await trunk_user.connect("InviteTrunk")
-    await branch_user.connect("InviteBranch")
-    await asyncio.sleep(0.5)
-
-    # Trunk user creates invite-only channel
-    await trunk_user.send_raw("JOIN #invitetest")
-    await asyncio.sleep(0.3)
-    await trunk_user.send_raw("MODE #invitetest +i")
-    await asyncio.sleep(0.3)
-
-    # Trunk user invites branch user
-    trunk_user.buffer.clear()
-    branch_user.buffer.clear()
-    await trunk_user.send_raw("INVITE InviteBranch #invitetest")
-    await asyncio.sleep(0.5)
-
-    # Branch user should receive INVITE
-    has_invite = any('INVITE' in line and '#invitetest' in line for line in branch_user.buffer)
-
-    # Branch user should now be able to join
-    await branch_user.send_raw("JOIN #invitetest")
-    await asyncio.sleep(0.5)
-
-    has_join = any('JOIN' in line and '#invitetest' in line for line in branch_user.buffer)
-
-    assert has_invite, "INVITE should propagate to user on different server"
-    assert has_join, "Invited user should be able to join invite-only channel"
-
-    await trunk_user.disconnect()
-    await branch_user.disconnect()
-
 @runner.test("NOTICE propagates cross-server")
 async def test_notice_crossserver():
     """Test NOTICE command works across servers"""
     trunk_user = IRCTestClient("notice_trunk")
-    branch_user = IRCTestClient("notice_branch", host="127.0.0.1", port=6668)
+    branch_user = IRCTestClient("notice_branch", host=TEST_HOST, port=BRANCH1_PORT)
 
     await trunk_user.connect("NoticeTrunk")
     await branch_user.connect("NoticeBranch")
@@ -784,7 +1122,7 @@ async def test_notice_crossserver():
 async def test_notice_channel_crossserver():
     """Test channel NOTICE works across servers"""
     trunk_user = IRCTestClient("notice_trunk_chan")
-    branch_user = IRCTestClient("notice_branch_chan", host="127.0.0.1", port=6668)
+    branch_user = IRCTestClient("notice_branch_chan", host=TEST_HOST, port=BRANCH1_PORT)
 
     await trunk_user.connect("NoticeTrunkChan")
     await branch_user.connect("NoticeBranchChan")
@@ -808,3 +1146,14 @@ async def test_notice_channel_crossserver():
     await trunk_user.disconnect()
     await branch_user.disconnect()
 
+# ==============================================================================
+# Run all tests
+# ==============================================================================
+
+if __name__ == "__main__":
+    print("pyIRCX v2.0.0 Distributed Networking Test Suite")
+    print("=" * 80)
+    print("Testing trunk/branch topology and cross-server operations")
+    print()
+
+    asyncio.run(runner.run_all())

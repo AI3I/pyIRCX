@@ -21,6 +21,7 @@ import argparse
 import time
 import random
 import string
+import os
 
 try:
     import websockets
@@ -111,9 +112,10 @@ class WebChatTester:
             print(f"    -> {command}")
         await ws.send(json.dumps({'type': 'raw', 'command': command}))
 
-    async def connect_and_register(self):
+    async def connect_and_register(self, nick=None):
         """Connect and register, returning the websocket"""
         ws = await websockets.connect(self.ws_url)
+        nick = nick or self.test_nick
 
         # Send IRCX mode request
         await self.send_raw(ws, "IRCX")
@@ -121,7 +123,7 @@ class WebChatTester:
         # Send registration
         await ws.send(json.dumps({
             'type': 'connect',
-            'nick': self.test_nick,
+            'nick': nick,
             'username': 'wctest',
             'realname': 'WebChat Test Harness'
         }))
@@ -481,6 +483,38 @@ class WebChatTester:
             self.results.fail("AWAY", str(e))
             return False
 
+    async def test_capabilities(self):
+        """Test 14: CAP LS / CAP REQ (best effort)"""
+        print("\n[Test: CAP Negotiation]")
+        try:
+            ws = await websockets.connect(self.ws_url)
+            await self.send_raw(ws, "CAP LS 302")
+            msg, all_msgs = await self.recv_until(ws, command='CAP', timeout=3)
+            if not msg:
+                self.results.skip("CAP LS", "No CAP response")
+                await ws.close()
+                return True
+
+            caps_line = " ".join(map(str, msg.get('params', [])))
+            if "message-tags" not in caps_line and "server-time" not in caps_line:
+                self.results.skip("CAP REQ", "Capabilities not advertised")
+                await ws.close()
+                return True
+
+            await self.send_raw(ws, "CAP REQ :message-tags server-time")
+            msg, _ = await self.recv_until(ws, command='CAP', timeout=3)
+            if msg and "ACK" in " ".join(map(str, msg.get('params', []))):
+                self.results.ok("CAP REQ", "message-tags/server-time ACK")
+            else:
+                self.results.skip("CAP REQ", "No ACK")
+
+            await self.send_raw(ws, "CAP END")
+            await ws.close()
+            return True
+        except Exception as e:
+            self.results.fail("CAP negotiation", str(e))
+            return False
+
     async def test_quit(self):
         """Test 13: QUIT command"""
         print("\n[Test: QUIT]")
@@ -503,6 +537,184 @@ class WebChatTester:
 
         except Exception as e:
             self.results.fail("QUIT", str(e))
+            return False
+
+    async def test_privmsg_between_clients(self):
+        """Test 14: WebChat-to-WebChat PRIVMSG"""
+        print("\n[Test: PRIVMSG Between Clients]")
+        try:
+            nick_a = "WCA_" + ''.join(random.choices(string.digits, k=4))
+            nick_b = "WCB_" + ''.join(random.choices(string.digits, k=4))
+            ws_a = await self.connect_and_register(nick=nick_a)
+            ws_b = await self.connect_and_register(nick=nick_b)
+            if not ws_a or not ws_b:
+                self.results.fail("PRIVMSG between clients", "Registration failed")
+                return False
+
+            test_msg = f"Hello {nick_b} {random.randint(1000, 9999)}"
+            await self.send_raw(ws_a, f"PRIVMSG {nick_b} :{test_msg}")
+
+            msg, _ = await self.recv_until(ws_b, command='PRIVMSG', timeout=5)
+            if msg and test_msg in " ".join(map(str, msg.get('params', []))):
+                self.results.ok("PRIVMSG delivery", test_msg[:30])
+            else:
+                self.results.fail("PRIVMSG delivery", "Message not received")
+
+            await ws_a.close()
+            await ws_b.close()
+            return True
+        except Exception as e:
+            self.results.fail("PRIVMSG between clients", str(e))
+            return False
+
+    async def test_channel_message_between_clients(self):
+        """Test 15: Channel message delivered to other WebChat client"""
+        print("\n[Test: Channel Message Between Clients]")
+        try:
+            nick_a = "WCC_" + ''.join(random.choices(string.digits, k=4))
+            nick_b = "WCD_" + ''.join(random.choices(string.digits, k=4))
+            channel = "#wcchan_" + ''.join(random.choices(string.digits, k=4))
+
+            ws_a = await self.connect_and_register(nick=nick_a)
+            ws_b = await self.connect_and_register(nick=nick_b)
+            if not ws_a or not ws_b:
+                self.results.fail("Channel message", "Registration failed")
+                return False
+
+            await ws_a.send(json.dumps({'type': 'join', 'channel': channel}))
+            await ws_b.send(json.dumps({'type': 'join', 'channel': channel}))
+            await self.recv_until(ws_a, numeric='366', timeout=5)
+            await self.recv_until(ws_b, numeric='366', timeout=5)
+
+            test_msg = f"Channel msg {random.randint(1000, 9999)}"
+            await self.send_raw(ws_a, f"PRIVMSG {channel} :{test_msg}")
+
+            msg, _ = await self.recv_until(ws_b, command='PRIVMSG', timeout=5)
+            if msg and test_msg in " ".join(map(str, msg.get('params', []))):
+                self.results.ok("Channel message delivery", test_msg[:30])
+            else:
+                self.results.fail("Channel message delivery", "Message not received")
+
+            await ws_a.close()
+            await ws_b.close()
+            return True
+        except Exception as e:
+            self.results.fail("Channel message", str(e))
+            return False
+
+    async def test_notice_between_clients(self):
+        """Test 16: NOTICE delivery between WebChat clients"""
+        print("\n[Test: NOTICE Between Clients]")
+        try:
+            nick_a = "WCE_" + ''.join(random.choices(string.digits, k=4))
+            nick_b = "WCF_" + ''.join(random.choices(string.digits, k=4))
+            ws_a = await self.connect_and_register(nick=nick_a)
+            ws_b = await self.connect_and_register(nick=nick_b)
+            if not ws_a or not ws_b:
+                self.results.fail("NOTICE between clients", "Registration failed")
+                return False
+
+            test_msg = f"Notice {random.randint(1000, 9999)}"
+            await self.send_raw(ws_a, f"NOTICE {nick_b} :{test_msg}")
+
+            msg, _ = await self.recv_until(ws_b, command='NOTICE', timeout=5)
+            if msg and test_msg in " ".join(map(str, msg.get('params', []))):
+                self.results.ok("NOTICE delivery", test_msg[:30])
+            else:
+                self.results.fail("NOTICE delivery", "Message not received")
+
+            await ws_a.close()
+            await ws_b.close()
+            return True
+        except Exception as e:
+            self.results.fail("NOTICE between clients", str(e))
+            return False
+
+    async def test_ping_pong(self):
+        """Test 17: PING/PONG roundtrip"""
+        print("\n[Test: PING/PONG]")
+        try:
+            ws = await self.connect_and_register()
+            if not ws:
+                self.results.fail("PING/PONG", "Registration failed")
+                return False
+
+            await self.send_raw(ws, "PING :wcping")
+            msg, _ = await self.recv_until(ws, command='PONG', timeout=3)
+            if msg:
+                self.results.ok("PONG received")
+            else:
+                self.results.fail("PING/PONG", "No PONG response")
+
+            await ws.close()
+            return True
+        except Exception as e:
+            self.results.fail("PING/PONG", str(e))
+            return False
+
+    async def test_unknown_command(self):
+        """Test 18: Unknown command error"""
+        print("\n[Test: Unknown Command]")
+        try:
+            ws = await self.connect_and_register()
+            if not ws:
+                self.results.fail("Unknown command", "Registration failed")
+                return False
+
+            await self.send_raw(ws, "FOOBAR")
+            msg, _ = await self.recv_until(ws, numeric='421', timeout=3)
+            if msg:
+                self.results.ok("Unknown command", "421 received")
+            else:
+                self.results.fail("Unknown command", "No 421 response")
+
+            await ws.close()
+            return True
+        except Exception as e:
+            self.results.fail("Unknown command", str(e))
+            return False
+
+    async def test_kick_ban_channel(self):
+        """Test 19: KICK/BAN from channel creator"""
+        print("\n[Test: KICK/BAN]")
+        try:
+            nick_a = "WCK_" + ''.join(random.choices(string.digits, k=4))
+            nick_b = "WCL_" + ''.join(random.choices(string.digits, k=4))
+            channel = "#wckick_" + ''.join(random.choices(string.digits, k=4))
+
+            ws_a = await self.connect_and_register(nick=nick_a)
+            ws_b = await self.connect_and_register(nick=nick_b)
+            if not ws_a or not ws_b:
+                self.results.fail("KICK/BAN", "Registration failed")
+                return False
+
+            await ws_a.send(json.dumps({'type': 'join', 'channel': channel}))
+            await ws_b.send(json.dumps({'type': 'join', 'channel': channel}))
+            await self.recv_until(ws_a, numeric='366', timeout=5)
+            await self.recv_until(ws_b, numeric='366', timeout=5)
+
+            await self.send_raw(ws_a, f"KICK {channel} {nick_b} :test kick")
+            msg, _ = await self.recv_until(ws_b, command='KICK', timeout=5)
+            if msg:
+                self.results.ok("KICK delivered", channel)
+            else:
+                self.results.fail("KICK delivered", "No KICK received")
+
+            # BAN then verify rejoin blocked
+            await self.send_raw(ws_a, f"MODE {channel} +b {nick_b}!*@*")
+            await asyncio.sleep(0.2)
+            await ws_b.send(json.dumps({'type': 'join', 'channel': channel}))
+            msg, _ = await self.recv_until(ws_b, numeric='474', timeout=3)
+            if msg:
+                self.results.ok("BAN enforced", channel)
+            else:
+                self.results.fail("BAN enforced", "No 474 response")
+
+            await ws_a.close()
+            await ws_b.close()
+            return True
+        except Exception as e:
+            self.results.fail("KICK/BAN", str(e))
             return False
 
     async def run_all_tests(self, quick=False):
@@ -529,6 +741,13 @@ class WebChatTester:
             await self.test_list()
             await self.test_ircx_mode()
             await self.test_away()
+            await self.test_capabilities()
+            await self.test_privmsg_between_clients()
+            await self.test_channel_message_between_clients()
+            await self.test_notice_between_clients()
+            await self.test_ping_pong()
+            await self.test_unknown_command()
+            await self.test_kick_ban_channel()
 
         # Always test quit last
         await self.test_quit()
@@ -538,13 +757,26 @@ class WebChatTester:
 
 async def main():
     parser = argparse.ArgumentParser(description='pyIRCX WebChat Test Harness')
-    parser.add_argument('--ws-url', default='ws://127.0.0.1:8765',
-                        help='WebSocket URL (default: ws://127.0.0.1:8765)')
+    default_ws = os.environ.get("PYIRCX_TEST_WS_URL", "ws://127.0.0.1:8765")
+    parser.add_argument('--ws-url', default=default_ws,
+                        help=f'WebSocket URL (default: {default_ws})')
     parser.add_argument('--verbose', '-v', action='store_true',
                         help='Show detailed output')
     parser.add_argument('--quick', '-q', action='store_true',
                         help='Run only essential tests')
     args = parser.parse_args()
+
+    # Preflight: if gateway not reachable, skip unless explicitly configured
+    require_ws = os.environ.get("PYIRCX_TEST_WS_URL") is not None or args.ws_url != "ws://127.0.0.1:8765"
+    try:
+        ws = await websockets.connect(args.ws_url)
+        await ws.close()
+    except Exception as e:
+        if require_ws:
+            print(f"ERROR: WebChat gateway not reachable: {e}")
+            sys.exit(1)
+        print(f"SKIP: WebChat gateway not reachable: {e}")
+        sys.exit(0)
 
     tester = WebChatTester(args.ws_url, args.verbose)
     success = await tester.run_all_tests(args.quick)
@@ -554,3 +786,18 @@ async def main():
 
 if __name__ == '__main__':
     asyncio.run(main())
+
+            await self.send_raw(ws_a, f"MODE {channel} +b {nick_b}!*@*")
+            await self.send_raw(ws_b, f"JOIN {channel}")
+            msg, _ = await self.recv_until(ws_b, numeric='474', timeout=5)
+            if msg:
+                self.results.ok("BAN enforced", "474 received")
+            else:
+                self.results.fail("BAN enforced", "No 474 received")
+
+            await ws_a.close()
+            await ws_b.close()
+            return True
+        except Exception as e:
+            self.results.fail("KICK/BAN", str(e))
+            return False

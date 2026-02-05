@@ -20,8 +20,14 @@ NC='\033[0m' # No Color
 
 # Configuration
 TEST_HOST="127.0.0.1"
-TEST_PORT=6667
-SERVER_WAIT=3
+TEST_PORT="${PYIRCX_TEST_TRUNK_PORT:-${PYIRCX_TEST_BASE_PORT:-6666}}"
+TEST_BRANCH1_PORT="${PYIRCX_TEST_BRANCH1_PORT:-6668}"
+TEST_BRANCH2_PORT="${PYIRCX_TEST_BRANCH2_PORT:-6669}"
+TRUNK_LINK_PORT="${PYIRCX_TEST_TRUNK_LINK_PORT:-${PYIRCX_TEST_LINK_BASE_PORT:-7001}}"
+BRANCH1_LINK_PORT="${PYIRCX_TEST_BRANCH1_LINK_PORT:-7002}"
+BRANCH2_LINK_PORT="${PYIRCX_TEST_BRANCH2_LINK_PORT:-7003}"
+LINK_PASSWORD="testlink"
+SERVER_WAIT=5
 TEST_TIMEOUT=120
 
 # Logging
@@ -37,14 +43,32 @@ mkdir -p "$LOG_DIR"
 # Flags
 CLEANUP_SERVER=0
 SERVER_PID=""
+BRANCH1_PID=""
+BRANCH2_PID=""
+TEST_DIR=""
 
 # Cleanup function
 cleanup() {
-    if [ $CLEANUP_SERVER -eq 1 ] && [ -n "$SERVER_PID" ]; then
-        echo -e "${YELLOW}Stopping test server (PID: $SERVER_PID)...${NC}"
-        kill $SERVER_PID 2>/dev/null || true
-        wait $SERVER_PID 2>/dev/null || true
-        echo -e "${GREEN}Test server stopped${NC}"
+    if [ $CLEANUP_SERVER -eq 1 ]; then
+        if [ -n "$BRANCH2_PID" ]; then
+            echo -e "${YELLOW}Stopping branch2 server (PID: $BRANCH2_PID)...${NC}"
+            kill $BRANCH2_PID 2>/dev/null || true
+            wait $BRANCH2_PID 2>/dev/null || true
+        fi
+        if [ -n "$BRANCH1_PID" ]; then
+            echo -e "${YELLOW}Stopping branch1 server (PID: $BRANCH1_PID)...${NC}"
+            kill $BRANCH1_PID 2>/dev/null || true
+            wait $BRANCH1_PID 2>/dev/null || true
+        fi
+        if [ -n "$SERVER_PID" ]; then
+            echo -e "${YELLOW}Stopping trunk server (PID: $SERVER_PID)...${NC}"
+            kill $SERVER_PID 2>/dev/null || true
+            wait $SERVER_PID 2>/dev/null || true
+        fi
+        if [ -n "$TEST_DIR" ] && [ -d "$TEST_DIR" ]; then
+            rm -rf "$TEST_DIR"
+        fi
+        echo -e "${GREEN}Test servers stopped${NC}"
     fi
 }
 
@@ -80,50 +104,222 @@ check_server() {
     fi
 }
 
-# Start test server
-start_test_server() {
-    echo -e "${BLUE}Starting temporary test server...${NC}"
+port_in_use() {
+    local host=$1
+    local port=$2
+    if command -v nc &> /dev/null; then
+        nc -z "$host" "$port" 2>/dev/null
+        return $?
+    fi
+    if command -v timeout &> /dev/null && command -v bash &> /dev/null; then
+        timeout 1 bash -c "cat < /dev/null > /dev/tcp/$host/$port" 2>/dev/null
+        return $?
+    fi
+    return 1
+}
 
-    # Check if pyircx.py exists
+select_free_ports() {
+    # Skip auto-selection if ports are explicitly set via env
+    if [ -n "$PYIRCX_TEST_TRUNK_PORT" ] || [ -n "$PYIRCX_TEST_BRANCH1_PORT" ] || [ -n "$PYIRCX_TEST_BRANCH2_PORT" ] || \
+       [ -n "$PYIRCX_TEST_TRUNK_LINK_PORT" ] || [ -n "$PYIRCX_TEST_BRANCH1_LINK_PORT" ] || [ -n "$PYIRCX_TEST_BRANCH2_LINK_PORT" ] || \
+       [ -n "$PYIRCX_TEST_BASE_PORT" ] || [ -n "$PYIRCX_TEST_LINK_BASE_PORT" ]; then
+        return
+    fi
+
+    # Ensure fixed branch ports are free
+    if port_in_use "$TEST_HOST" "$TEST_BRANCH1_PORT" || port_in_use "$TEST_HOST" "$TEST_BRANCH2_PORT"; then
+        echo -e "${RED}Error: Branch ports $TEST_BRANCH1_PORT/$TEST_BRANCH2_PORT already in use.${NC}"
+        echo -e "${RED}Set PYIRCX_TEST_BRANCH1_PORT/PYIRCX_TEST_BRANCH2_PORT to override.${NC}"
+        exit 1
+    fi
+
+    # Find a free trunk port (avoid 6667 to keep it open for installed instance)
+    local base
+    for base in 6666 6665 6664 6663 6662 6661 6660 6659 6658 6657 6656 6655; do
+        if port_in_use "$TEST_HOST" "$base"; then
+            continue
+        fi
+        TEST_PORT="$base"
+        break
+    done
+
+    if port_in_use "$TEST_HOST" "$TEST_PORT"; then
+        echo -e "${RED}Error: No free trunk port found near 6666.${NC}"
+        echo -e "${RED}Set PYIRCX_TEST_TRUNK_PORT to override.${NC}"
+        exit 1
+    fi
+
+    # Find free link ports block in 7001-7099
+    local link_base
+    for link_base in 7001 7004 7007 7010 7013 7016 7019 7022 7025 7028 7031 7034 7037 7040 7043 7046 7049 7052 7055 7058 7061 7064 7067 7070 7073 7076 7079 7082 7085 7088 7091 7094 7097; do
+        if port_in_use "$TEST_HOST" "$link_base" || port_in_use "$TEST_HOST" "$((link_base+1))" || port_in_use "$TEST_HOST" "$((link_base+2))"; then
+            continue
+        fi
+        TRUNK_LINK_PORT="$link_base"
+        BRANCH1_LINK_PORT="$((link_base+1))"
+        BRANCH2_LINK_PORT="$((link_base+2))"
+        echo -e "${YELLOW}Selected ports: trunk=$TEST_PORT, branch1=$TEST_BRANCH1_PORT, branch2=$TEST_BRANCH2_PORT (links $TRUNK_LINK_PORT-$BRANCH2_LINK_PORT)${NC}"
+        return
+    done
+
+    echo -e "${RED}Error: No free link port block found in 7001-7099.${NC}"
+    echo -e "${RED}Set PYIRCX_TEST_TRUNK_LINK_PORT/PYIRCX_TEST_BRANCH1_LINK_PORT/PYIRCX_TEST_BRANCH2_LINK_PORT to override.${NC}"
+    exit 1
+}
+
+wait_for_port() {
+    local host=$1
+    local port=$2
+    local timeout_secs=${3:-5}
+    local end=$((SECONDS + timeout_secs))
+    while [ $SECONDS -lt $end ]; do
+        if command -v nc &> /dev/null; then
+            if nc -z "$host" "$port" 2>/dev/null; then
+                return 0
+            fi
+        elif command -v timeout &> /dev/null && command -v bash &> /dev/null; then
+            if timeout 1 bash -c "cat < /dev/null > /dev/tcp/$host/$port" 2>/dev/null; then
+                return 0
+            fi
+        else
+            return 0
+        fi
+        sleep 0.2
+    done
+    return 1
+}
+
+# Start test servers (trunk + 2 branches)
+start_test_servers() {
+    echo -e "${BLUE}Starting temporary test servers (trunk + 2 branches)...${NC}"
+
     if [ ! -f "pyircx.py" ]; then
         echo -e "${RED}Error: pyircx.py not found in current directory${NC}"
         echo "Please run this script from the pyIRCX directory"
         exit 1
     fi
 
-    # Start server in background
-    python3 pyircx.py --config pyircx_config.json > /tmp/pyircx_test.log 2>&1 &
+    TEST_DIR=$(mktemp -d "/tmp/pyircx_test_${TIMESTAMP}_XXXX")
+    CONFIG_TRUNK="${TEST_DIR}/pyircx_trunk.json"
+    CONFIG_BRANCH1="${TEST_DIR}/pyircx_branch1.json"
+    CONFIG_BRANCH2="${TEST_DIR}/pyircx_branch2.json"
+    DB_TRUNK="${TEST_DIR}/pyircx_trunk.db"
+    DB_BRANCH1="${TEST_DIR}/pyircx_branch1.db"
+    DB_BRANCH2="${TEST_DIR}/pyircx_branch2.db"
+
+    # Use sync sqlite3 pool and disable thread executor in test harness
+    export PYIRCX_SYNC_DB=1
+    export PYIRCX_NO_THREADS=1
+
+    python3 - <<PY
+import json
+from pathlib import Path
+
+base = json.loads(Path("pyircx_config.json").read_text())
+
+def make_config(name, port, role, bind_port, links, db_path, is_hub, hub_server):
+    cfg = json.loads(json.dumps(base))
+    cfg["server"]["name"] = name
+    cfg["network"]["listen_addr"] = "127.0.0.1"
+    cfg["network"]["listen_ports"] = [port]
+    cfg["linking"]["enabled"] = True
+    cfg["linking"]["server_role"] = role
+    cfg["linking"]["bind_host"] = "127.0.0.1"
+    cfg["linking"]["bind_port"] = bind_port
+    cfg["linking"]["links"] = links
+    cfg["database"]["path"] = db_path
+    cfg["services"]["mode"] = "centralized"
+    cfg["services"]["is_services_hub"] = is_hub
+    cfg["services"]["hub_server"] = hub_server
+    cfg["ssl"]["enabled"] = False
+    cfg["security"]["auth_require_ssl"] = False
+    cfg["security"]["pass_require_ssl"] = False
+    return cfg
+
+trunk_name = "trunk.testnet.local"
+branch1_name = "branch1.testnet.local"
+branch2_name = "branch2.testnet.local"
+
+link_password = "${LINK_PASSWORD}"
+
+trunk_links = [
+    {"name": branch1_name, "host": "127.0.0.1", "port": ${BRANCH1_LINK_PORT}, "password": link_password, "autoconnect": False},
+    {"name": branch2_name, "host": "127.0.0.1", "port": ${BRANCH2_LINK_PORT}, "password": link_password, "autoconnect": False},
+]
+
+branch1_links = [
+    {"name": trunk_name, "host": "127.0.0.1", "port": ${TRUNK_LINK_PORT}, "password": link_password, "autoconnect": True},
+]
+
+branch2_links = [
+    {"name": trunk_name, "host": "127.0.0.1", "port": ${TRUNK_LINK_PORT}, "password": link_password, "autoconnect": True},
+]
+
+configs = {
+    "${CONFIG_TRUNK}": make_config(trunk_name, ${TEST_PORT}, "trunk", ${TRUNK_LINK_PORT}, trunk_links, "${DB_TRUNK}", True, trunk_name),
+    "${CONFIG_BRANCH1}": make_config(branch1_name, ${TEST_BRANCH1_PORT}, "branch", ${BRANCH1_LINK_PORT}, branch1_links, "${DB_BRANCH1}", False, trunk_name),
+    "${CONFIG_BRANCH2}": make_config(branch2_name, ${TEST_BRANCH2_PORT}, "branch", ${BRANCH2_LINK_PORT}, branch2_links, "${DB_BRANCH2}", False, trunk_name),
+}
+
+for path, cfg in configs.items():
+    Path(path).write_text(json.dumps(cfg, indent=2))
+PY
+
+    # Start servers in background
+    python3 pyircx.py --config "$CONFIG_TRUNK" > "${TEST_DIR}/trunk.log" 2>&1 &
     SERVER_PID=$!
+    python3 pyircx.py --config "$CONFIG_BRANCH1" > "${TEST_DIR}/branch1.log" 2>&1 &
+    BRANCH1_PID=$!
+    python3 pyircx.py --config "$CONFIG_BRANCH2" > "${TEST_DIR}/branch2.log" 2>&1 &
+    BRANCH2_PID=$!
     CLEANUP_SERVER=1
 
-    echo -e "${YELLOW}Waiting ${SERVER_WAIT} seconds for server to start...${NC}"
+    echo -e "${YELLOW}Waiting ${SERVER_WAIT} seconds for servers to start...${NC}"
     sleep $SERVER_WAIT
 
-    # Verify server started
-    SERVER_STARTED=0
-    if command -v nc &> /dev/null; then
-        if nc -z $TEST_HOST $TEST_PORT 2>/dev/null; then
-            SERVER_STARTED=1
-        fi
-    elif command -v timeout &> /dev/null && command -v bash &> /dev/null; then
-        if timeout 1 bash -c "cat < /dev/null > /dev/tcp/$TEST_HOST/$TEST_PORT" 2>/dev/null; then
-            SERVER_STARTED=1
-        fi
-    else
-        # Assume it started if the process is still running
-        if kill -0 $SERVER_PID 2>/dev/null; then
-            SERVER_STARTED=1
-            echo -e "${YELLOW}Warning: Cannot verify server port, assuming it started${NC}"
-        fi
+    if ! wait_for_port "$TEST_HOST" "$TEST_PORT" 20; then
+        echo -e "${RED}Error: Trunk server failed to start on $TEST_HOST:$TEST_PORT${NC}"
+        echo "See ${TEST_DIR}/trunk.log"
+        exit 1
     fi
-
-    if [ $SERVER_STARTED -eq 0 ]; then
-        echo -e "${RED}Error: Failed to start test server${NC}"
-        echo "Check /tmp/pyircx_test.log for errors"
+    if ! wait_for_port "$TEST_HOST" "$TEST_BRANCH1_PORT" 20; then
+        echo -e "${RED}Error: Branch1 server failed to start on $TEST_HOST:$TEST_BRANCH1_PORT${NC}"
+        echo "See ${TEST_DIR}/branch1.log"
+        exit 1
+    fi
+    if ! wait_for_port "$TEST_HOST" "$TEST_BRANCH2_PORT" 20; then
+        echo -e "${RED}Error: Branch2 server failed to start on $TEST_HOST:$TEST_BRANCH2_PORT${NC}"
+        echo "See ${TEST_DIR}/branch2.log"
         exit 1
     fi
 
-    echo -e "${GREEN}✓ Test server started (PID: $SERVER_PID)${NC}"
+    # Create test accounts in trunk DB
+    if ! python3 tests/integration/setup_test_accounts.py --db "$DB_TRUNK" > "${TEST_DIR}/accounts.log" 2>&1; then
+        echo -e "${RED}Error: Failed to create test accounts${NC}"
+        echo "See ${TEST_DIR}/accounts.log"
+        exit 1
+    fi
+
+    # Export test environment for suites
+    export PYIRCX_TEST_HOST="$TEST_HOST"
+    export PYIRCX_TEST_TRUNK_PORT="$TEST_PORT"
+    export PYIRCX_TEST_BRANCH1_PORT="$TEST_BRANCH1_PORT"
+    export PYIRCX_TEST_BRANCH2_PORT="$TEST_BRANCH2_PORT"
+    export PYIRCX_TEST_DB_TRUNK="$DB_TRUNK"
+    export PYIRCX_TEST_DB_BRANCH1="$DB_BRANCH1"
+    export PYIRCX_TEST_DB_BRANCH2="$DB_BRANCH2"
+    export PYIRCX_TEST_CONFIG_TRUNK="$CONFIG_TRUNK"
+    export PYIRCX_TEST_CONFIG_BRANCH1="$CONFIG_BRANCH1"
+    export PYIRCX_TEST_CONFIG_BRANCH2="$CONFIG_BRANCH2"
+    export PYIRCX_TEST_TRUNK_NAME="trunk.testnet.local"
+    export PYIRCX_TEST_BRANCH1_NAME="branch1.testnet.local"
+    export PYIRCX_TEST_BRANCH2_NAME="branch2.testnet.local"
+    export PYIRCX_TEST_TRUNK_LINK_PORT="$TRUNK_LINK_PORT"
+    export PYIRCX_TEST_BRANCH1_LINK_PORT="$BRANCH1_LINK_PORT"
+    export PYIRCX_TEST_BRANCH2_LINK_PORT="$BRANCH2_LINK_PORT"
+
+    echo -e "${GREEN}✓ Test servers started (PIDs: trunk=$SERVER_PID, b1=$BRANCH1_PID, b2=$BRANCH2_PID)${NC}"
+    echo -e "${GREEN}✓ Test configs/logs in ${TEST_DIR}${NC}"
 }
 
 # Run a test suite
@@ -215,6 +411,7 @@ EOF
 
 # Main execution
 main() {
+    select_free_ports
     # Initialize log file
     write_log_header
 
@@ -265,6 +462,14 @@ main() {
         echo -e "${GREEN}✓ tests/integration/network/links.py (4 tests)${NC}"
         TESTS_FOUND=$((TESTS_FOUND + 1))
     fi
+    if [ -f "tests/integration/network/distributed.py" ]; then
+        echo -e "${GREEN}✓ tests/integration/network/distributed.py (multi-server tests)${NC}"
+        TESTS_FOUND=$((TESTS_FOUND + 1))
+    fi
+    if [ -f "tests/integration/network/topology.py" ]; then
+        echo -e "${GREEN}✓ tests/integration/network/topology.py (split/rejoin tests)${NC}"
+        TESTS_FOUND=$((TESTS_FOUND + 1))
+    fi
     if [ -f "tests/integration/ircx/access.py" ]; then
         echo -e "${GREEN}✓ tests/integration/ircx/access.py (10 tests)${NC}"
         TESTS_FOUND=$((TESTS_FOUND + 1))
@@ -295,7 +500,7 @@ main() {
 
     {
         echo "- **Test Suites Found**: $TESTS_FOUND"
-        echo "- **Server**: $TEST_HOST:$TEST_PORT"
+        echo "- **Server**: trunk=$TEST_HOST:$TEST_PORT, branch1=$TEST_HOST:$TEST_BRANCH1_PORT, branch2=$TEST_HOST:$TEST_BRANCH2_PORT"
         echo ""
         echo "---"
         echo ""
@@ -305,16 +510,14 @@ main() {
 
     # Check if server is running
     if check_server; then
-        echo -e "${YELLOW}⚠️  WARNING: Server already running. Tests require specific config settings.${NC}"
-        echo -e "${YELLOW}   To ensure correct test config, stop the existing server first:${NC}"
-        echo -e "${YELLOW}   pkill -f 'python.*pyircx.py' && sleep 2${NC}"
-        echo ""
-        echo -e "${BLUE}Attempting to use existing server instance...${NC}"
-        echo "- Server: Using existing instance (WARNING: may have incorrect config)" >> "$LOG_FILE"
+        echo -e "${RED}Error: A server is already running on $TEST_HOST:$TEST_PORT${NC}"
+        echo -e "${YELLOW}Please stop existing servers before running integration tests:${NC}"
+        echo -e "${YELLOW}  pkill -f 'python.*pyircx.py' && sleep 2${NC}"
+        exit 1
     else
-        echo -e "${YELLOW}Starting test server automatically...${NC}"
-        echo "- Server: Started automatically (PID: will be set)" >> "$LOG_FILE"
-        start_test_server
+        echo -e "${YELLOW}Starting test servers automatically...${NC}"
+        echo "- Server: Started automatically (trunk+branches)" >> "$LOG_FILE"
+        start_test_servers
     fi
 
     echo ""
@@ -367,6 +570,26 @@ main() {
         fi
     fi
 
+    # Distributed networking tests (trunk + 2 branches)
+    if [ -f "tests/integration/network/distributed.py" ]; then
+        TOTAL_SUITES=$((TOTAL_SUITES + 1))
+        if run_test_suite "tests/integration/network/distributed.py" "Distributed Networking Tests (multi-server)"; then
+            PASSED_SUITES=$((PASSED_SUITES + 1))
+        else
+            FAILED_SUITES=$((FAILED_SUITES + 1))
+        fi
+    fi
+
+    # Network topology tests (splits/rejoins)
+    if [ -f "tests/integration/network/topology.py" ]; then
+        TOTAL_SUITES=$((TOTAL_SUITES + 1))
+        if run_test_suite "tests/integration/network/topology.py" "Network Topology Tests (splits/joins)"; then
+            PASSED_SUITES=$((PASSED_SUITES + 1))
+        else
+            FAILED_SUITES=$((FAILED_SUITES + 1))
+        fi
+    fi
+
     # Access control tests
     if [ -f "tests/integration/ircx/access.py" ]; then
         TOTAL_SUITES=$((TOTAL_SUITES + 1))
@@ -401,6 +624,16 @@ main() {
     if [ -f "tests/integration/ircx/services.py" ]; then
         TOTAL_SUITES=$((TOTAL_SUITES + 1))
         if run_test_suite "tests/integration/ircx/services.py" "Service Improvements Tests (13 tests)"; then
+            PASSED_SUITES=$((PASSED_SUITES + 1))
+        else
+            FAILED_SUITES=$((FAILED_SUITES + 1))
+        fi
+    fi
+
+    # WebChat gateway tests (optional - requires gateway running)
+    if [ -f "tests/integration/web/webchat.py" ]; then
+        TOTAL_SUITES=$((TOTAL_SUITES + 1))
+        if run_test_suite "tests/integration/web/webchat.py" "WebChat Gateway Tests"; then
             PASSED_SUITES=$((PASSED_SUITES + 1))
         else
             FAILED_SUITES=$((FAILED_SUITES + 1))

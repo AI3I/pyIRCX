@@ -18,6 +18,7 @@ import argparse
 from dataclasses import dataclass
 from typing import List, Dict
 import socket
+import os
 
 # Configuration
 @dataclass
@@ -34,16 +35,24 @@ class StressConfig:
     
     def __post_init__(self):
         if self.servers is None:
+            host = os.environ.get("PYIRCX_TEST_HOST", "127.0.0.1")
+            trunk_port = int(os.environ.get("PYIRCX_TEST_TRUNK_PORT", "6667"))
+            branch1_port = int(os.environ.get("PYIRCX_TEST_BRANCH1_PORT", "6668"))
+            branch2_port = int(os.environ.get("PYIRCX_TEST_BRANCH2_PORT", "6669"))
             self.servers = [
-                ('127.0.0.1', 6667),  # Trunk
-                ('127.0.0.1', 6668),  # Branch 1
-                ('127.0.0.1', 6669),  # Branch 2
+                (host, trunk_port),   # Trunk
+                (host, branch1_port), # Branch 1
+                (host, branch2_port), # Branch 2
             ]
 
 # Simple IRC client for stress testing
 class StressClient:
     """Minimal IRC client for load testing"""
-    def __init__(self, nickname, host='127.0.0.1', port=6667):
+    def __init__(self, nickname, host=None, port=None):
+        if host is None:
+            host = os.environ.get("PYIRCX_TEST_HOST", "127.0.0.1")
+        if port is None:
+            port = int(os.environ.get("PYIRCX_TEST_TRUNK_PORT", "6667"))
         self.nickname = nickname
         self.host = host
         self.port = port
