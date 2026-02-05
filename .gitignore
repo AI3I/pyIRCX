@@ -1,9 +1,12 @@
 # Database files
 *.db
+*.db-shm
+*.db-wal
 
 # Log files
 *.log
 *.out
+tests/integration/logs/latest.md
 
 # Python cache
 __pycache__/
