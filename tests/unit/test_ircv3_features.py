@@ -780,6 +780,37 @@ class TestCommandRouting:
     def test_rename_routed(self, handlers):
         assert handlers.get('RENAME') == 'handle_rename'
 
+    def test_command_handlers_exist(self, handlers):
+        import pyircx
+        missing = []
+        for cmd, handler_name in handlers.items():
+            if not hasattr(pyircx.pyIRCXServer, handler_name):
+                missing.append((cmd, handler_name))
+        assert not missing, f"Missing handlers: {missing}"
+
+    def test_command_handlers_signature(self, handlers):
+        import inspect
+        import pyircx
+        bad = []
+        for cmd, handler_name in handlers.items():
+            fn = getattr(pyircx.pyIRCXServer, handler_name, None)
+            if fn is None:
+                continue
+            sig = inspect.signature(fn)
+            params = list(sig.parameters.values())
+            # Expect at least: self, user, params (or varargs/kwargs)
+            remaining = params[1:]  # skip self
+            positional = [
+                p for p in remaining
+                if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
+            ]
+            has_var = any(
+                p.kind in (p.VAR_POSITIONAL, p.VAR_KEYWORD) for p in remaining
+            )
+            if len(positional) < 2 and not has_var:
+                bad.append((cmd, handler_name, str(sig)))
+        assert not bad, f"Handler signature mismatch: {bad}"
+
 
 # =============================================================================
 # SERVICE BOT +b MODE TESTS
