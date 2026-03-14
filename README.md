@@ -8,23 +8,11 @@
 
 ---
 
-## ⚠️ Copyright Notice
+## License
 
-**All Rights Reserved.** This software and all associated files (source code, documentation, configuration files, scripts, and assets) are proprietary. This is **NOT** open source or free software.
+pyIRCX is open source software licensed under the GNU Affero General Public License v3.0 or later.
 
-**Unauthorized access is prohibited.** Reading, viewing, downloading, or accessing this repository or any of its contents without explicit written permission is strictly forbidden.
-
-You may not:
-- Access, view, read, or download any files without explicit written permission
-- Use, copy, or execute the software
-- Modify, adapt, or create derivative works
-- Redistribute, sell, lease, or sublicense
-- Reverse engineer or decompile
-- Use for commercial or non-commercial purposes
-
-All access, use, modification, and redistribution require explicit written permission from the copyright holder.
-
-Copyright © 2026 0x8007000E. All rights reserved.
+See [LICENSE](LICENSE) for the full license text.
 
 ---
 
