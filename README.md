@@ -14,6 +14,14 @@ pyIRCX is open source software licensed under the GNU Affero General Public Lice
 
 See [LICENSE](LICENSE) for the full license text.
 
+## Platform Support
+
+pyIRCX requires Python `3.8+`.
+
+In practice, that means current Debian/Ubuntu, Fedora, and newer RHEL-family environments are supported when they provide a modern enough Python base.
+
+Older baseline installs that do not provide Python `3.8+` are not supported by the standard install path. This includes older `RHEL`/`OEL`/`Alma`/`Rocky` class systems unless they have already been explicitly modernized.
+
 ---
 
 ## What is pyIRCX?
@@ -326,6 +334,10 @@ pyIRCX implements defense-in-depth with multiple security layers:
 ## Quick Start
 
 ### Installation
+
+Verify that the target host provides Python `3.8+` before running the installer.
+
+Older baseline systems below that requirement are outside the supported install path.
 
 ```bash
 # Clone the repository

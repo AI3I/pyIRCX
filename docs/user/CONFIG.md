@@ -2,6 +2,14 @@
 
 Configuration is stored in `pyircx_config.json`. All options have sensible defaults.
 
+## Supported Platforms
+
+pyIRCX requires Python `3.8+`.
+
+That generally maps to current Debian/Ubuntu, Fedora, and newer RHEL-family systems with a modern Python runtime available.
+
+Older baseline `RHEL`/`OEL`/`Alma`/`Rocky` style installs that do not provide Python `3.8+` are outside the supported install path unless the host has already been modernized.
+
 ## Server Settings
 
 | Option | Default | Description |

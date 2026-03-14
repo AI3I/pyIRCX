@@ -20,6 +20,21 @@ CONFIG_DIR="/etc/pyircx"
 WEB_ADMIN_DIR="/var/www/html/webadmin"
 SERVICE_USER="pyircx"
 SERVICE_GROUP="pyircx"
+INSTALL_CONF="/etc/pyircx/install.conf"
+WEBADMIN_ENABLED="false"
+WEBCHAT_ENABLED="false"
+UNBOUND_ENABLED="false"
+
+load_install_config() {
+    if [ -f "$INSTALL_CONF" ]; then
+        # shellcheck disable=SC1090
+        source "$INSTALL_CONF"
+        WEBADMIN_ENABLED="${WEBADMIN_ENABLED:-false}"
+        WEBCHAT_ENABLED="${WEBCHAT_ENABLED:-false}"
+        UNBOUND_ENABLED="${UNBOUND_ENABLED:-false}"
+        WEB_ADMIN_DIR="${WEBADMIN_DIR:-$WEB_ADMIN_DIR}"
+    fi
+}
 
 echo ""
 echo "========================================"
@@ -44,6 +59,7 @@ if [ ! -d "$INSTALL_DIR" ]; then
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+load_install_config
 
 echo -e "${BLUE}Detecting current installation...${NC}"
 echo ""
@@ -143,15 +159,17 @@ else
 fi
 
 # Check for Web Admin Panel
-if [ ! -d "$WEB_ADMIN_DIR" ]; then
-    echo -e "${YELLOW}✗ Web Administration Panel not installed${NC}"
+if [ -d "$WEB_ADMIN_DIR" ]; then
+    echo -e "${GREEN}✓ Web Administration Panel installed${NC}"
+elif [ "$WEBADMIN_ENABLED" = "true" ]; then
+    echo -e "${YELLOW}✗ Web Administration Panel expected but not installed${NC}"
     NEEDS_WEB_ADMIN=1
 else
-    echo -e "${GREEN}✓ Web Administration Panel installed${NC}"
+    echo -e "${BLUE}ℹ Web Administration Panel not installed (optional)${NC}"
 fi
 
 # Check for SELinux policies
-if command -v semodule &> /dev/null; then
+if [ -d "$WEB_ADMIN_DIR" ] && command -v semodule &> /dev/null; then
     if semodule -l | grep -q "pyircx-httpd-journal-v3"; then
         echo -e "${GREEN}✓ SELinux policies installed${NC}"
     else
@@ -161,15 +179,15 @@ if command -v semodule &> /dev/null; then
 fi
 
 # Check for Polkit rules
-if [ ! -f /etc/polkit-1/rules.d/10-pyircx-admin.rules ]; then
+if [ -d "$WEB_ADMIN_DIR" ] && [ ! -f /etc/polkit-1/rules.d/10-pyircx-admin.rules ]; then
     echo -e "${YELLOW}✗ Polkit rules not installed${NC}"
     NEEDS_POLKIT=1
-else
+elif [ -d "$WEB_ADMIN_DIR" ]; then
     echo -e "${GREEN}✓ Polkit rules installed${NC}"
 fi
 
 # Check if apache user is in systemd-journal group
-if id apache &>/dev/null; then
+if [ -d "$WEB_ADMIN_DIR" ] && id apache &>/dev/null; then
     if groups apache | grep -q systemd-journal; then
         echo -e "${GREEN}✓ Apache user configured for journal access${NC}"
     else
@@ -210,11 +228,13 @@ if [ -d "$INSTALL_DIR/webchat" ]; then
 fi
 
 # Check for Unbound DNS resolver
-if ! systemctl is-active --quiet unbound 2>/dev/null; then
-    echo -e "${YELLOW}✗ Unbound DNS resolver not installed${NC}"
+if systemctl is-active --quiet unbound 2>/dev/null || [ -f /etc/unbound/unbound.conf.d/pyircx.conf ]; then
+    echo -e "${GREEN}✓ Unbound DNS resolver running${NC}"
+elif [ "$UNBOUND_ENABLED" = "true" ]; then
+    echo -e "${YELLOW}✗ Unbound DNS resolver expected but not installed${NC}"
     NEEDS_UNBOUND=1
 else
-    echo -e "${GREEN}✓ Unbound DNS resolver running${NC}"
+    echo -e "${BLUE}ℹ Unbound DNS resolver not installed (optional)${NC}"
 fi
 
 # Calculate total updates needed
@@ -328,7 +348,7 @@ if [ $NEEDS_SYSTEMD_UPDATE -eq 1 ] || [ -f "$SCRIPT_DIR/pyircx.service" ]; then
 fi
 
 # Install or Update Web Admin Panel
-if [ $NEEDS_WEB_ADMIN -eq 1 ] || [ -d "$WEB_ADMIN_DIR" ]; then
+if [ -d "$WEB_ADMIN_DIR" ] || [ $NEEDS_WEB_ADMIN -eq 1 ]; then
     echo ""
     if [ $NEEDS_WEB_ADMIN -eq 1 ]; then
         echo -e "${BLUE}Installing Web Administration Panel...${NC}"
@@ -377,7 +397,7 @@ if [ $NEEDS_WEB_ADMIN -eq 1 ] || [ -d "$WEB_ADMIN_DIR" ]; then
 fi
 
 # Install SELinux Policies
-if [ $NEEDS_SELINUX -eq 1 ] && command -v semodule &> /dev/null; then
+if [ -d "$WEB_ADMIN_DIR" ] && [ $NEEDS_SELINUX -eq 1 ] && command -v semodule &> /dev/null; then
     echo ""
     echo -e "${BLUE}Installing SELinux policies...${NC}"
 
@@ -413,7 +433,7 @@ if [ $NEEDS_SELINUX -eq 1 ] && command -v semodule &> /dev/null; then
 fi
 
 # Configure SELinux file contexts (comprehensive configuration)
-if command -v semanage &> /dev/null && command -v restorecon &> /dev/null; then
+if [ -d "$WEB_ADMIN_DIR" ] && command -v semanage &> /dev/null && command -v restorecon &> /dev/null; then
     echo ""
     echo -e "${BLUE}Configuring SELinux file contexts...${NC}"
 
@@ -455,7 +475,7 @@ if command -v semanage &> /dev/null && command -v restorecon &> /dev/null; then
 fi
 
 # Install Polkit Rules
-if [ $NEEDS_POLKIT -eq 1 ]; then
+if [ -d "$WEB_ADMIN_DIR" ] && [ $NEEDS_POLKIT -eq 1 ]; then
     echo ""
     echo -e "${BLUE}Installing Polkit rules...${NC}"
 
@@ -473,7 +493,7 @@ if [ $NEEDS_POLKIT -eq 1 ]; then
 fi
 
 # Setup Apache User
-if [ $NEEDS_APACHE_SETUP -eq 1 ]; then
+if [ -d "$WEB_ADMIN_DIR" ] && [ $NEEDS_APACHE_SETUP -eq 1 ]; then
     echo ""
     echo -e "${BLUE}Configuring Apache user...${NC}"
 
@@ -563,7 +583,7 @@ if [ $NEEDS_UNBOUND -eq 1 ]; then
     read -p "Install Unbound for local DNS resolution? [Y/n] " -n 1 -r
     echo
     if [[ ! $REPLY =~ ^[Nn]$ ]]; then
-        # Source install.sh to get the install_unbound function
+        # Restore only when the existing install expected local Unbound.
         if [ -f "$SCRIPT_DIR/install.sh" ]; then
             # Extract and run just the install_unbound function
             source <(sed -n '/^install_unbound()/,/^}/p' "$SCRIPT_DIR/install.sh")
@@ -615,7 +635,7 @@ elif id http &>/dev/null; then
     WEB_USER="http"
 fi
 
-if [ -n "$WEB_USER" ]; then
+if [ -d "$WEB_ADMIN_DIR" ] && [ -n "$WEB_USER" ]; then
     echo -e "${YELLOW}Adding $WEB_USER to $SERVICE_GROUP group for database access...${NC}"
     usermod -a -G "$SERVICE_GROUP" "$WEB_USER"
     echo -e "${GREEN}✓ Web server user added to group${NC}"

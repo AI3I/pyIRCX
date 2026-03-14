@@ -18,6 +18,16 @@ INSTALL_DIR="/opt/pyircx"
 CONFIG_DIR="/etc/pyircx"
 SERVICE_USER="pyircx"
 SERVICE_GROUP="pyircx"
+INSTALL_CONF="/etc/pyircx/install.conf"
+UNBOUND_ENABLED="false"
+
+load_install_config() {
+    if [ -f "$INSTALL_CONF" ]; then
+        # shellcheck disable=SC1090
+        source "$INSTALL_CONF"
+        UNBOUND_ENABLED="${UNBOUND_ENABLED:-false}"
+    fi
+}
 
 echo ""
 echo "========================================"
@@ -41,6 +51,8 @@ if [ ! -d "$INSTALL_DIR" ]; then
     exit 1
 fi
 
+load_install_config
+
 ISSUES_FOUND=0
 FIXES_APPLIED=0
 
@@ -58,7 +70,7 @@ if [ -f "$INSTALL_DIR/pyircx.py" ]; then
         WEBADMIN_VER=$(grep -o "pyIRCX v[0-9]\+\.[0-9]\+\.[0-9]\+" /var/www/html/webadmin/index.php | head -1 | sed 's/pyIRCX v//')
         if [ "$PYIRCX_VERSION" != "$WEBADMIN_VER" ]; then
             echo -e "${YELLOW}⚠${NC} webadmin/index.php version mismatch: $WEBADMIN_VER (expected $PYIRCX_VERSION)"
-            ((ISSUES_FOUND++))
+            ((ISSUES_FOUND+=1))
         else
             echo -e "${GREEN}✓${NC} webadmin/index.php version matches"
         fi
@@ -74,7 +86,7 @@ if [ -f "$INSTALL_DIR/pyircx.py" ]; then
             WEBCHAT_VER=$(grep -o "v[0-9]\+\.[0-9]\+\.[0-9]\+</span>" "$location" | head -1 | sed 's/v\(.*\)<\/span>/\1/')
             if [ "$PYIRCX_VERSION" != "$WEBCHAT_VER" ]; then
                 echo -e "${YELLOW}⚠${NC} webchat/index.html version mismatch: $WEBCHAT_VER (expected $PYIRCX_VERSION)"
-                ((ISSUES_FOUND++))
+                ((ISSUES_FOUND+=1))
             else
                 echo -e "${GREEN}✓${NC} webchat/index.html version matches"
             fi
@@ -83,7 +95,7 @@ if [ -f "$INSTALL_DIR/pyircx.py" ]; then
     done
 else
     echo -e "${RED}✗${NC} pyircx.py not found, cannot check version"
-    ((ISSUES_FOUND++))
+    ((ISSUES_FOUND+=1))
 fi
 echo ""
 
@@ -115,7 +127,7 @@ for file in "${REQUIRED_FILES[@]}"; do
         echo -e "${GREEN}✓${NC} $file"
     else
         echo -e "${RED}✗${NC} $file ${YELLOW}(MISSING)${NC}"
-        ((ISSUES_FOUND++))
+        ((ISSUES_FOUND+=1))
     fi
 done
 echo ""
@@ -126,7 +138,7 @@ if id "$SERVICE_USER" &>/dev/null; then
     echo -e "${GREEN}✓${NC} User '$SERVICE_USER' exists"
 else
     echo -e "${RED}✗${NC} User '$SERVICE_USER' does not exist ${YELLOW}(ISSUE)${NC}"
-    ((ISSUES_FOUND++))
+    ((ISSUES_FOUND+=1))
 fi
 echo ""
 
@@ -140,7 +152,7 @@ if [ -f "$INSTALL_DIR/pyircx.py" ]; then
         echo -e "${GREEN}✓${NC} pyircx.py is executable"
     else
         echo -e "${YELLOW}⚠${NC} pyircx.py is not executable ${YELLOW}(FIXABLE)${NC}"
-        ((PERM_ISSUES++))
+        ((PERM_ISSUES+=1))
     fi
 fi
 
@@ -151,7 +163,7 @@ if [ -d "$INSTALL_DIR" ]; then
         echo -e "${GREEN}✓${NC} Install directory owned by $SERVICE_USER"
     else
         echo -e "${YELLOW}⚠${NC} Install directory owned by $OWNER (should be $SERVICE_USER) ${YELLOW}(FIXABLE)${NC}"
-        ((PERM_ISSUES++))
+        ((PERM_ISSUES+=1))
     fi
 fi
 
@@ -161,12 +173,12 @@ if [ -d "$CONFIG_DIR" ]; then
         echo -e "${GREEN}✓${NC} Config directory owned by $SERVICE_USER"
     else
         echo -e "${YELLOW}⚠${NC} Config directory owned by $OWNER (should be $SERVICE_USER) ${YELLOW}(FIXABLE)${NC}"
-        ((PERM_ISSUES++))
+        ((PERM_ISSUES+=1))
     fi
 fi
 
 if [ $PERM_ISSUES -gt 0 ]; then
-    ((ISSUES_FOUND++))
+    ((ISSUES_FOUND+=1))
 fi
 echo ""
 
@@ -179,7 +191,7 @@ if systemctl list-unit-files | grep -q pyircx.service; then
         echo -e "${GREEN}✓${NC} Service is enabled"
     else
         echo -e "${YELLOW}⚠${NC} Service is not enabled ${YELLOW}(FIXABLE)${NC}"
-        ((ISSUES_FOUND++))
+        ((ISSUES_FOUND+=1))
     fi
 
     if systemctl is-active --quiet pyircx 2>/dev/null; then
@@ -189,7 +201,7 @@ if systemctl list-unit-files | grep -q pyircx.service; then
     fi
 else
     echo -e "${RED}✗${NC} Service is not installed ${YELLOW}(ISSUE)${NC}"
-    ((ISSUES_FOUND++))
+    ((ISSUES_FOUND+=1))
 fi
 echo ""
 
@@ -218,7 +230,7 @@ if [ -d "$WEB_ADMIN_DIR" ]; then
             echo -e "${GREEN}✓${NC} $file"
         else
             echo -e "${RED}✗${NC} $file missing"
-            ((WEB_ISSUES++))
+            ((WEB_ISSUES+=1))
         fi
     done
 
@@ -228,7 +240,7 @@ if [ -d "$WEB_ADMIN_DIR" ]; then
         echo -e "${GREEN}✓${NC} Web admin owned by apache"
     else
         echo -e "${YELLOW}⚠${NC} Web admin owned by $OWNER (should be apache) ${YELLOW}(FIXABLE)${NC}"
-        ((WEB_ISSUES++))
+        ((WEB_ISSUES+=1))
     fi
 
     # Check apache in systemd-journal group
@@ -236,7 +248,7 @@ if [ -d "$WEB_ADMIN_DIR" ]; then
         echo -e "${GREEN}✓${NC} apache user in systemd-journal group"
     else
         echo -e "${YELLOW}⚠${NC} apache not in systemd-journal group ${YELLOW}(FIXABLE)${NC}"
-        ((WEB_ISSUES++))
+        ((WEB_ISSUES+=1))
     fi
 
     # Check polkit rules
@@ -244,7 +256,7 @@ if [ -d "$WEB_ADMIN_DIR" ]; then
         echo -e "${GREEN}✓${NC} Polkit rules installed"
     else
         echo -e "${YELLOW}⚠${NC} Polkit rules missing ${YELLOW}(FIXABLE)${NC}"
-        ((WEB_ISSUES++))
+        ((WEB_ISSUES+=1))
     fi
 
     # Check SELinux policies (if SELinux is enabled)
@@ -253,26 +265,26 @@ if [ -d "$WEB_ADMIN_DIR" ]; then
             echo -e "${GREEN}✓${NC} SELinux httpd-systemd policy installed"
         else
             echo -e "${YELLOW}⚠${NC} SELinux httpd-systemd policy missing ${YELLOW}(FIXABLE)${NC}"
-            ((WEB_ISSUES++))
+            ((WEB_ISSUES+=1))
         fi
 
         if semodule -l 2>/dev/null | grep -q pyircx-httpd-journal; then
             echo -e "${GREEN}✓${NC} SELinux httpd-journal policy installed"
         else
             echo -e "${YELLOW}⚠${NC} SELinux httpd-journal policy missing ${YELLOW}(FIXABLE)${NC}"
-            ((WEB_ISSUES++))
+            ((WEB_ISSUES+=1))
         fi
 
         if semodule -l 2>/dev/null | grep -q pyircx-httpd-reload; then
             echo -e "${GREEN}✓${NC} SELinux httpd-reload policy installed"
         else
             echo -e "${YELLOW}⚠${NC} SELinux httpd-reload policy missing ${YELLOW}(FIXABLE)${NC}"
-            ((WEB_ISSUES++))
+            ((WEB_ISSUES+=1))
         fi
     fi
 
     if [ $WEB_ISSUES -gt 0 ]; then
-        ((ISSUES_FOUND++))
+        ((ISSUES_FOUND+=1))
     fi
 else
     echo -e "${BLUE}ℹ${NC} Web Admin Panel not installed ${BLUE}(Optional)${NC}"
@@ -287,14 +299,14 @@ if [ -L "$INSTALL_DIR/pyircx_config.json" ]; then
         echo -e "${GREEN}✓${NC} Config symlink is correct"
     else
         echo -e "${YELLOW}⚠${NC} Config symlink points to wrong location ${YELLOW}(FIXABLE)${NC}"
-        ((ISSUES_FOUND++))
+        ((ISSUES_FOUND+=1))
     fi
 elif [ -f "$INSTALL_DIR/pyircx_config.json" ]; then
     echo -e "${YELLOW}⚠${NC} Config is a regular file (should be symlink) ${YELLOW}(FIXABLE)${NC}"
-    ((ISSUES_FOUND++))
+    ((ISSUES_FOUND+=1))
 else
     echo -e "${RED}✗${NC} Config symlink missing ${YELLOW}(FIXABLE)${NC}"
-    ((ISSUES_FOUND++))
+    ((ISSUES_FOUND+=1))
 fi
 echo ""
 
@@ -306,12 +318,12 @@ for dep in aiosqlite bcrypt pyotp cryptography; do
         echo -e "${GREEN}✓${NC} $dep"
     else
         echo -e "${RED}✗${NC} $dep ${YELLOW}(MISSING)${NC}"
-        ((MISSING_DEPS++))
+        ((MISSING_DEPS+=1))
     fi
 done
 
 if [ $MISSING_DEPS -gt 0 ]; then
-    ((ISSUES_FOUND++))
+    ((ISSUES_FOUND+=1))
 fi
 echo ""
 
@@ -328,11 +340,11 @@ if [ -d "$INSTALL_DIR/webchat" ]; then
             echo -e "${GREEN}✓${NC} gateway.py is executable"
         else
             echo -e "${YELLOW}⚠${NC} gateway.py is not executable ${YELLOW}(FIXABLE)${NC}"
-            ((WEBCHAT_ISSUES++))
+            ((WEBCHAT_ISSUES+=1))
         fi
     else
         echo -e "${RED}✗${NC} gateway.py missing ${YELLOW}(ISSUE)${NC}"
-        ((WEBCHAT_ISSUES++))
+        ((WEBCHAT_ISSUES+=1))
     fi
 
     # Check frontend files (in web directory)
@@ -340,14 +352,14 @@ if [ -d "$INSTALL_DIR/webchat" ]; then
         echo -e "${GREEN}✓${NC} webchat/index.html exists"
     else
         echo -e "${YELLOW}⚠${NC} webchat/index.html missing ${YELLOW}(FIXABLE)${NC}"
-        ((WEBCHAT_ISSUES++))
+        ((WEBCHAT_ISSUES+=1))
     fi
 
     if [ -f "/var/www/html/webchat/config.js" ]; then
         echo -e "${GREEN}✓${NC} webchat/config.js exists"
     else
         echo -e "${YELLOW}⚠${NC} webchat/config.js missing ${YELLOW}(FIXABLE)${NC}"
-        ((WEBCHAT_ISSUES++))
+        ((WEBCHAT_ISSUES+=1))
     fi
 
     # Check webchat config
@@ -355,7 +367,7 @@ if [ -d "$INSTALL_DIR/webchat" ]; then
         echo -e "${GREEN}✓${NC} webchat.conf exists"
     else
         echo -e "${YELLOW}⚠${NC} webchat.conf missing ${YELLOW}(FIXABLE)${NC}"
-        ((WEBCHAT_ISSUES++))
+        ((WEBCHAT_ISSUES+=1))
     fi
 
     # Check websockets module
@@ -363,7 +375,7 @@ if [ -d "$INSTALL_DIR/webchat" ]; then
         echo -e "${GREEN}✓${NC} websockets module installed"
     else
         echo -e "${RED}✗${NC} websockets module missing ${YELLOW}(FIXABLE)${NC}"
-        ((WEBCHAT_ISSUES++))
+        ((WEBCHAT_ISSUES+=1))
     fi
 
     # Check service
@@ -373,7 +385,7 @@ if [ -d "$INSTALL_DIR/webchat" ]; then
             echo -e "${GREEN}✓${NC} WebChat service is enabled"
         else
             echo -e "${YELLOW}⚠${NC} WebChat service is not enabled ${YELLOW}(FIXABLE)${NC}"
-            ((WEBCHAT_ISSUES++))
+            ((WEBCHAT_ISSUES+=1))
         fi
         if systemctl is-active --quiet pyircx-webchat 2>/dev/null; then
             echo -e "${GREEN}✓${NC} WebChat service is running"
@@ -385,7 +397,7 @@ if [ -d "$INSTALL_DIR/webchat" ]; then
     fi
 
     if [ $WEBCHAT_ISSUES -gt 0 ]; then
-        ((ISSUES_FOUND++))
+        ((ISSUES_FOUND+=1))
     fi
 else
     echo -e "${BLUE}ℹ${NC} WebChat not installed ${BLUE}(Optional)${NC}"
@@ -402,7 +414,7 @@ if [ -f "$INSTALL_DIR/api.py" ]; then
         echo -e "${GREEN}✓${NC} API is executable"
     else
         echo -e "${YELLOW}⚠${NC} API is not executable ${YELLOW}(FIXABLE)${NC}"
-        ((ISSUES_FOUND++))
+        ((ISSUES_FOUND+=1))
     fi
 
     # Check ownership
@@ -411,11 +423,11 @@ if [ -f "$INSTALL_DIR/api.py" ]; then
         echo -e "${GREEN}✓${NC} API owned by $SERVICE_USER"
     else
         echo -e "${YELLOW}⚠${NC} API owned by $OWNER (should be $SERVICE_USER) ${YELLOW}(FIXABLE)${NC}"
-        ((ISSUES_FOUND++))
+        ((ISSUES_FOUND+=1))
     fi
 else
     echo -e "${YELLOW}⚠${NC} API file missing"
-    ((ISSUES_FOUND++))
+    ((ISSUES_FOUND+=1))
 fi
 echo ""
 
@@ -430,7 +442,7 @@ if command -v unbound &>/dev/null; then
         echo -e "${GREEN}✓${NC} Unbound service is running"
     else
         echo -e "${YELLOW}⚠${NC} Unbound service is not running ${YELLOW}(FIXABLE)${NC}"
-        ((UNBOUND_ISSUES++))
+        ((UNBOUND_ISSUES+=1))
     fi
 
     # Check if service is enabled
@@ -438,15 +450,17 @@ if command -v unbound &>/dev/null; then
         echo -e "${GREEN}✓${NC} Unbound service is enabled"
     else
         echo -e "${YELLOW}⚠${NC} Unbound service is not enabled ${YELLOW}(FIXABLE)${NC}"
-        ((UNBOUND_ISSUES++))
+        ((UNBOUND_ISSUES+=1))
     fi
 
     # Check pyircx config exists
     if [ -f /etc/unbound/unbound.conf.d/pyircx.conf ]; then
         echo -e "${GREEN}✓${NC} pyIRCX unbound config exists"
-    else
+    elif [ "$UNBOUND_ENABLED" = "true" ]; then
         echo -e "${YELLOW}⚠${NC} pyIRCX unbound config missing ${YELLOW}(FIXABLE)${NC}"
-        ((UNBOUND_ISSUES++))
+        ((UNBOUND_ISSUES+=1))
+    else
+        echo -e "${BLUE}ℹ${NC} pyIRCX unbound config not enabled ${BLUE}(Optional)${NC}"
     fi
 
     # Check resolv.conf points to unbound
@@ -457,7 +471,7 @@ if command -v unbound &>/dev/null; then
     fi
 
     if [ $UNBOUND_ISSUES -gt 0 ]; then
-        ((ISSUES_FOUND++))
+        ((ISSUES_FOUND+=1))
     fi
 else
     echo -e "${BLUE}ℹ${NC} Unbound not installed ${BLUE}(Optional)${NC}"
@@ -525,7 +539,7 @@ if [[ ! $REPLY =~ ^[Nn]$ ]]; then
         echo -e "${YELLOW}Creating service user...${NC}"
         useradd --system --no-create-home --shell /usr/sbin/nologin "$SERVICE_USER"
         echo -e "${GREEN}✓ Service user created${NC}"
-        ((FIXES_APPLIED++))
+        ((FIXES_APPLIED+=1))
     fi
 
     # Fix permissions
@@ -612,7 +626,7 @@ if [[ ! $REPLY =~ ^[Nn]$ ]]; then
         fi
 
         echo -e "${GREEN}✓ Permissions fixed${NC}"
-        ((FIXES_APPLIED++))
+        ((FIXES_APPLIED+=1))
     fi
 
     # Fix config symlink
@@ -621,7 +635,7 @@ if [[ ! $REPLY =~ ^[Nn]$ ]]; then
         rm -f "$INSTALL_DIR/pyircx_config.json"
         ln -sf "$CONFIG_DIR/pyircx_config.json" "$INSTALL_DIR/pyircx_config.json"
         echo -e "${GREEN}✓ Config symlink fixed${NC}"
-        ((FIXES_APPLIED++))
+        ((FIXES_APPLIED+=1))
     fi
 
     # Fix API permissions
@@ -630,7 +644,7 @@ if [[ ! $REPLY =~ ^[Nn]$ ]]; then
             echo -e "${YELLOW}Fixing API permissions...${NC}"
             chmod 755 "$INSTALL_DIR/api.py"
             echo -e "${GREEN}✓ API permissions fixed${NC}"
-            ((FIXES_APPLIED++))
+            ((FIXES_APPLIED+=1))
         fi
 
         # Fix API ownership
@@ -639,7 +653,7 @@ if [[ ! $REPLY =~ ^[Nn]$ ]]; then
             echo -e "${YELLOW}Fixing API ownership...${NC}"
             chown "$SERVICE_USER:$SERVICE_GROUP" "$INSTALL_DIR/api.py"
             echo -e "${GREEN}✓ API ownership fixed${NC}"
-            ((FIXES_APPLIED++))
+            ((FIXES_APPLIED+=1))
         fi
     fi
 
@@ -650,7 +664,7 @@ if [[ ! $REPLY =~ ^[Nn]$ ]]; then
             echo -e "${YELLOW}Fixing web admin ownership...${NC}"
             chown -R apache:apache "$WEB_ADMIN_DIR"
             echo -e "${GREEN}✓ Web admin ownership fixed${NC}"
-            ((FIXES_APPLIED++))
+            ((FIXES_APPLIED+=1))
         fi
 
         # Add apache to systemd-journal group
@@ -658,7 +672,7 @@ if [[ ! $REPLY =~ ^[Nn]$ ]]; then
             echo -e "${YELLOW}Adding apache to systemd-journal group...${NC}"
             usermod -a -G systemd-journal apache
             echo -e "${GREEN}✓ apache added to systemd-journal group${NC}"
-            ((FIXES_APPLIED++))
+            ((FIXES_APPLIED+=1))
         fi
     fi
 
@@ -668,7 +682,7 @@ if [[ ! $REPLY =~ ^[Nn]$ ]]; then
             echo -e "${YELLOW}Enabling pyircx service...${NC}"
             systemctl enable pyircx
             echo -e "${GREEN}✓ pyircx service enabled${NC}"
-            ((FIXES_APPLIED++))
+            ((FIXES_APPLIED+=1))
         fi
     fi
 
@@ -678,7 +692,7 @@ if [[ ! $REPLY =~ ^[Nn]$ ]]; then
         mkdir -p "$INSTALL_DIR/webchat"
         chown "$SERVICE_USER:$SERVICE_GROUP" "$INSTALL_DIR/webchat"
         echo -e "${GREEN}✓ WebChat backend directory created${NC}"
-        ((FIXES_APPLIED++))
+        ((FIXES_APPLIED+=1))
     fi
 
     # Fix WebChat issues if installed
@@ -688,7 +702,7 @@ if [[ ! $REPLY =~ ^[Nn]$ ]]; then
             echo -e "${YELLOW}Fixing WebChat gateway permissions...${NC}"
             chmod 755 "$INSTALL_DIR/webchat/gateway.py"
             echo -e "${GREEN}✓ WebChat gateway permissions fixed${NC}"
-            ((FIXES_APPLIED++))
+            ((FIXES_APPLIED+=1))
         fi
 
         # Install websockets if missing
@@ -696,7 +710,7 @@ if [[ ! $REPLY =~ ^[Nn]$ ]]; then
             echo -e "${YELLOW}Installing websockets module...${NC}"
             pip3 install websockets
             echo -e "${GREEN}✓ websockets module installed${NC}"
-            ((FIXES_APPLIED++))
+            ((FIXES_APPLIED+=1))
         fi
 
         # Create webchat.conf if missing
@@ -713,7 +727,7 @@ EOF
             chown "$SERVICE_USER:$SERVICE_GROUP" "$CONFIG_DIR/webchat.conf"
             chmod 640 "$CONFIG_DIR/webchat.conf"
             echo -e "${GREEN}✓ webchat.conf created${NC}"
-            ((FIXES_APPLIED++))
+            ((FIXES_APPLIED+=1))
         fi
 
         # Enable webchat service if not enabled
@@ -722,7 +736,7 @@ EOF
                 echo -e "${YELLOW}Enabling pyircx-webchat service...${NC}"
                 systemctl enable pyircx-webchat
                 echo -e "${GREEN}✓ pyircx-webchat service enabled${NC}"
-                ((FIXES_APPLIED++))
+                ((FIXES_APPLIED+=1))
             fi
         fi
     fi
@@ -735,14 +749,14 @@ EOF
         if ! systemctl is-enabled --quiet unbound 2>/dev/null; then
             systemctl enable unbound
             echo -e "${GREEN}✓ Unbound service enabled${NC}"
-            ((FIXES_APPLIED++))
+            ((FIXES_APPLIED+=1))
         fi
 
         # Start service if not running
         if ! systemctl is-active --quiet unbound 2>/dev/null; then
             systemctl start unbound
             echo -e "${GREEN}✓ Unbound service started${NC}"
-            ((FIXES_APPLIED++))
+            ((FIXES_APPLIED+=1))
         fi
 
         # Create pyircx config if missing
@@ -771,7 +785,7 @@ UNBOUND_EOF
             chmod 644 /etc/unbound/unbound.conf.d/pyircx.conf
             systemctl restart unbound
             echo -e "${GREEN}✓ Unbound pyircx config created${NC}"
-            ((FIXES_APPLIED++))
+            ((FIXES_APPLIED+=1))
         fi
     fi
 
@@ -785,7 +799,7 @@ UNBOUND_EOF
         echo -e "${YELLOW}Installing missing Python dependencies...${NC}"
         pip3 install --upgrade aiosqlite bcrypt pyotp cryptography
         echo -e "${GREEN}✓ Python dependencies installed${NC}"
-        ((FIXES_APPLIED++))
+        ((FIXES_APPLIED+=1))
     fi
 
     echo ""

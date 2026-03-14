@@ -32,6 +32,13 @@ UNBOUND_INSTALLED="false"
 # Generated secrets for first-time install
 GENERATED_ADMIN_PASS="__CHANGE_ME__"
 GENERATED_WEBIRC_PASS="__CHANGE_ME__"
+NONINTERACTIVE="${PYIRCX_NONINTERACTIVE:-0}"
+INSTALL_DIR_PROMPT="${PYIRCX_INSTALL_DIR_PROMPT:-yes}"
+INSTALL_UNBOUND_PROMPT="${PYIRCX_INSTALL_UNBOUND:-ask}"
+INSTALL_APACHE_PROMPT="${PYIRCX_INSTALL_APACHE:-ask}"
+INSTALL_SSL_PROMPT="${PYIRCX_INSTALL_SSL:-ask}"
+INSTALL_WEBADMIN_PROMPT="${PYIRCX_INSTALL_WEBADMIN:-ask}"
+INSTALL_WEBCHAT_PROMPT="${PYIRCX_INSTALL_WEBCHAT:-ask}"
 
 # Detect OS
 detect_os() {
@@ -55,6 +62,41 @@ check_root() {
         echo -e "${RED}Error: This script must be run as root${NC}"
         echo "Try: sudo $0"
         exit 1
+    fi
+}
+
+prompt_yes_no() {
+    local prompt="$1"
+    local default_answer="$2"
+    local configured_answer="${3:-ask}"
+    local reply=""
+    local normalized=""
+
+    if [ "$NONINTERACTIVE" = "1" ] && [ "$configured_answer" != "ask" ]; then
+        reply="$configured_answer"
+        echo "$prompt $([ "$default_answer" = "yes" ] && echo "[Y/n]" || echo "[y/N]") $reply"
+    else
+        read -p "$prompt $([ "$default_answer" = "yes" ] && echo "[Y/n]" || echo "[y/N]") " -n 1 -r
+        echo
+        reply="${REPLY:-}"
+    fi
+
+    case "${reply,,}" in
+        y|yes)
+            normalized="y"
+            ;;
+        n|no)
+            normalized="n"
+            ;;
+        *)
+            normalized="$reply"
+            ;;
+    esac
+
+    if [ "$default_answer" = "yes" ]; then
+        [[ "$normalized" != "n" ]]
+    else
+        [[ "$normalized" = "y" ]]
     fi
 }
 
@@ -294,6 +336,19 @@ install_dependencies() {
     local os=$(detect_os)
     echo -e "${YELLOW}Installing dependencies for $os...${NC}"
 
+    if command -v python3 &>/dev/null; then
+        if command -v pip3 &>/dev/null; then
+            echo -e "${GREEN}Python 3 and pip3 already available, skipping package manager dependency install${NC}"
+            return
+        fi
+
+        echo -e "${YELLOW}pip3 not found, attempting local bootstrap...${NC}"
+        if python3 -m ensurepip --upgrade >/dev/null 2>&1; then
+            echo -e "${GREEN}pip3 bootstrapped with ensurepip${NC}"
+            return
+        fi
+    fi
+
     case $os in
         ubuntu|debian|linuxmint|pop|elementary|zorin|kali|parrot|raspbian)
             apt-get update
@@ -374,8 +429,13 @@ install_dependencies() {
 install_python_packages() {
     echo -e "${YELLOW}Installing Python packages...${NC}"
 
-    pip3 install --upgrade pip
-    pip3 install aiosqlite bcrypt pyotp cryptography
+    local pip_args=()
+
+    if pip3 install --help 2>/dev/null | grep -q -- '--break-system-packages'; then
+        pip_args+=(--break-system-packages)
+    fi
+
+    pip3 install "${pip_args[@]}" aiosqlite bcrypt pyotp cryptography
 
     echo -e "${GREEN}Python packages installed${NC}"
 }
@@ -1176,9 +1236,7 @@ main() {
     generate_install_secrets
 
     echo ""
-    read -p "Install to $INSTALL_DIR? [Y/n] " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Nn]$ ]]; then
+    if ! prompt_yes_no "Install to $INSTALL_DIR?" "yes" "$INSTALL_DIR_PROMPT"; then
         read -p "Enter installation directory: " INSTALL_DIR
     fi
 
@@ -1257,9 +1315,7 @@ main() {
     echo "  - Privacy - queries don't go through ISP DNS"
     echo "  - DNSSEC validation for security"
     echo ""
-    read -p "Install Unbound DNS resolver on localhost? [Y/n] " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+    if prompt_yes_no "Install Unbound DNS resolver on localhost?" "yes" "$INSTALL_UNBOUND_PROMPT"; then
         install_unbound
         UNBOUND_INSTALLED="true"
     else
@@ -1283,9 +1339,7 @@ main() {
     echo "  - Set up proper permissions and SELinux contexts"
     echo "  - Enable required Apache modules"
     echo ""
-    read -p "Set up Apache/httpd now? [Y/n] " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+    if prompt_yes_no "Set up Apache/httpd now?" "yes" "$INSTALL_APACHE_PROMPT"; then
         if [ -f "setup_apache.sh" ]; then
             echo ""
             echo "Running Apache setup..."
@@ -1309,9 +1363,7 @@ main() {
     echo "  - Self-signed (for testing)"
     echo "  - Skip (configure manually later)"
     echo ""
-    read -p "Set up SSL/TLS now? [y/N] " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
+    if prompt_yes_no "Set up SSL/TLS now?" "no" "$INSTALL_SSL_PROMPT"; then
         if [ -f "setup_ssl.sh" ]; then
             ./setup_ssl.sh "$CONFIG_DIR/pyircx_config.json"
         else
@@ -1331,9 +1383,7 @@ main() {
     echo "The Web Admin Panel provides a browser-based interface for"
     echo "managing the IRC server. Requires Apache and PHP."
     echo ""
-    read -p "Install Web Administration Panel? [y/N] " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
+    if prompt_yes_no "Install Web Administration Panel?" "no" "$INSTALL_WEBADMIN_PROMPT"; then
         prompt_webadmin_path
         if [ -n "$WEB_ADMIN_DIR" ]; then
             install_web_admin
@@ -1348,9 +1398,7 @@ main() {
     echo "WebChat provides a browser-based IRC client that connects"
     echo "via WebSocket. Requires a web server for HTTPS."
     echo ""
-    read -p "Install WebChat browser client? [y/N] " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
+    if prompt_yes_no "Install WebChat browser client?" "no" "$INSTALL_WEBCHAT_PROMPT"; then
         prompt_webchat_path
         if [ -n "$WEBCHAT_WEB_DIR" ]; then
             install_webchat

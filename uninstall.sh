@@ -18,6 +18,8 @@ INSTALL_DIR="/opt/pyircx"
 CONFIG_DIR="/etc/pyircx"
 SERVICE_USER="pyircx"
 SERVICE_GROUP="pyircx"
+BACKUP_DB="false"
+DB_PATH="$INSTALL_DIR/pyircx.db"
 
 echo ""
 echo "========================================"
@@ -121,6 +123,22 @@ if command -v semanage &> /dev/null; then
     echo -e "${GREEN}✓ SELinux file contexts removed${NC}"
 fi
 
+# Handle database backup before removing the install tree.
+if [ -f "$DB_PATH" ]; then
+    echo ""
+    echo -e "${YELLOW}Database found: $DB_PATH${NC}"
+    echo "This contains user accounts, channels, and messages."
+    echo ""
+    read -p "Backup database before removing? [Y/n] " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+        BACKUP_PATH="$HOME/pyircx_db_backup_$(date +%Y%m%d_%H%M%S).db"
+        cp "$DB_PATH" "$BACKUP_PATH"
+        BACKUP_DB="true"
+        echo -e "${GREEN}✓ Database backed up to: $BACKUP_PATH${NC}"
+    fi
+fi
+
 # Remove installation directory
 echo ""
 echo -e "${YELLOW}Installation directory: $INSTALL_DIR${NC}"
@@ -140,27 +158,12 @@ else
     echo "Installation directory not found"
 fi
 
-# Remove configuration directory (with database backup option)
+# Remove configuration directory
 echo ""
 echo -e "${YELLOW}Configuration directory: $CONFIG_DIR${NC}"
 if [ -d "$CONFIG_DIR" ]; then
     echo "This directory contains:"
     ls -lh "$CONFIG_DIR" 2>/dev/null | tail -n +2 || echo "  (empty or inaccessible)"
-
-    # Check for database
-    if [ -f "$INSTALL_DIR/pyircx.db" ]; then
-        echo ""
-        echo -e "${YELLOW}Database found: $INSTALL_DIR/pyircx.db${NC}"
-        echo "This contains user accounts, channels, and messages."
-        echo ""
-        read -p "Backup database before removing? [Y/n] " -n 1 -r
-        echo
-        if [[ ! $REPLY =~ ^[Nn]$ ]]; then
-            BACKUP_PATH="$HOME/pyircx_db_backup_$(date +%Y%m%d_%H%M%S).db"
-            cp "$INSTALL_DIR/pyircx.db" "$BACKUP_PATH"
-            echo -e "${GREEN}✓ Database backed up to: $BACKUP_PATH${NC}"
-        fi
-    fi
 
     echo ""
     read -p "Remove configuration directory? [y/N] " -n 1 -r
