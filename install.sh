@@ -29,6 +29,10 @@ WEBCHAT_WEB_DIR=""
 # DNS resolver (will be set by prompts)
 UNBOUND_INSTALLED="false"
 
+# Generated secrets for first-time install
+GENERATED_ADMIN_PASS="__CHANGE_ME__"
+GENERATED_WEBIRC_PASS="__CHANGE_ME__"
+
 # Detect OS
 detect_os() {
     if [ -f /etc/os-release ]; then
@@ -52,6 +56,12 @@ check_root() {
         echo "Try: sudo $0"
         exit 1
     fi
+}
+
+# Generate install-time secrets (fallback to placeholders if generation fails)
+generate_install_secrets() {
+    GENERATED_ADMIN_PASS=$(python3 -c "import secrets; print(secrets.token_urlsafe(18))" 2>/dev/null || echo "__CHANGE_ME__")
+    GENERATED_WEBIRC_PASS=$(python3 -c "import secrets; print(secrets.token_urlsafe(24))" 2>/dev/null || echo "__CHANGE_ME__")
 }
 
 # Save installation configuration
@@ -427,18 +437,56 @@ copy_files() {
     cp "$SCRIPT_DIR/linking.py" "$INSTALL_DIR/"
 
     # Copy or create config
+    created_config="false"
     if [ ! -f "$CONFIG_DIR/pyircx_config.json" ]; then
         if [ -f "$SCRIPT_DIR/pyircx_config.json" ]; then
             # Use provided config template
             cp "$SCRIPT_DIR/pyircx_config.json" "$CONFIG_DIR/"
             echo "Copied config template"
+            created_config="true"
         else
             # Generate default config from pyircx.py
             echo "Generating default config..."
             python3 "$SCRIPT_DIR/generate_default_config.py" "$INSTALL_DIR/pyircx.py" "$CONFIG_DIR/pyircx_config.json"
+            created_config="true"
         fi
     else
         echo "Config already exists, not overwriting"
+    fi
+
+    if [ "$created_config" = "true" ]; then
+        python3 - "$CONFIG_DIR/pyircx_config.json" "$GENERATED_ADMIN_PASS" "$GENERATED_WEBIRC_PASS" <<'PY'
+import json
+import sys
+
+cfg_path, admin_pass, webirc_pass = sys.argv[1], sys.argv[2], sys.argv[3]
+
+with open(cfg_path, 'r', encoding='utf-8') as f:
+    cfg = json.load(f)
+
+cfg.setdefault('admin', {})
+cfg['admin']['default_password'] = admin_pass
+
+cfg.setdefault('security', {})
+cfg['security']['auth_require_ssl'] = True
+cfg['security']['pass_require_ssl'] = True
+
+cfg['security'].setdefault('webirc', {})
+cfg['security']['webirc'].setdefault('hosts', {})
+if not cfg['security']['webirc']['hosts']:
+    cfg['security']['webirc']['hosts']['pyircx-webchat'] = {'allowed_ips': ['127.0.0.1', '::1']}
+for host_cfg in cfg['security']['webirc']['hosts'].values():
+    host_cfg['password'] = webirc_pass
+
+cfg.setdefault('linking', {})
+cfg['linking'].setdefault('tls', {})
+cfg['linking']['tls']['enabled'] = True
+cfg['linking']['tls']['required'] = True
+cfg['linking']['tls']['verify'] = cfg['linking']['tls'].get('verify', True)
+
+with open(cfg_path, 'w', encoding='utf-8') as f:
+    json.dump(cfg, f, indent=2)
+PY
     fi
 
     # Create symlink for config
@@ -941,7 +989,7 @@ initialize_database() {
     # Use init_database.py if available
     if [ -f "$SCRIPT_DIR/init_database.py" ]; then
         echo -e "${YELLOW}Creating database with init_database.py...${NC}"
-        python3 "$SCRIPT_DIR/init_database.py" "$DB_PATH" --admin-username admin --admin-password changeme
+        python3 "$SCRIPT_DIR/init_database.py" "$DB_PATH" --admin-username admin --admin-password "$GENERATED_ADMIN_PASS"
 
         # Set ownership and permissions
         chown "$SERVICE_USER:$SERVICE_GROUP" "$DB_PATH"
@@ -1073,7 +1121,7 @@ IRC_PORT=6667
 
 # WEBIRC password (must match pyircx.py security.webirc.hosts config)
 # IMPORTANT: Change this in production!
-WEBIRC_PASS=changeme
+WEBIRC_PASS=$GENERATED_WEBIRC_PASS
 EOF
         chown "$SERVICE_USER:$SERVICE_GROUP" "$CONFIG_DIR/webchat.conf"
         chmod 640 "$CONFIG_DIR/webchat.conf"
@@ -1125,6 +1173,7 @@ main() {
     check_root
     check_python
     check_version_consistency
+    generate_install_secrets
 
     echo ""
     read -p "Install to $INSTALL_DIR? [Y/n] " -n 1 -r
@@ -1155,7 +1204,7 @@ main() {
     echo ""
     echo -e "${YELLOW}Default Admin Account:${NC}"
     echo "  Username: admin"
-    echo "  Password: changeme"
+    echo "  Password: $GENERATED_ADMIN_PASS"
     echo ""
     echo -e "${RED}*** CHANGE THE DEFAULT PASSWORD IMMEDIATELY ***${NC}"
     echo ""
@@ -1169,7 +1218,7 @@ main() {
     echo "    python3 $INSTALL_DIR/api.py change-staff-password admin YourNewPassword"
     echo ""
     echo "  Option 3 - Via IRC client:"
-    echo "    /QUOTE PASS admin:changeme"
+    echo "    /QUOTE PASS admin:$GENERATED_ADMIN_PASS"
     echo "    /STAFF PASS admin YourNewPassword"
     echo ""
     echo "  The change_password.sh script can also change:"

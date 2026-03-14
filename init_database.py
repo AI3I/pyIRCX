@@ -27,9 +27,9 @@ import bcrypt
 import argparse
 from datetime import datetime
 
-# Default admin credentials (should be changed after first login)
+# Default admin credentials (must be replaced before production use)
 DEFAULT_ADMIN_USER = "admin"
-DEFAULT_ADMIN_PASS = "changeme"
+DEFAULT_ADMIN_PASS = "__CHANGE_ME__"
 
 def create_database(db_path, admin_username=None, admin_password=None):
     """Create pyIRCX database with all required tables"""
@@ -240,7 +240,7 @@ Post-installation:
        python3 api.py change-staff-password admin YourNewPassword
 
   2. Or login to IRC and use:
-       /QUOTE PASS admin:changeme
+       /QUOTE PASS admin:<current-password>
        /STAFF PASS admin YourNewPassword
 
   3. Set ownership (if running as root):

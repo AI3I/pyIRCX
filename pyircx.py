@@ -937,7 +937,7 @@ class pyIRCXServer:
                     row = await cursor.fetchone()
                     if row[0] == 0:
                         default_user = CONFIG.get('admin', 'default_username', default='admin')
-                        default_pass = CONFIG.get('admin', 'default_password', default='changeme')
+                        default_pass = CONFIG.get('admin', 'default_password', default='__CHANGE_ME__')
                         password_hash = await hash_password_async(default_pass)
                         await db.execute(
                             "INSERT INTO users (username, password_hash, level) VALUES (?, ?, ?)",
@@ -2083,7 +2083,7 @@ class pyIRCXServer:
         # Fall back to PASS-based authentication
         elif user.provided_pass:
             # Check SSL requirement for PASS-based staff authentication (configurable)
-            pass_require_ssl = CONFIG.get('security', 'pass_require_ssl', default=False)
+            pass_require_ssl = CONFIG.get('security', 'pass_require_ssl', default=True)
             if pass_require_ssl and not user.using_ssl:
                 # Block staff auth via PASS on non-SSL connections
                 logger.warning(get_log_message("pass_staff_blocked_ssl", username=user.username, ip=user.ip))

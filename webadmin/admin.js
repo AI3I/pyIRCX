@@ -238,14 +238,26 @@ console.log("=== admin.js LOADING ===");
                     html += `<td>`;
                     // Add REGISTER for unregistered users
                     if (!u.registered) {
-                        html += `<button class="btn btn-sm btn-primary" onclick="registerUserFromAdmin('${escapeHtml(u.nickname)}')" title="Register this user">📝 Register</button> `;
+                        html += `<button class="btn btn-sm btn-primary action-user" data-action="register" data-nick="${escapeHtml(u.nickname)}" title="Register this user">📝 Register</button> `;
                     }
-                    html += `<button class="btn btn-sm btn-warning" onclick="killUser('${escapeHtml(u.nickname)}')" title="Disconnect user">⚡ Kill</button> `;
-                    html += `<button class="btn btn-sm btn-danger" onclick="banUser('${escapeHtml(u.nickname)}')" title="Ban user">🚫 Ban</button>`;
+                    html += `<button class="btn btn-sm btn-warning action-user" data-action="kill" data-nick="${escapeHtml(u.nickname)}" title="Disconnect user">⚡ Kill</button> `;
+                    html += `<button class="btn btn-sm btn-danger action-user" data-action="ban" data-nick="${escapeHtml(u.nickname)}" title="Ban user">🚫 Ban</button>`;
                     html += `</td></tr>`;
                 });
                 html += '</tbody></table>';
                 $('#connected-users').innerHTML = html;
+                
+                // Bind actions safely (no inline JS)
+                document.querySelectorAll('#connected-users .action-user').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const action = btn.getAttribute('data-action');
+                        const nick = btn.getAttribute('data-nick') || '';
+                        if (!nick) return;
+                        if (action === 'register') registerUserFromAdmin(nick);
+                        if (action === 'kill') killUser(nick);
+                        if (action === 'ban') banUser(nick);
+                    });
+                });
                 
                 // Make table sortable
                 const connectedTable = $('#connected-users table');
@@ -280,21 +292,35 @@ console.log("=== admin.js LOADING ===");
                     html += `<td>`;
                     // Button order: REGISTER/EDIT, KILL, LOCK/UNLOCK
                     if (!c.registered) {
-                        html += `<button class="btn btn-sm btn-primary" onclick="registerChannel('${escapeHtml(c.name)}')" title="Register this channel">📝 Register</button> `;
-                        html += `<button class="btn btn-sm btn-warning" onclick="killChannel('${escapeHtml(c.name)}')" title="Reset channel (kicks all users)">⚡ Kill</button>`;
+                        html += `<button class="btn btn-sm btn-primary action-channel" data-action="register" data-channel="${escapeHtml(c.name)}" title="Register this channel">📝 Register</button> `;
+                        html += `<button class="btn btn-sm btn-warning action-channel" data-action="kill" data-channel="${escapeHtml(c.name)}" title="Reset channel (kicks all users)">⚡ Kill</button>`;
                     } else {
-                        html += `<button class="btn btn-sm btn-info" onclick="openEditChannelModal('${escapeHtml(c.name)}', '')" title="Edit channel settings">✏️ Edit</button> `;
-                        html += `<button class="btn btn-sm btn-warning" onclick="killChannel('${escapeHtml(c.name)}')" title="Reset channel (kicks all users)">⚡ Kill</button> `;
+                        html += `<button class="btn btn-sm btn-info action-channel" data-action="edit" data-channel="${escapeHtml(c.name)}" title="Edit channel settings">✏️ Edit</button> `;
+                        html += `<button class="btn btn-sm btn-warning action-channel" data-action="kill" data-channel="${escapeHtml(c.name)}" title="Reset channel (kicks all users)">⚡ Kill</button> `;
                         if (hasZMode) {
-                            html += `<button class="btn btn-sm btn-success" onclick="unlockChannel('${escapeHtml(c.name)}')" title="Unlock channel (remove +z)">🔓 Unlock</button>`;
+                            html += `<button class="btn btn-sm btn-success action-channel" data-action="unlock" data-channel="${escapeHtml(c.name)}" title="Unlock channel (remove +z)">🔓 Unlock</button>`;
                         } else {
-                            html += `<button class="btn btn-sm btn-danger" onclick="lockChannel('${escapeHtml(c.name)}')" title="Lock channel (set +z)">🔒 Lock</button>`;
+                            html += `<button class="btn btn-sm btn-danger action-channel" data-action="lock" data-channel="${escapeHtml(c.name)}" title="Lock channel (set +z)">🔒 Lock</button>`;
                         }
                     }
                     html += `</td></tr>`;
                 });
                 html += '</tbody></table>';
                 $('#active-channels').innerHTML = html;
+                
+                // Bind actions safely (no inline JS)
+                document.querySelectorAll('#active-channels .action-channel').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const action = btn.getAttribute('data-action');
+                        const channel = btn.getAttribute('data-channel') || '';
+                        if (!channel) return;
+                        if (action === 'register') registerChannel(channel);
+                        if (action === 'edit') openEditChannelModal(channel, '');
+                        if (action === 'kill') killChannel(channel);
+                        if (action === 'lock') lockChannel(channel);
+                        if (action === 'unlock') unlockChannel(channel);
+                    });
+                });
                 
                 // Make table sortable
                 const activeChansTable = $('#active-channels table');
@@ -729,7 +755,7 @@ console.log("=== admin.js LOADING ===");
                 html += `<td>${realnameDisplay}${forceIndicator}</td>`;
                 html += `<td>${s.email ? escapeHtml(s.email) : '<em class="text-muted">Not set</em>'}</td>`;
                 html += `<td><span class="label label-${levelClass}">${s.level}</span></td>`;
-                html += `<td><button class="btn btn-sm btn-info btn-edit-staff" data-username="${escapeHtml(s.username)}" data-level="${s.level}" data-realname="${s.realname || ''}" data-email="${s.email || ''}" data-force-realname="${s.force_realname}">✏️ Edit</button></td></tr>`;
+                html += `<td><button class="btn btn-sm btn-info btn-edit-staff" data-username="${escapeHtml(s.username)}" data-level="${escapeHtml(s.level)}" data-realname="${escapeHtml(s.realname || '')}" data-email="${escapeHtml(s.email || '')}" data-force-realname="${escapeHtml(String(s.force_realname))}">✏️ Edit</button></td></tr>`;
             });
             html += '</tbody></table>';
             $('#staff-list').innerHTML = html;
@@ -845,12 +871,23 @@ console.log("=== admin.js LOADING ===");
                 html += `<td>${formatTimestamp(c.registered_at)}</td>`;
                 html += `<td>${timeAgo(c.last_used)}</td>`;
                 html += `<td>`;
-                html += `<button class="btn btn-sm btn-info" onclick="openEditChannelModal('${escapeHtml(c.name)}', '${escapeHtml(c.owner)}')">✏️ Edit</button> `;
-                html += `<button class="btn btn-sm btn-danger" onclick="unregisterChannel('${escapeHtml(c.name)}')">🗑️ Delete</button>`;
+                html += `<button class="btn btn-sm btn-info action-channel-list" data-action="edit" data-channel="${escapeHtml(c.name)}" data-owner="${escapeHtml(c.owner)}">✏️ Edit</button> `;
+                html += `<button class="btn btn-sm btn-danger action-channel-list" data-action="delete" data-channel="${escapeHtml(c.name)}">🗑️ Delete</button>`;
                 html += `</td></tr>`;
             });
             html += '</tbody></table>';
             $('#channels-list').innerHTML = html;
+
+            document.querySelectorAll('#channels-list .action-channel-list').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const action = btn.getAttribute('data-action');
+                    const channel = btn.getAttribute('data-channel') || '';
+                    const owner = btn.getAttribute('data-owner') || '';
+                    if (!channel) return;
+                    if (action === 'edit') openEditChannelModal(channel, owner);
+                    if (action === 'delete') unregisterChannel(channel);
+                });
+            });
 
             // Render pagination
             renderChannelsPagination(total, page);
@@ -885,12 +922,23 @@ console.log("=== admin.js LOADING ===");
                 html += `<td>${r.mfa_enabled ? '<span class="label label-success">Yes</span>' : '<span class="label label-default">No</span>'}</td>`;
                 html += `<td>${escapeHtml(r.email)}</td>`;
                 html += `<td>`;
-                html += `<button class="btn btn-sm btn-info" onclick="openEditNickModal('${escapeHtml(r.nickname)}', '${escapeHtml(r.email)}')">✏️ Edit</button> `;
-                html += `<button class="btn btn-sm btn-danger" onclick="unregisterNick('${escapeHtml(r.nickname)}')">🗑️ Delete</button>`;
+                html += `<button class="btn btn-sm btn-info action-nick-list" data-action="edit" data-nick="${escapeHtml(r.nickname)}" data-email="${escapeHtml(r.email)}">✏️ Edit</button> `;
+                html += `<button class="btn btn-sm btn-danger action-nick-list" data-action="delete" data-nick="${escapeHtml(r.nickname)}">🗑️ Delete</button>`;
                 html += `</td></tr>`;
             });
             html += '</tbody></table>';
             $('#recent-registrations').innerHTML = html;
+
+            document.querySelectorAll('#recent-registrations .action-nick-list').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const action = btn.getAttribute('data-action');
+                    const nick = btn.getAttribute('data-nick') || '';
+                    const email = btn.getAttribute('data-email') || '';
+                    if (!nick) return;
+                    if (action === 'edit') openEditNickModal(nick, email);
+                    if (action === 'delete') unregisterNick(nick);
+                });
+            });
             
             // Make table sortable
             const nickTable = $('#recent-registrations table');
@@ -915,11 +963,17 @@ console.log("=== admin.js LOADING ===");
         const end = Math.min(currentPage * itemsPerPage, total);
 
         let html = '';
-        html += `<button class="btn btn-default" onclick="loadRecentRegs(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>Previous</button>`;
+        html += `<button class="btn btn-default page-nicks-btn" data-page="${currentPage - 1}" ${currentPage === 1 ? 'disabled' : ''}>Previous</button>`;
         html += `<span class="pagination-info">Page ${currentPage} of ${totalPages} (${start}-${end} of ${total})</span>`;
-        html += `<button class="btn btn-default" onclick="loadRecentRegs(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>Next</button>`;
+        html += `<button class="btn btn-default page-nicks-btn" data-page="${currentPage + 1}" ${currentPage === totalPages ? 'disabled' : ''}>Next</button>`;
 
         $('#nicks-pagination').innerHTML = html;
+        document.querySelectorAll('#nicks-pagination .page-nicks-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const page = parseInt(btn.getAttribute('data-page'), 10);
+                if (!isNaN(page)) loadRecentRegs(page);
+            });
+        });
     }
 
     function renderChannelsPagination(total, currentPage) {
@@ -936,11 +990,17 @@ console.log("=== admin.js LOADING ===");
         const end = Math.min(currentPage * itemsPerPage, total);
 
         let html = '';
-        html += `<button class="btn btn-default" onclick="loadChannels(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>Previous</button>`;
+        html += `<button class="btn btn-default page-channels-btn" data-page="${currentPage - 1}" ${currentPage === 1 ? 'disabled' : ''}>Previous</button>`;
         html += `<span class="pagination-info">Page ${currentPage} of ${totalPages} (${start}-${end} of ${total})</span>`;
-        html += `<button class="btn btn-default" onclick="loadChannels(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>Next</button>`;
+        html += `<button class="btn btn-default page-channels-btn" data-page="${currentPage + 1}" ${currentPage === totalPages ? 'disabled' : ''}>Next</button>`;
 
         $('#channels-pagination').innerHTML = html;
+        document.querySelectorAll('#channels-pagination .page-channels-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const page = parseInt(btn.getAttribute('data-page'), 10);
+                if (!isNaN(page)) loadChannels(page);
+            });
+        });
     }
 
     function loadConfig() {
@@ -1669,6 +1729,32 @@ console.log("=== admin.js LOADING ===");
         setInterval(() => { if ($('.page.active')?.id === 'page-dashboard') { loadServiceStatus(); loadRealtimeStatus(); } }, 10000);
 
         // Nickname Editing
+        if ($('#btn-open-register-nick')) {
+            $('#btn-open-register-nick').addEventListener('click', () => openModal('modal-register-nick'));
+        }
+        if ($('#btn-open-register-channel')) {
+            $('#btn-open-register-channel').addEventListener('click', () => openModal('modal-register-channel'));
+        }
+        if ($('#btn-load-motd')) {
+            $('#btn-load-motd').addEventListener('click', () => window.loadMotd());
+        }
+        if ($('#btn-save-motd')) {
+            $('#btn-save-motd').addEventListener('click', () => window.saveMotd());
+        }
+        $$('.access-tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const level = btn.getAttribute('data-level');
+                if (level) showAccessTab(level);
+            });
+        });
+        $$('.access-add-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const level = btn.getAttribute('data-level');
+                if (level) addAccessEntry(level);
+            });
+        });
+
+        // Nickname Editing
         if ($('#btn-cancel-edit-nick')) {
             $('#btn-cancel-edit-nick').addEventListener('click', () => {
                 $('#modal-edit-nick').style.display = 'none';
@@ -2022,11 +2108,19 @@ console.log("=== admin.js LOADING ===");
             const mask = entry[0] || entry;  // Support both array format and simple string
             html += `<div style="padding: 5px; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center;">
                 <code>${escapeHtml(mask)}</code>
-                <button type="button" class="btn btn-sm btn-danger" onclick="removeAccessEntry('${level}', ${index})" style="padding: 2px 8px;">❌ Remove</button>
+                <button type="button" class="btn btn-sm btn-danger access-remove-btn" data-level="${escapeHtml(level)}" data-index="${index}" style="padding: 2px 8px;">❌ Remove</button>
             </div>`;
         });
         html += '</div>';
         listDiv.innerHTML = html;
+        listDiv.querySelectorAll('.access-remove-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const lvl = btn.getAttribute('data-level') || '';
+                const idx = parseInt(btn.getAttribute('data-index'), 10);
+                if (!lvl || isNaN(idx)) return;
+                removeAccessEntry(lvl, idx);
+            });
+        });
     }
 
     function addAccessEntry(level) {
@@ -2134,9 +2228,15 @@ console.log("=== admin.js LOADING ===");
     // Add a branch server entry (for trunk config)
     function generateSecurePassword() {
         const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
+        const length = 24;
+        if (!(window.crypto && window.crypto.getRandomValues)) {
+            throw new Error('Secure RNG unavailable in this browser');
+        }
+        const bytes = new Uint32Array(length);
+        window.crypto.getRandomValues(bytes);
         let password = '';
-        for (let i = 0; i < 24; i++) {
-            password += chars.charAt(Math.floor(Math.random() * chars.length));
+        for (let i = 0; i < length; i++) {
+            password += chars.charAt(bytes[i] % chars.length);
         }
         return password;
     }
@@ -2219,9 +2319,13 @@ console.log("=== admin.js LOADING ===");
         const genPassBtn = div.querySelector('.branch-gen-password-btn');
         genPassBtn?.addEventListener('click', () => {
             const passwordField = div.querySelector('.branch-password');
-            passwordField.value = generateSecurePassword();
-            passwordField.type = 'text'; // Show the generated password
-            setTimeout(() => { passwordField.type = 'password'; }, 3000); // Hide after 3 seconds
+            try {
+                passwordField.value = generateSecurePassword();
+                passwordField.type = 'text'; // Show the generated password
+                setTimeout(() => { passwordField.type = 'password'; }, 3000); // Hide after 3 seconds
+            } catch (err) {
+                showToast('Error', 'Secure password generation is unavailable in this browser', 'error');
+            }
         });
 
         // Add config generator handler
@@ -2312,7 +2416,7 @@ console.log("=== admin.js LOADING ===");
                     "loc2": "Network Operations",
                     "email": "admin@" + branchName,
                     "default_username": "admin",
-                    "default_password": "changeme"
+                    "default_password": "__CHANGE_ME__"
                 },
 
                 "limits": trunkConfig.limits || {
@@ -2329,7 +2433,7 @@ console.log("=== admin.js LOADING ===");
 
                 "security": {
                     "auth_require_ssl": trunkConfig.security?.auth_require_ssl !== undefined ? trunkConfig.security.auth_require_ssl : true,
-                    "pass_require_ssl": trunkConfig.security?.pass_require_ssl !== undefined ? trunkConfig.security.pass_require_ssl : false,
+                    "pass_require_ssl": trunkConfig.security?.pass_require_ssl !== undefined ? trunkConfig.security.pass_require_ssl : true,
                     "cap_timeout": trunkConfig.security?.cap_timeout || 60,
                     "auth_max_attempts": trunkConfig.security?.auth_max_attempts || 5,
                     "auth_lockout_duration": trunkConfig.security?.auth_lockout_duration || 300,
@@ -2429,6 +2533,14 @@ console.log("=== admin.js LOADING ===");
                     "server_role": "branch",
                     "bind_host": "0.0.0.0",
                     "bind_port": linkPort,
+                    "tls": {
+                        "enabled": trunkConfig.linking?.tls?.enabled !== undefined ? trunkConfig.linking.tls.enabled : true,
+                        "required": trunkConfig.linking?.tls?.required !== undefined ? trunkConfig.linking.tls.required : true,
+                        "verify": trunkConfig.linking?.tls?.verify !== false,
+                        "cert_file": sslCertPath,
+                        "key_file": sslKeyPath,
+                        "ca_file": trunkConfig.linking?.tls?.ca_file || null
+                    },
                     "links": [
                         {
                             "name": trunkName,
@@ -2571,6 +2683,11 @@ console.log("=== admin.js LOADING ===");
             setCheck('#cfg-linking-enabled', config.linking?.enabled || false);
             setVal('#cfg-linking-host', config.linking?.bind_host || '');
             setVal('#cfg-linking-port', config.linking?.bind_port || 7001);
+            setCheck('#cfg-linking-tls-enabled', config.linking?.tls?.enabled || false);
+            setCheck('#cfg-linking-tls-verify', config.linking?.tls?.verify !== false);
+            setVal('#cfg-linking-tls-cert', config.linking?.tls?.cert_file || '');
+            setVal('#cfg-linking-tls-key', config.linking?.tls?.key_file || '');
+            setVal('#cfg-linking-tls-ca', config.linking?.tls?.ca_file || '');
 
             // Load branch list (webadmin is always on trunk)
             const branchesList = $('#cfg-linking-branches-list');
@@ -2711,6 +2828,12 @@ console.log("=== admin.js LOADING ===");
         newConfig.linking.bind_host = getVal('#cfg-linking-host');
         newConfig.linking.bind_port = parseInt(getVal('#cfg-linking-port'));
         newConfig.linking.server_role = 'trunk';
+        newConfig.linking.tls = newConfig.linking.tls || {};
+        newConfig.linking.tls.enabled = getCheck('#cfg-linking-tls-enabled');
+        newConfig.linking.tls.verify = getCheck('#cfg-linking-tls-verify');
+        newConfig.linking.tls.cert_file = getVal('#cfg-linking-tls-cert') || null;
+        newConfig.linking.tls.key_file = getVal('#cfg-linking-tls-key') || null;
+        newConfig.linking.tls.ca_file = getVal('#cfg-linking-tls-ca') || null;
 
         // Trunk is always services hub
         newConfig.services.is_services_hub = true;

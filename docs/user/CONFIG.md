@@ -281,14 +281,14 @@ Channels with mode `+y` will log activity to `transcripts/<channelname>.log`.
 | `admin.loc2` | `"Network Operations"` | Admin info line 2 |
 | `admin.email` | `"admin@irc.local"` | Admin contact email |
 | `admin.default_username` | `"admin"` | Default admin username (first run only) |
-| `admin.default_password` | `"changeme"` | Default admin password (first run only) |
+| `admin.default_password` | `"__CHANGE_ME__"` | Default admin password placeholder (first run only) |
 
 ### Default Admin Account
 
 On first startup (when no staff accounts exist), pyIRCX automatically creates a default ADMIN account:
 
 - **Username:** `admin` (or value of `admin.default_username`)
-- **Password:** `changeme` (or value of `admin.default_password`)
+- **Password:** `__CHANGE_ME__` (or value of `admin.default_password`)
 
 **Important:** Change the default password immediately after first login:
 ```
@@ -297,7 +297,7 @@ STAFF PASS admin yournewsecurepassword
 
 To login as admin, use the PASS command before USER:
 ```
-PASS admin:changeme
+PASS admin:__CHANGE_ME__
 USER admin 0 * :Administrator
 NICK YourNick
 ```

@@ -127,6 +127,8 @@ All test harnesses have been updated and modernized for pyIRCX v2.0.0 release.
 - Enhanced output with version feature separation
 - Increased test timeout to 120 seconds
 - Total test count: ~230 tests across 8 suites
+- Exports `PYIRCX_TEST_ADMIN_PASS` (default: `testpass`) for staff auth tests
+- Applies test-only overrides: `security.auth_require_ssl=false` and `security.pass_require_ssl=false`
 
 **Test Execution Order:**
 1. tests/integration/users.py - IRC/IRCX Protocol (115 tests)
@@ -232,9 +234,9 @@ python3 services.py
 ## Test Accounts
 
 All test files document available test accounts:
-- **admin/changeme** (ADMIN) - Full privileges
-- **sysop/changeme** (SYSOP) - Staff privileges
-- **guide/changeme** (GUIDE) - Limited staff privileges
+- **admin/testpass** (ADMIN) - Full privileges
+- **sysop/testpass** (SYSOP) - Staff privileges
+- **guide/testpass** (GUIDE) - Limited staff privileges
 
 ## Status
 

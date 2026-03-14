@@ -10,8 +10,14 @@ import sqlite3
 import socket
 import re
 import time
+import os
+import json
 from collections import defaultdict
 from datetime import datetime, timedelta
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - non-POSIX fallback
+    fcntl = None
 
 from responses import get_log_message, SERVER_MESSAGES
 
@@ -24,6 +30,54 @@ logger = logging.getLogger(__name__)
 
 # Global rate limit storage
 _rate_limits = defaultdict(list)
+_RATE_LIMIT_FILE = os.environ.get('PYIRCX_API_RATE_FILE', '/tmp/pyircx_api_rate_limits.json')
+
+
+def _check_rate_limit_shared(key: str, calls_per_minute: int) -> bool:
+    """
+    Cross-process rate limiter backed by a lock-protected JSON file.
+    Returns True when call is allowed, False when rate-limited.
+    """
+    now = time.time()
+    cutoff = now - 60
+
+    try:
+        with open(_RATE_LIMIT_FILE, 'a+', encoding='utf-8') as fp:
+            if fcntl:
+                fcntl.flock(fp.fileno(), fcntl.LOCK_EX)
+            fp.seek(0)
+            raw = fp.read().strip()
+            state = json.loads(raw) if raw else {}
+            if not isinstance(state, dict):
+                state = {}
+
+            # Prune stale entries globally to avoid unbounded growth.
+            pruned = {}
+            for state_key, timestamps in state.items():
+                if not isinstance(timestamps, list):
+                    continue
+                fresh = [ts for ts in timestamps if isinstance(ts, (int, float)) and ts > cutoff]
+                if fresh:
+                    pruned[state_key] = fresh
+            state = pruned
+
+            current = state.get(key, [])
+            if len(current) >= calls_per_minute:
+                allowed = False
+            else:
+                current.append(now)
+                state[key] = current
+                allowed = True
+
+            fp.seek(0)
+            fp.truncate()
+            fp.write(json.dumps(state))
+            fp.flush()
+            if fcntl:
+                fcntl.flock(fp.fileno(), fcntl.LOCK_UN)
+            return allowed
+    except Exception:
+        return None
 
 def rate_limit(calls_per_minute=10):
     """Decorator to rate limit function calls
@@ -51,6 +105,15 @@ def rate_limit(calls_per_minute=10):
         def wrapper(*args, **kwargs):
             # Create a unique key based on function name and first argument (usually username)
             key = f"{func.__name__}:{args[0] if args else 'global'}"
+
+            # Prefer cross-process limiter when available.
+            shared_allowed = _check_rate_limit_shared(key, calls_per_minute)
+            if shared_allowed is False:
+                logger.warning(get_log_message("rate_limit_exceeded", key=key))
+                raise ValueError(SERVER_MESSAGES['api_rate_limit_exceeded'])
+            if shared_allowed is True:
+                return func(*args, **kwargs)
+
             now = datetime.now()
             minute_ago = now - timedelta(minutes=1)
 

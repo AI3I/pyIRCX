@@ -275,7 +275,7 @@ async def test_stats_v_with_staff():
     """Test STATS v works for staff users"""
     client = IRCTestClient("stats_v_staff")
 
-    # Connect with admin password (assumes default admin/changeme)
+    # Connect with admin test account password (default: testpass)
     await client.connect("StatsVStaff", staff_account="admin")
     await asyncio.sleep(0.3)
     await asyncio.sleep(0.5)

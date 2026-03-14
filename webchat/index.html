@@ -1627,9 +1627,15 @@ function updateIgnoredList() {
         list.innerHTML = [...ignoredUsers].map(u => `
             <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 0;">
                 <span>${escapeHtml(u)}</span>
-                <button onclick="unignoreUser('${escapeHtml(u)}')" style="all: unset; cursor: pointer; color: var(--danger);">✕</button>
+                <button class="unignore-btn" data-nick="${escapeHtml(u)}" style="all: unset; cursor: pointer; color: var(--danger);">✕</button>
             </div>
         `).join('');
+        list.querySelectorAll('.unignore-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const nick = btn.getAttribute('data-nick');
+                if (nick) unignoreUser(nick);
+            });
+        });
     }
 }
 
@@ -1666,7 +1672,15 @@ const emojis = ['😀','😃','😄','😁','😆','😅','🤣','😂','🙂','
 
 function openEmojiPicker() {
     const grid = $('emojiGrid');
-    grid.innerHTML = emojis.map(e => `<button onclick="insertEmoji('${e}')" style="all: unset; cursor: pointer; font-size: 24px; text-align: center; padding: 8px; border-radius: 6px; transition: background 0.15s;" onmouseover="this.style.background='var(--bg-tertiary)'" onmouseout="this.style.background='transparent'">${e}</button>`).join('');
+    grid.innerHTML = emojis.map(e => `<button class="emoji-btn" data-emoji="${e}" style="all: unset; cursor: pointer; font-size: 24px; text-align: center; padding: 8px; border-radius: 6px; transition: background 0.15s;">${e}</button>`).join('');
+    grid.querySelectorAll('.emoji-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const emoji = btn.getAttribute('data-emoji');
+            if (emoji) insertEmoji(emoji);
+        });
+        btn.addEventListener('mouseover', () => { btn.style.background = 'var(--bg-tertiary)'; });
+        btn.addEventListener('mouseout', () => { btn.style.background = 'transparent'; });
+    });
     $('emojiModal').classList.remove('hidden');
 }
 
@@ -1815,11 +1829,17 @@ function showListModal() {
     const tbody = $('listTableBody');
     tbody.innerHTML = listData.map(row => `
         <tr style="border-bottom: 1px solid var(--border-color);">
-            <td style="padding: 8px; font-weight: 600; cursor: pointer;" onclick="joinFromList('${escapeHtml(row.channel)}')">${escapeHtml(row.channel)}</td>
+            <td style="padding: 8px; font-weight: 600; cursor: pointer;" class="list-join-cell" data-channel="${escapeHtml(row.channel)}">${escapeHtml(row.channel)}</td>
             <td style="padding: 8px;">${row.users}</td>
             <td style="padding: 8px; color: var(--text-muted);">${escapeHtml(row.topic || '')}</td>
         </tr>
     `).join('');
+    tbody.querySelectorAll('.list-join-cell').forEach(cell => {
+        cell.addEventListener('click', () => {
+            const channel = cell.getAttribute('data-channel');
+            if (channel) joinFromList(channel);
+        });
+    });
     $('listModal').classList.remove('hidden');
 }
 
@@ -1835,21 +1855,23 @@ function showChannelContextMenu(ch, x, y) {
     if (ch.isPrivate) {
         // Private message context menu
         menu.innerHTML = `
-            <div class="context-menu-item" onclick="switchChannel('${escapeHtml(ch.name)}');hideContextMenu();">💬 Open Chat</div>
+            <div class="context-menu-item cm-action" data-action="switch" data-target="${escapeHtml(ch.name)}">💬 Open Chat</div>
             <div class="context-menu-divider"></div>
-            <div class="context-menu-item" onclick="closePrivateChat('${escapeHtml(ch.name)}');hideContextMenu();">✕ Close Chat</div>
+            <div class="context-menu-item cm-action" data-action="close-private" data-target="${escapeHtml(ch.name)}">✕ Close Chat</div>
         `;
     } else {
         // Channel context menu
         menu.innerHTML = `
-            <div class="context-menu-item" onclick="switchChannel('${escapeHtml(ch.name)}');hideContextMenu();">📺 View Channel</div>
+            <div class="context-menu-item cm-action" data-action="switch" data-target="${escapeHtml(ch.name)}">📺 View Channel</div>
             <div class="context-menu-divider"></div>
-            <div class="context-menu-item" onclick="openModesModal();hideContextMenu();">🔧 Channel Modes</div>
-            <div class="context-menu-item" onclick="openPropModal();hideContextMenu();">⚙️ Properties</div>
+            <div class="context-menu-item cm-action" data-action="open-modes">🔧 Channel Modes</div>
+            <div class="context-menu-item cm-action" data-action="open-prop">⚙️ Properties</div>
             <div class="context-menu-divider"></div>
-            <div class="context-menu-item" onclick="partChannelFromMenu('${escapeHtml(ch.name)}');hideContextMenu();">🚪 Leave Channel</div>
+            <div class="context-menu-item cm-action" data-action="part" data-target="${escapeHtml(ch.name)}">🚪 Leave Channel</div>
         `;
     }
+
+    bindContextMenuActions();
 
     menu.style.left = x + 'px';
     menu.style.top = y + 'px';
@@ -1887,24 +1909,51 @@ function showContextMenu(nick, x, y) {
     const ignored = isIgnored(nick);
 
     menu.innerHTML = `
-        <div class="context-menu-item" onclick="queueCmd('WHOIS ${escapeHtml(nick)}');hideContextMenu();">📋 WHOIS ${escapeHtml(nick)}</div>
-        <div class="context-menu-item" onclick="startPM('${escapeHtml(nick)}');hideContextMenu();">💬 Private Message</div>
+        <div class="context-menu-item cm-action" data-action="whois" data-target="${escapeHtml(nick)}">📋 WHOIS ${escapeHtml(nick)}</div>
+        <div class="context-menu-item cm-action" data-action="start-pm" data-target="${escapeHtml(nick)}">💬 Private Message</div>
         ${!isMe ? `
             <div class="context-menu-divider"></div>
-            <div class="context-menu-item" onclick="queueCmd('MODE ${currentChannel} +q ${escapeHtml(nick)}');hideContextMenu();">👑 Give Owner</div>
-            <div class="context-menu-item" onclick="queueCmd('MODE ${currentChannel} +o ${escapeHtml(nick)}');hideContextMenu();">⭐ Give Host</div>
-            <div class="context-menu-item" onclick="queueCmd('MODE ${currentChannel} +v ${escapeHtml(nick)}');hideContextMenu();">💬 Give Voice</div>
+            <div class="context-menu-item cm-action" data-action="mode" data-mode="q" data-target="${escapeHtml(nick)}">👑 Give Owner</div>
+            <div class="context-menu-item cm-action" data-action="mode" data-mode="o" data-target="${escapeHtml(nick)}">⭐ Give Host</div>
+            <div class="context-menu-item cm-action" data-action="mode" data-mode="v" data-target="${escapeHtml(nick)}">💬 Give Voice</div>
             <div class="context-menu-divider"></div>
-            <div class="context-menu-item" onclick="kickUser('${escapeHtml(nick)}');hideContextMenu();">🚪 Kick</div>
-            <div class="context-menu-item" onclick="banUser('${escapeHtml(nick)}');hideContextMenu();">🚫 Ban</div>
+            <div class="context-menu-item cm-action" data-action="kick" data-target="${escapeHtml(nick)}">🚪 Kick</div>
+            <div class="context-menu-item cm-action" data-action="ban" data-target="${escapeHtml(nick)}">🚫 Ban</div>
             <div class="context-menu-divider"></div>
-            <div class="context-menu-item" onclick="${ignored ? 'unignoreUser' : 'ignoreUserFromMenu'}('${escapeHtml(nick)}');hideContextMenu();">${ignored ? '✅ Unignore' : '🔇 Ignore'}</div>
+            <div class="context-menu-item cm-action" data-action="${ignored ? 'unignore' : 'ignore'}" data-target="${escapeHtml(nick)}">${ignored ? '✅ Unignore' : '🔇 Ignore'}</div>
         ` : ''}
     `;
+
+    bindContextMenuActions();
 
     menu.style.left = x + 'px';
     menu.style.top = y + 'px';
     menu.style.display = 'block';
+}
+
+function bindContextMenuActions() {
+    const menu = $('contextMenu');
+    menu.querySelectorAll('.cm-action').forEach(item => {
+        item.addEventListener('click', () => {
+            const action = item.getAttribute('data-action');
+            const target = item.getAttribute('data-target') || '';
+            const mode = item.getAttribute('data-mode') || '';
+
+            if (action === 'switch' && target) switchChannel(target);
+            if (action === 'close-private' && target) closePrivateChat(target);
+            if (action === 'open-modes') openModesModal();
+            if (action === 'open-prop') openPropModal();
+            if (action === 'part' && target) partChannelFromMenu(target);
+            if (action === 'whois' && target) queueCmd(`WHOIS ${target}`);
+            if (action === 'start-pm' && target) startPM(target);
+            if (action === 'mode' && mode && target) queueCmd(`MODE ${currentChannel} +${mode} ${target}`);
+            if (action === 'kick' && target) kickUser(target);
+            if (action === 'ban' && target) banUser(target);
+            if (action === 'ignore' && target) ignoreUserFromMenu(target);
+            if (action === 'unignore' && target) unignoreUser(target);
+            hideContextMenu();
+        });
+    });
 }
 
 function hideContextMenu() {

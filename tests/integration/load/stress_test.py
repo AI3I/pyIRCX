@@ -20,6 +20,8 @@ from typing import List, Dict
 import socket
 import os
 
+TEST_ADMIN_PASS = os.environ.get("PYIRCX_TEST_ADMIN_PASS", "testpass")
+
 # Configuration
 @dataclass
 class StressConfig:
@@ -172,7 +174,7 @@ class StaffUser:
     async def run(self, duration: int):
         """Run staff simulation"""
         # Authenticate as staff
-        await self.client.send("PASS changeme")  # Default admin password
+        await self.client.send(f"PASS {TEST_ADMIN_PASS}")  # Test admin password
         await asyncio.sleep(1)
         
         end_time = time.time() + duration

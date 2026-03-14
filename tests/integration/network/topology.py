@@ -32,6 +32,7 @@ BRANCH2_NAME = os.environ.get("PYIRCX_TEST_BRANCH2_NAME", "branch2.testnet.local
 TRUNK_LINK_PORT = int(os.environ.get("PYIRCX_TEST_TRUNK_LINK_PORT", "7001"))
 BRANCH1_LINK_PORT = int(os.environ.get("PYIRCX_TEST_BRANCH1_LINK_PORT", "7002"))
 BRANCH2_LINK_PORT = int(os.environ.get("PYIRCX_TEST_BRANCH2_LINK_PORT", "7003"))
+TEST_ADMIN_PASS = os.environ.get("PYIRCX_TEST_ADMIN_PASS", "testpass")
 
 runner = TestRunner()
 
@@ -44,8 +45,7 @@ async def test_squit_basic():
     """Test SQUIT command disconnects a server"""
     # Admin on trunk
     admin = IRCTestClient("squit_admin", host=TEST_HOST, port=TRUNK_PORT)
-    await admin.send_raw("PASS changeme")
-    await admin.connect("SQUITAdmin", "admin")
+    await admin.connect("SQUITAdmin", "admin", password=TEST_ADMIN_PASS)
     
     # User on branch
     branch_user = IRCTestClient("branch_user", host=TEST_HOST, port=BRANCH1_PORT)
@@ -72,8 +72,7 @@ async def test_users_disappear_on_split():
     
     await trunk_user.connect("TrunkWatch")
     await branch_user.connect("BranchGone")
-    await admin.send_raw("PASS changeme")
-    await admin.connect("DivergenceAdmin", "admin")
+    await admin.connect("DivergenceAdmin", "admin", password=TEST_ADMIN_PASS)
     
     await asyncio.sleep(2)
     
@@ -120,8 +119,7 @@ async def test_channel_loses_users_on_split():
     await trunk2.connect("Trunk2")
     await branch1.connect("Branch1")
     await branch2.connect("Branch2")
-    await admin.send_raw("PASS changeme")
-    await admin.connect("ChanAdmin", "admin")
+    await admin.connect("ChanAdmin", "admin", password=TEST_ADMIN_PASS)
     
     await asyncio.sleep(2)
     
@@ -162,8 +160,7 @@ async def test_empty_channel_cleanup_on_split():
     admin = IRCTestClient("empty_admin", host=TEST_HOST, port=TRUNK_PORT)
     
     await branch_only.connect("BranchOnly")
-    await admin.send_raw("PASS changeme")
-    await admin.connect("EmptyAdmin", "admin")
+    await admin.connect("EmptyAdmin", "admin", password=TEST_ADMIN_PASS)
     
     await asyncio.sleep(2)
     
@@ -202,8 +199,7 @@ async def test_empty_channel_cleanup_on_split():
 async def test_connect_rejoin():
     """Test CONNECT command rejoins a split server"""
     admin = IRCTestClient("rejoin_admin", host=TEST_HOST, port=TRUNK_PORT)
-    await admin.send_raw("PASS changeme")
-    await admin.connect("RejoinAdmin", "admin")
+    await admin.connect("RejoinAdmin", "admin", password=TEST_ADMIN_PASS)
     
     await asyncio.sleep(1)
     
@@ -231,8 +227,7 @@ async def test_users_reappear_on_join():
     
     await trunk_user.connect("TrunkSee")
     await branch_user.connect("BranchBack")
-    await admin.send_raw("PASS changeme")
-    await admin.connect("JoinAdmin", "admin")
+    await admin.connect("JoinAdmin", "admin", password=TEST_ADMIN_PASS)
     
     await asyncio.sleep(2)
     
@@ -281,8 +276,7 @@ async def test_channel_modes_during_split():
     
     await trunk_user.connect("ModeTrunk")
     await branch_user.connect("ModeBranch")
-    await admin.send_raw("PASS changeme")
-    await admin.connect("ModeAdmin", "admin")
+    await admin.connect("ModeAdmin", "admin", password=TEST_ADMIN_PASS)
     
     await asyncio.sleep(2)
     
@@ -317,8 +311,7 @@ async def test_channel_topic_during_split():
     admin = IRCTestClient("topic_admin", host=TEST_HOST, port=TRUNK_PORT)
     
     await trunk_user.connect("TopicTrunk")
-    await admin.send_raw("PASS changeme")
-    await admin.connect("TopicAdmin", "admin")
+    await admin.connect("TopicAdmin", "admin", password=TEST_ADMIN_PASS)
     
     await asyncio.sleep(1)
     
@@ -356,8 +349,7 @@ async def test_duplicate_nick_on_join():
     admin = IRCTestClient("dup_admin", host=TEST_HOST, port=TRUNK_PORT)
     
     await trunk_user.connect("DupNick")  # Same nick on trunk
-    await admin.send_raw("PASS changeme")
-    await admin.connect("DupAdmin", "admin")
+    await admin.connect("DupAdmin", "admin", password=TEST_ADMIN_PASS)
     
     await asyncio.sleep(2)
     
@@ -383,8 +375,7 @@ async def test_services_unavailable_during_split():
     admin = IRCTestClient("service_admin", host=TEST_HOST, port=TRUNK_PORT)
     
     await branch_user.connect("ServiceUser")
-    await admin.send_raw("PASS changeme")
-    await admin.connect("ServiceAdmin", "admin")
+    await admin.connect("ServiceAdmin", "admin", password=TEST_ADMIN_PASS)
     
     await asyncio.sleep(2)
     
@@ -409,9 +400,7 @@ async def test_services_unavailable_during_split():
 async def test_staff_auth_unavailable_during_split():
     """Test staff authentication fails on branch when trunk is split"""
     admin = IRCTestClient("auth_admin", host=TEST_HOST, port=TRUNK_PORT)
-    
-    await admin.send_raw("PASS changeme")
-    await admin.connect("AuthAdmin", "admin")
+    await admin.connect("AuthAdmin", "admin", password=TEST_ADMIN_PASS)
     
     await asyncio.sleep(1)
     
@@ -432,8 +421,7 @@ async def test_staff_auth_unavailable_during_split():
 async def test_multiple_splits_joins():
     """Test server can handle multiple divergence/convergence cycles"""
     admin = IRCTestClient("cycle_admin", host=TEST_HOST, port=TRUNK_PORT)
-    await admin.send_raw("PASS changeme")
-    await admin.connect("CycleAdmin", "admin")
+    await admin.connect("CycleAdmin", "admin", password=TEST_ADMIN_PASS)
     
     await asyncio.sleep(1)
     
@@ -459,8 +447,7 @@ async def test_no_messaging_across_split():
     
     await trunk_user.connect("MsgTrunk")
     await branch_user.connect("MsgBranch")
-    await admin.send_raw("PASS changeme")
-    await admin.connect("MsgAdmin", "admin")
+    await admin.connect("MsgAdmin", "admin", password=TEST_ADMIN_PASS)
     
     await asyncio.sleep(2)
     

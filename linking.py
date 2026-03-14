@@ -19,6 +19,7 @@ import asyncio
 import bcrypt
 import time
 import logging
+import ssl
 from typing import Dict, Set, Optional, Tuple
 
 from responses import SERVER_MESSAGES, get_log_message
@@ -93,6 +94,12 @@ class ServerLinkManager:
         self.bind_port = CONFIG.get('linking', 'bind_port', default=7001)
         self.links_config = CONFIG.get('linking', 'links', default=[])
         self.link_server = None
+        self.tls_enabled = CONFIG.get('linking', 'tls', 'enabled', default=True)
+        self.tls_required = CONFIG.get('linking', 'tls', 'required', default=True)
+        self.tls_verify = CONFIG.get('linking', 'tls', 'verify', default=True)
+        self.tls_cert_file = CONFIG.get('linking', 'tls', 'cert_file', default=None)
+        self.tls_key_file = CONFIG.get('linking', 'tls', 'key_file', default=None)
+        self.tls_ca_file = CONFIG.get('linking', 'tls', 'ca_file', default=None)
 
         # Auto-reconnect tracking
         self.reconnect_attempts: Dict[str, int] = {}  # servername -> retry count
@@ -256,13 +263,23 @@ class ServerLinkManager:
         if not self.enabled:
             logger.info(get_log_message("link_disabled_config"))
             return
+        if self.tls_required and not self.tls_enabled:
+            logger.error(get_log_message("link_start_failed", error="Link TLS is required but disabled in linking.tls.enabled"))
+            return
 
         # Start listening for incoming server connections
         try:
+            ssl_context = None
+            if self.tls_enabled:
+                ssl_context = self._build_server_ssl_context()
+                if ssl_context is None:
+                    logger.error(get_log_message("link_start_failed", error="TLS enabled but SSL context could not be created"))
+                    return
             self.link_server = await asyncio.start_server(
                 self.handle_incoming_link,
                 self.bind_host,
-                self.bind_port
+                self.bind_port,
+                ssl=ssl_context
             )
             logger.info(get_log_message("link_listening", host=self.bind_host, port=self.bind_port))
 
@@ -427,7 +444,17 @@ class ServerLinkManager:
 
         try:
             logger.info(get_log_message("link_connecting", server=servername, host=host, port=port))
-            reader, writer = await asyncio.open_connection(host, port)
+            if self.tls_required and not self.tls_enabled:
+                raise RuntimeError("Link TLS is required but disabled in linking.tls.enabled")
+            ssl_context = None
+            server_hostname = None
+            if self.tls_enabled:
+                ssl_context = self._build_client_ssl_context()
+                if ssl_context is None:
+                    raise RuntimeError("TLS enabled but client SSL context could not be created")
+                if ssl_context.check_hostname:
+                    server_hostname = host
+            reader, writer = await asyncio.open_connection(host, port, ssl=ssl_context, server_hostname=server_hostname)
 
             # Send SERVER command with role
             network_name = CONFIG.get('server', 'network', default='IRCX Network')
@@ -2606,6 +2633,37 @@ class ServerLinkManager:
                     return password_hash == password
 
         return False
+
+    def _build_server_ssl_context(self) -> Optional[ssl.SSLContext]:
+        """Build SSL context for incoming link connections."""
+        if not self.tls_cert_file or not self.tls_key_file:
+            logger.error(get_log_message("ssl_missing_config"))
+            return None
+        try:
+            context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            context.minimum_version = ssl.TLSVersion.TLSv1_2
+            context.load_cert_chain(self.tls_cert_file, self.tls_key_file)
+            return context
+        except Exception as e:
+            logger.error(get_log_message("ssl_load_generic_error", error=e))
+            return None
+
+    def _build_client_ssl_context(self) -> Optional[ssl.SSLContext]:
+        """Build SSL context for outgoing link connections."""
+        try:
+            if self.tls_verify:
+                context = ssl.create_default_context(cafile=self.tls_ca_file)
+                context.check_hostname = True
+                context.verify_mode = ssl.CERT_REQUIRED
+            else:
+                context = ssl.create_default_context()
+                context.check_hostname = False
+                context.verify_mode = ssl.CERT_NONE
+            context.minimum_version = ssl.TLSVersion.TLSv1_2
+            return context
+        except Exception as e:
+            logger.error(get_log_message("ssl_load_generic_error", error=e))
+            return None
 
     def get_services_hub(self) -> Optional[LinkedServer]:
         """Get the services hub server connection"""

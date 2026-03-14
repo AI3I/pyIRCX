@@ -30,7 +30,7 @@
     "loc2": "Network Operations",
     "email": "admin@irc.local",
     "default_username": "admin",
-    "default_password": "changeme"
+    "default_password": "__CHANGE_ME__"
   },
 
   "limits": {
@@ -46,8 +46,8 @@
   },
 
   "security": {
-    "auth_require_ssl": false,
-    "pass_require_ssl": false,
+    "auth_require_ssl": true,
+    "pass_require_ssl": true,
     "cap_timeout": 60,
     "auth_max_attempts": 5,
     "auth_lockout_duration": 300,
@@ -94,7 +94,7 @@
       "enabled": true,
       "hosts": {
         "pyircx-webchat": {
-          "password": "changeme",
+          "password": "__CHANGE_ME__",
           "allowed_ips": [
             "127.0.0.1",
             "::1"
@@ -170,6 +170,14 @@
     "server_role": "standalone",
     "bind_host": "0.0.0.0",
     "bind_port": 7001,
+    "tls": {
+      "enabled": true,
+      "required": true,
+      "verify": true,
+      "cert_file": "/etc/letsencrypt/live/irc.example.com/fullchain.pem",
+      "key_file": "/etc/letsencrypt/live/irc.example.com/privkey.pem",
+      "ca_file": null
+    },
     "links": [],
     "_comment": "Server role: 'standalone', 'trunk' (hub/services host), or 'branch' (leaf)"
   },

@@ -6,6 +6,7 @@ Generate default pyircx_config.json from ServerConfig.DEFAULT
 import sys
 import json
 import re
+import ast
 
 def extract_default_config(pyircx_path):
     """Extract DEFAULT dict from pyircx.py"""
@@ -21,9 +22,9 @@ def extract_default_config(pyircx_path):
     # Extract the dict string
     default_str = match.group(1)
     
-    # Parse it as Python code
+    # Parse as a literal Python structure only (no code execution)
     try:
-        config = eval(default_str)
+        config = ast.literal_eval(default_str)
         return config
     except Exception as e:
         print(f"Error parsing DEFAULT: {e}", file=sys.stderr)

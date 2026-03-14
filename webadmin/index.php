@@ -184,7 +184,7 @@ $csrf_token = $_SESSION['csrf_token'];
                 <div class="card">
                     <div class="card-header">
                         <h3>📝 Registered Nicknames</h3>
-                        <button class="btn btn-primary btn-sm" onclick="openModal('modal-register-nick')">📝 Register Nickname</button>
+                        <button class="btn btn-primary btn-sm" id="btn-open-register-nick">📝 Register Nickname</button>
                     </div>
                     <div class="card-body">
                         <div id="recent-registrations">Loading...</div>
@@ -231,7 +231,7 @@ $csrf_token = $_SESSION['csrf_token'];
                 <div class="card">
                     <div class="card-header">
                         <h3>📋 Registered Channels</h3>
-                        <button class="btn btn-primary btn-sm" onclick="openModal('modal-register-channel')">📝 Register Channel</button>
+                        <button class="btn btn-primary btn-sm" id="btn-open-register-channel">📝 Register Channel</button>
                     </div>
                     <div class="card-body">
                         <div id="channels-list">Loading...</div>
@@ -622,10 +622,10 @@ Type /help for available commands."></textarea>
                                 <small>Each line will be displayed as a separate line in the MOTD. Users see this when they connect or use the /MOTD command.</small>
                             </div>
                             <div style="margin-top: 15px;">
-                                <button type="button" class="btn btn-success" onclick="loadMotd()">
+                                <button type="button" class="btn btn-success" id="btn-load-motd">
                                     <i class="fas fa-download"></i> Load MOTD
                                 </button>
-                                <button type="button" class="btn btn-primary" onclick="saveMotd()">
+                                <button type="button" class="btn btn-primary" id="btn-save-motd">
                                     <i class="fas fa-save"></i> Save MOTD
                                 </button>
                             </div>
@@ -923,6 +923,31 @@ badword3"></textarea>
                                 <label>Bind Port</label>
                                 <input type="number" class="form-control" id="cfg-linking-port" placeholder="7000">
                                 <small>Port for server-to-server connections. Default: 7000. Must not conflict with client ports. Firewall: Allow only trusted server IPs.</small>
+                            </div>
+
+                            <h4 style="margin-top: 20px;">Link TLS</h4>
+                            <div class="form-group">
+                                <label><input type="checkbox" id="cfg-linking-tls-enabled"> Enable TLS for Server Links</label>
+                                <small>Encrypts server-to-server link traffic, including authentication exchange.</small>
+                            </div>
+                            <div class="form-group">
+                                <label><input type="checkbox" id="cfg-linking-tls-verify"> Verify Remote Certificate</label>
+                                <small>Recommended for production. Disable only for controlled testing with self-signed certificates.</small>
+                            </div>
+                            <div class="form-group">
+                                <label>TLS Certificate File</label>
+                                <input type="text" class="form-control" id="cfg-linking-tls-cert" placeholder="/etc/letsencrypt/live/example.com/fullchain.pem">
+                                <small>Certificate file used for incoming link connections.</small>
+                            </div>
+                            <div class="form-group">
+                                <label>TLS Private Key File</label>
+                                <input type="text" class="form-control" id="cfg-linking-tls-key" placeholder="/etc/letsencrypt/live/example.com/privkey.pem">
+                                <small>Private key for incoming link TLS.</small>
+                            </div>
+                            <div class="form-group">
+                                <label>TLS CA File (Optional)</label>
+                                <input type="text" class="form-control" id="cfg-linking-tls-ca" placeholder="/etc/ssl/certs/ca-certificates.crt">
+                                <small>Optional CA bundle for verifying remote certificates.</small>
                             </div>
 
                             <h4 style="margin-top: 20px;">Branch Servers (Leaf Nodes)</h4>
@@ -1548,11 +1573,11 @@ badword3"></textarea>
 
                     <div style="margin-bottom: 20px;">
                         <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 10px;">
-                            <button type="button" class="btn btn-sm btn-default" id="access-tab-owner" onclick="showAccessTab('owner')" style="font-weight: 600;">OWNER (+q)</button>
-                            <button type="button" class="btn btn-sm btn-default" id="access-tab-host" onclick="showAccessTab('host')">HOST (+o)</button>
-                            <button type="button" class="btn btn-sm btn-default" id="access-tab-voice" onclick="showAccessTab('voice')">VOICE (+v)</button>
-                            <button type="button" class="btn btn-sm btn-default" id="access-tab-grant" onclick="showAccessTab('grant')">GRANT</button>
-                            <button type="button" class="btn btn-sm btn-default" id="access-tab-deny" onclick="showAccessTab('deny')">DENY (Ban)</button>
+                            <button type="button" class="btn btn-sm btn-default access-tab-btn" id="access-tab-owner" data-level="owner" style="font-weight: 600;">OWNER (+q)</button>
+                            <button type="button" class="btn btn-sm btn-default access-tab-btn" id="access-tab-host" data-level="host">HOST (+o)</button>
+                            <button type="button" class="btn btn-sm btn-default access-tab-btn" id="access-tab-voice" data-level="voice">VOICE (+v)</button>
+                            <button type="button" class="btn btn-sm btn-default access-tab-btn" id="access-tab-grant" data-level="grant">GRANT</button>
+                            <button type="button" class="btn btn-sm btn-default access-tab-btn" id="access-tab-deny" data-level="deny">DENY (Ban)</button>
                         </div>
 
                         <div id="access-list-container" style="border: 1px solid #ddd; padding: 15px; background: #f9f9f9; min-height: 150px;">
@@ -1561,7 +1586,7 @@ badword3"></textarea>
                                 <div id="access-owner-list" style="margin-top: 10px;"></div>
                                 <div style="margin-top: 10px;">
                                     <input type="text" id="access-owner-mask" class="form-control" style="width: 60%; display: inline-block;" placeholder="Hostmask (e.g., bob!*@*, *!*@*.example.com)">
-                                    <button type="button" class="btn btn-sm btn-primary" onclick="addAccessEntry('owner')" style="margin-left: 10px;">Add</button>
+                                    <button type="button" class="btn btn-sm btn-primary access-add-btn" data-level="owner" style="margin-left: 10px;">Add</button>
                                 </div>
                             </div>
 
@@ -1570,7 +1595,7 @@ badword3"></textarea>
                                 <div id="access-host-list" style="margin-top: 10px;"></div>
                                 <div style="margin-top: 10px;">
                                     <input type="text" id="access-host-mask" class="form-control" style="width: 60%; display: inline-block;" placeholder="Hostmask (e.g., bob!*@*, *!*@*.example.com)">
-                                    <button type="button" class="btn btn-sm btn-primary" onclick="addAccessEntry('host')" style="margin-left: 10px;">Add</button>
+                                    <button type="button" class="btn btn-sm btn-primary access-add-btn" data-level="host" style="margin-left: 10px;">Add</button>
                                 </div>
                             </div>
 
@@ -1579,7 +1604,7 @@ badword3"></textarea>
                                 <div id="access-voice-list" style="margin-top: 10px;"></div>
                                 <div style="margin-top: 10px;">
                                     <input type="text" id="access-voice-mask" class="form-control" style="width: 60%; display: inline-block;" placeholder="Hostmask (e.g., bob!*@*, *!*@*.example.com)">
-                                    <button type="button" class="btn btn-sm btn-primary" onclick="addAccessEntry('voice')" style="margin-left: 10px;">Add</button>
+                                    <button type="button" class="btn btn-sm btn-primary access-add-btn" data-level="voice" style="margin-left: 10px;">Add</button>
                                 </div>
                             </div>
 
@@ -1588,7 +1613,7 @@ badword3"></textarea>
                                 <div id="access-grant-list" style="margin-top: 10px;"></div>
                                 <div style="margin-top: 10px;">
                                     <input type="text" id="access-grant-mask" class="form-control" style="width: 60%; display: inline-block;" placeholder="Hostmask (e.g., bob!*@*, *!*@*.example.com)">
-                                    <button type="button" class="btn btn-sm btn-primary" onclick="addAccessEntry('grant')" style="margin-left: 10px;">Add</button>
+                                    <button type="button" class="btn btn-sm btn-primary access-add-btn" data-level="grant" style="margin-left: 10px;">Add</button>
                                 </div>
                             </div>
 
@@ -1597,7 +1622,7 @@ badword3"></textarea>
                                 <div id="access-deny-list" style="margin-top: 10px;"></div>
                                 <div style="margin-top: 10px;">
                                     <input type="text" id="access-deny-mask" class="form-control" style="width: 60%; display: inline-block;" placeholder="Hostmask (e.g., *!*@*.spam.host)">
-                                    <button type="button" class="btn btn-sm btn-danger" onclick="addAccessEntry('deny')" style="margin-left: 10px;">Add</button>
+                                    <button type="button" class="btn btn-sm btn-danger access-add-btn" data-level="deny" style="margin-left: 10px;">Add</button>
                                 </div>
                             </div>
                         </div>

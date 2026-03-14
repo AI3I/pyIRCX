@@ -451,7 +451,7 @@ WS_HOST=0.0.0.0
 WS_PORT=8765
 IRC_HOST=127.0.0.1
 IRC_PORT=6667
-WEBIRC_PASS=changeme  # Change this!
+WEBIRC_PASS=<generated-webirc-password>
 ```
 
 **Apache HTTPS Proxy** (for wss://):
