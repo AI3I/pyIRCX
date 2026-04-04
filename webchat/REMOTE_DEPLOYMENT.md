@@ -128,23 +128,29 @@ scp webchat/gateway.py root@web.example.com:/opt/pyircx/webchat/
 ```bash
 mkdir -p /etc/pyircx
 cat > /etc/pyircx/webchat.conf << 'EOF'
-# WebSocket Gateway Configuration
-WS_PORT=8765
-WS_HOST=0.0.0.0
-IRC_HOST=irc.example.com
-IRC_PORT=6667
-WEBIRC_PASSWORD=secure-random-password-here
+[websocket]
+host = 0.0.0.0
+port = 8765
+
+[irc]
+host = irc.example.com
+port = 6667
+
+[webirc]
+password = secure-random-password-here
+gateway = pyircx-webchat
+trusted_proxies = 127.0.0.1/32, ::1/128
 EOF
 
 chmod 600 /etc/pyircx/webchat.conf
 ```
 
 **Key settings:**
-- `WS_PORT` - WebSocket port (8765 default, or use 443 for WSS behind proxy)
-- `WS_HOST` - Bind address (0.0.0.0 for all interfaces)
-- `IRC_HOST` - **Your IRC server hostname or IP** (NOT localhost!)
-- `IRC_PORT` - IRC server port (6667 plain, 6697 SSL)
-- `WEBIRC_PASSWORD` - Must match password in IRC server config
+- `[websocket] host` - Bind address (0.0.0.0 for all interfaces)
+- `[websocket] port` - WebSocket port (8765 default, or use 443 for WSS behind proxy)
+- `[irc] host` - **Your IRC server hostname or IP** (NOT localhost!)
+- `[irc] port` - IRC server port (6667 plain, 6697 SSL)
+- `[webirc] password` - Must match password in IRC server config
 
 ---
 
@@ -187,8 +193,7 @@ After=network.target
 Type=simple
 User=pyircx
 Group=pyircx
-EnvironmentFile=/etc/pyircx/webchat.conf
-ExecStart=/usr/bin/python3 /opt/pyircx/webchat/gateway.py
+ExecStart=/usr/bin/python3 /opt/pyircx/webchat/gateway.py --config /etc/pyircx/webchat.conf
 Restart=always
 RestartSec=5
 
@@ -381,7 +386,7 @@ journalctl -u pyircx | grep WEBIRC
 ```
 
 **Verify:**
-- WEBIRC_PASSWORD matches in both configs
+- `[webirc] password` matches in both configs
 - Web server IP is in allowed_ips list
 - IRC server security.webirc.enabled is true
 

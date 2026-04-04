@@ -1,4 +1,4 @@
-# Performance Analysis - pyIRCX v2.0.0
+# Performance Analysis - pyIRCX
 
 ## Executive Summary
 
@@ -13,7 +13,7 @@ pyIRCX is built on Python's asyncio framework for high concurrency and low laten
 
 ### Core Components
 
-pyIRCX v2.0.0 consists of three main components:
+pyIRCX consists of three main components:
 
 1. **IRC Server** (`pyircx.py`) - Core IRC/IRCX protocol server
 2. **Server Linking** (`linking.py`) - Distributed networking (trunk-branch topology)
@@ -252,7 +252,7 @@ Hub + 5 branches (2,000 users each): ~6GB total across 6 processes
 
 **Trunk-and-Branch Network Architecture:**
 
-pyIRCX v2.0.0 implements a **trunk-and-branch topology** (not traditional hub/leaf):
+pyIRCX implements a **trunk-and-branch topology** (not traditional hub/leaf):
 
 ```
                 [Trunk Server]
@@ -819,7 +819,7 @@ grep "Pool exhausted" /var/log/pyircx.log
 
 ## Conclusion
 
-pyIRCX v2.0.0 is **suitable for small to enterprise deployments**:
+pyIRCX is **suitable for small to enterprise deployments**:
 
 ✅ **Excellent for: 100-1,000 users** (single server)
 ✅ **Excellent for: 1,000-5,000 users** (single server or small linked network)
@@ -849,6 +849,6 @@ pyIRCX v2.0.0 is **suitable for small to enterprise deployments**:
 
 ---
 
-**Document Version:** 2.0.0
+**Document Version:** Current release
 **Last Updated:** 2026-01-18
 **Benchmarked On:** Python 3.11, 8-core CPU, 16GB RAM, SSD storage, 1 Gbps network

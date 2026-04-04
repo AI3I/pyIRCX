@@ -16,9 +16,10 @@ from unittest.mock import patch
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
+import api_helpers
 from api_helpers import (
     rate_limit, timed_cache, validate_access_type,
-    validate_pattern, sanitize_sql_pattern, _rate_limits
+    validate_pattern, sanitize_sql_pattern, _rate_limits, _RATE_LIMIT_FILE
 )
 
 
@@ -33,6 +34,15 @@ class TestRateLimit:
     def setup_method(self):
         """Clear rate limit state before each test"""
         _rate_limits.clear()
+        try:
+            os.unlink(_RATE_LIMIT_FILE)
+        except OSError:
+            pass
+        self._shared_rate_limit = api_helpers._check_rate_limit_shared
+        api_helpers._check_rate_limit_shared = lambda *args, **kwargs: None
+
+    def teardown_method(self):
+        api_helpers._check_rate_limit_shared = self._shared_rate_limit
 
     def test_allows_calls_within_limit(self):
         """Test allows calls within limit"""
@@ -175,6 +185,24 @@ class TestTimedCache:
         result_b = cached_func("b")
         assert result_a == "result_a"
         assert result_b == "result_b"
+
+    def test_cache_clear_hook_empties_cache(self):
+        """Test timed_cache exposes a cache_clear hook for invalidation."""
+        call_count = {"n": 0}
+
+        @timed_cache(seconds=60)
+        def cached_func(key):
+            call_count["n"] += 1
+            return f"result_{key}_{call_count['n']}"
+
+        assert cached_func("a") == "result_a_1"
+        assert cached_func("a") == "result_a_1"
+        assert call_count["n"] == 1
+
+        cached_func.cache_clear()
+
+        assert cached_func("a") == "result_a_2"
+        assert call_count["n"] == 2
 
 
 # =============================================================================

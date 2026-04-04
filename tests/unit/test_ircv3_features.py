@@ -81,6 +81,7 @@ def make_mock_server():
     server.users = {}
     server.users_lower = {}
     server.link_manager = None
+    server._pending_remote_whois = {}
     server.stats = {'messages_sent': 0}
     # Reset msgid counter for predictable tests
     pyircx.pyIRCXServer._msgid_counter = 0
@@ -123,6 +124,73 @@ class TestISupportTokens:
     def test_stats_bot_users_message(self):
         assert "stats_bot_users" in SERVER_MESSAGES
         assert "{count}" in SERVER_MESSAGES["stats_bot_users"]
+
+
+@pytest.mark.unit
+class TestWebircHostPresentation:
+    @pytest.mark.asyncio
+    async def test_webirc_updates_host_from_reverse_dns(self):
+        server = make_mock_server()
+        user = make_mock_user()
+        user.registered = False
+        user.ip = "127.0.0.1"
+        user.host = "localhost"
+        user.hostname = "localhost"
+
+        import pyircx
+        pyircx.CONFIG.data = {
+            "security": {
+                "webirc": {
+                    "enabled": True,
+                    "hosts": {
+                        "pyircx-webchat": {
+                            "password": "secret",
+                            "allowed_ips": ["127.0.0.1"],
+                        }
+                    },
+                }
+            }
+        }
+        server.resolve_hostname = AsyncMock(return_value="resolved.example.test")
+
+        await server.handle_webirc(user, ["secret", "pyircx-webchat", "40.129.129.76", "40.129.129.76"])
+
+        assert user.ip == "40.129.129.76"
+        assert user.host == "resolved.example.test"
+        assert user.hostname == "resolved.example.test"
+
+    @pytest.mark.asyncio
+    async def test_webirc_falls_back_to_ip_when_reverse_dns_fails(self):
+        server = make_mock_server()
+        user = make_mock_user()
+        user.registered = False
+        user.ip = "127.0.0.1"
+        user.host = "localhost"
+        user.hostname = "localhost"
+
+        import pyircx
+        pyircx.CONFIG.data = {
+            "security": {
+                "webirc": {
+                    "enabled": True,
+                    "hosts": {
+                        "pyircx-webchat": {
+                            "password": "secret",
+                            "allowed_ips": ["127.0.0.1"],
+                        }
+                    },
+                }
+            }
+        }
+        server.resolve_hostname = AsyncMock(return_value="40.129.129.76")
+
+        await server.handle_webirc(user, ["secret", "pyircx-webchat", "40.129.129.76", "40.129.129.76"])
+
+        assert user.ip == "40.129.129.76"
+        assert user.host == "40.129.129.76"
+        assert user.hostname == "40.129.129.76"
+
+
 
 
 # =============================================================================
@@ -262,6 +330,713 @@ class TestBuildMsgTags:
         assert "account=" in result
 
 
+@pytest.mark.unit
+@pytest.mark.asyncio
+class TestMysticalEntityBroadcasts:
+    """Test admin-issued System/God wildcard messaging."""
+
+    async def test_entity_privmsg_wildcard_broadcasts_to_all_local_users(self):
+        server = make_mock_server()
+        admin = make_mock_user("AdminUser", modes={'a': True})
+        user1 = make_mock_user("UserOne")
+        user2 = make_mock_user("UserTwo")
+        service = make_mock_user("SystemSvc")
+        service.is_virtual = True
+
+        server.users = {
+            admin.nickname: admin,
+            user1.nickname: user1,
+            user2.nickname: user2,
+            service.nickname: service,
+        }
+        server._send_service_msg = AsyncMock()
+
+        await server._handle_mystical_entity(admin, "System", "PRIVMSG * hello everyone")
+
+        user1.send.assert_awaited_once_with(":System!System@test.server.local PRIVMSG * :hello everyone")
+        user2.send.assert_awaited_once_with(":System!System@test.server.local PRIVMSG * :hello everyone")
+        service.send.assert_not_awaited()
+
+    async def test_entity_notice_wildcard_preserves_full_message(self):
+        server = make_mock_server()
+        admin = make_mock_user("AdminUser", modes={'a': True})
+        user1 = make_mock_user("UserOne")
+
+        server.users = {
+            admin.nickname: admin,
+            user1.nickname: user1,
+        }
+        server._send_service_msg = AsyncMock()
+
+        await server._handle_mystical_entity(admin, "God", "NOTICE * this is a full notice")
+
+        user1.send.assert_awaited_once_with(":God!God@test.server.local NOTICE * :this is a full notice")
+
+    async def test_entity_wildcard_broadcast_propagates_to_links(self):
+        server = make_mock_server()
+        admin = make_mock_user("AdminUser", modes={'a': True})
+        user1 = make_mock_user("UserOne")
+        server.users = {
+            admin.nickname: admin,
+            user1.nickname: user1,
+        }
+        server.link_manager = MagicMock()
+        server.link_manager.enabled = True
+        server.link_manager.broadcast_to_servers = AsyncMock()
+        server._send_service_msg = AsyncMock()
+
+        await server._handle_mystical_entity(admin, "System", "PRIVMSG * hello network")
+
+        expected = ":System!System@test.server.local PRIVMSG * :hello network"
+        user1.send.assert_awaited_once_with(expected)
+        server.link_manager.broadcast_to_servers.assert_awaited_once_with(expected)
+
+    async def test_entity_channel_notice_only_fans_out_locally_once_and_propagates(self):
+        server = make_mock_server()
+        admin = make_mock_user("AdminUser", modes={'a': True})
+        local_member = make_mock_user("LocalUser")
+        remote_member = make_mock_user("RemoteUser")
+        remote_member.is_remote = True
+        channel = make_mock_channel("#ops", members={
+            local_member.nickname: local_member,
+            remote_member.nickname: remote_member,
+        })
+        server.channels = {channel.name: channel}
+        server.link_manager = MagicMock()
+        server.link_manager.enabled = True
+        server.link_manager.broadcast_to_servers = AsyncMock()
+        server._send_service_msg = AsyncMock()
+
+        await server._handle_mystical_entity(admin, "God", "NOTICE #ops attention all")
+
+        expected = ":God!God@test.server.local NOTICE #ops :attention all"
+        local_member.send.assert_awaited_once_with(expected)
+        remote_member.send.assert_not_awaited()
+        server.link_manager.broadcast_to_servers.assert_awaited_once_with(expected)
+
+    async def test_entity_kick_propagates_and_updates_channel_state(self):
+        server = make_mock_server()
+        admin = make_mock_user("AdminUser", modes={'a': True})
+        local_member = make_mock_user("LocalUser")
+        target = make_mock_user("Victim")
+        remote_member = make_mock_user("RemoteUser")
+        remote_member.is_remote = True
+        target.channels = {"#ops"}
+        channel = make_mock_channel("#ops", members={
+            local_member.nickname: local_member,
+            target.nickname: target,
+            remote_member.nickname: remote_member,
+        })
+        channel.owners.add(target.nickname)
+        channel.hosts.add(target.nickname)
+        channel.voices.add(target.nickname)
+        channel.gagged.add(target.nickname)
+        server.channels = {channel.name: channel}
+        server.link_manager = MagicMock()
+        server.link_manager.enabled = True
+        server.link_manager.broadcast_to_servers = AsyncMock()
+        server._send_service_msg = AsyncMock()
+
+        await server._handle_mystical_entity(admin, "System", "KICK #ops Victim rule breach")
+
+        expected = ":System!System@test.server.local KICK #ops Victim :rule breach"
+        local_member.send.assert_awaited_once_with(expected)
+        target.send.assert_awaited_once_with(expected)
+        remote_member.send.assert_not_awaited()
+        server.link_manager.broadcast_to_servers.assert_awaited_once_with(expected)
+        assert "Victim" not in channel.members
+        assert "#ops" not in target.channels
+        assert "Victim" not in channel.owners
+        assert "Victim" not in channel.hosts
+        assert "Victim" not in channel.voices
+        assert "Victim" not in channel.gagged
+
+    async def test_entity_kill_local_user_propagates_to_links(self):
+        server = make_mock_server()
+        admin = make_mock_user("AdminUser", modes={'a': True})
+        target = make_mock_user("Victim")
+        target.is_virtual = False
+        target.has_mode = lambda m: False
+        server.users = {target.nickname: target}
+        server.link_manager = MagicMock()
+        server.link_manager.enabled = True
+        server.link_manager.broadcast_to_servers = AsyncMock()
+        server.quit_user = AsyncMock()
+        server._send_service_msg = AsyncMock()
+
+        await server._handle_mystical_entity(admin, "God", "KILL Victim judgment")
+
+        expected = ":God!God@test.server.local KILL Victim :judgment"
+        target.send.assert_awaited_once_with(expected)
+        server.link_manager.broadcast_to_servers.assert_awaited_once_with(expected)
+        server.quit_user.assert_awaited_once_with(target)
+
+    async def test_virtual_service_join_helper_notifies_local_members_and_links_once(self):
+        server = make_mock_server()
+        local_member = make_mock_user("LocalUser")
+        remote_member = make_mock_user("RemoteUser")
+        remote_member.is_remote = True
+        service = make_mock_user("ServiceBot01")
+        service.is_virtual = True
+        service.channels = set()
+        channel = make_mock_channel("#ops", members={
+            local_member.nickname: local_member,
+            remote_member.nickname: remote_member,
+        })
+        server.link_manager = MagicMock()
+        server.link_manager.enabled = True
+        server.link_manager.broadcast_to_servers = AsyncMock()
+
+        await server._join_virtual_service_to_channel(service, channel, "#ops")
+
+        join_msg = ":ServiceBot01!servicebot01@test.host JOIN #ops"
+        mode_msg = ":test.server.local MODE #ops +q ServiceBot01"
+        local_member.send.assert_any_await(join_msg)
+        remote_member.send.assert_not_awaited()
+        assert channel.members["ServiceBot01"] is service
+        assert "ServiceBot01" in channel.owners
+        assert "#ops" in service.channels
+        assert server.link_manager.broadcast_to_servers.await_args_list[0].args == (join_msg,)
+        assert server.link_manager.broadcast_to_servers.await_args_list[1].args == (mode_msg,)
+
+    async def test_entity_invite_uses_virtual_service_join_helper(self):
+        server = make_mock_server()
+        admin = make_mock_user("AdminUser", modes={'a': True})
+        entity = make_mock_user("System", modes={'S': True})
+        entity.is_virtual = True
+        entity.channels = set()
+        local_member = make_mock_user("LocalUser")
+        remote_member = make_mock_user("RemoteUser")
+        remote_member.is_remote = True
+        channel = make_mock_channel("#ops", members={
+            admin.nickname: admin,
+            local_member.nickname: local_member,
+            remote_member.nickname: remote_member,
+        })
+        server.users = {"System": entity}
+        server.servicebots = {}
+        server.get_user = MagicMock(return_value=entity)
+        server.get_channel = MagicMock(return_value=(channel, "#ops"))
+        server.get_reply = MagicMock(return_value=":test.server.local 341 AdminUser System #ops")
+        server.link_manager = MagicMock()
+        server.link_manager.enabled = True
+        server.link_manager.broadcast_to_servers = AsyncMock()
+
+        await server.handle_invite(admin, ["System", "#ops"])
+
+        join_msg = ":System!system@test.host JOIN #ops"
+        mode_msg = ":test.server.local MODE #ops +q System"
+        local_member.send.assert_any_await(join_msg)
+        remote_member.send.assert_not_awaited()
+        admin.send.assert_any_await(":test.server.local 341 AdminUser System #ops")
+        assert channel.members["System"] is entity
+        assert "System" in channel.owners
+        assert server.link_manager.broadcast_to_servers.await_args_list[0].args == (join_msg,)
+        assert server.link_manager.broadcast_to_servers.await_args_list[1].args == (mode_msg,)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+class TestCrossServerServiceRouting:
+    async def test_service_target_names_cover_dispatcher_and_configured_bots(self):
+        server = make_mock_server()
+        targets = server._service_target_names()
+
+        assert "god" in targets
+        assert "servicebot" in targets
+        assert "servicebot01" in targets
+
+    async def test_dispatch_service_target_handles_servicebot_dispatcher(self):
+        server = make_mock_server()
+        user = make_mock_user("AdminUser")
+        server._handle_servicebot_msg = AsyncMock()
+
+        handled = await server._dispatch_service_target(user, "ServiceBot", "HELP")
+
+        assert handled is True
+        server._handle_servicebot_msg.assert_awaited_once_with(user, "HELP", "ServiceBot")
+
+    async def test_linked_wildcard_message_fans_out_to_local_users(self):
+        import linking
+
+        manager = object.__new__(linking.ServerLinkManager)
+        manager.irc_server = make_mock_server()
+        manager.server_role = "branch"
+        manager.broadcast_to_servers = AsyncMock()
+
+        local_user = make_mock_user("LocalUser")
+        local_user_2 = make_mock_user("LocalUser2")
+        remote_user = make_mock_user("RemoteUser")
+        remote_user.is_remote = True
+        service = make_mock_user("ServiceBot01")
+        service.is_virtual = True
+        manager.irc_server.users = {
+            local_user.nickname: local_user,
+            local_user_2.nickname: local_user_2,
+            remote_user.nickname: remote_user,
+            service.nickname: service,
+        }
+
+        upstream = MagicMock()
+        upstream.name = "branch1.testnet.local"
+
+        line = ":RemoteUser!remote@test.host NOTICE * :network broadcast"
+        await manager.handle_prefixed_message(upstream, line)
+
+        local_user.send.assert_awaited_once_with(line)
+        local_user_2.send.assert_awaited_once_with(line)
+        remote_user.send.assert_not_awaited()
+        service.send.assert_not_awaited()
+        manager.broadcast_to_servers.assert_not_awaited()
+
+    async def test_linked_servicebot_message_uses_shared_dispatch(self):
+        import linking
+
+        manager = object.__new__(linking.ServerLinkManager)
+        manager.irc_server = make_mock_server()
+        manager.server_role = "trunk"
+        manager.broadcast_to_servers = AsyncMock()
+        manager.irc_server._service_target_names = MagicMock(return_value={"servicebot01"})
+        manager.irc_server._dispatch_service_target = AsyncMock(return_value=True)
+
+        remote_user = make_mock_user("RemoteUser")
+        remote_user.is_remote = True
+        remote_user.from_server = "branch1.testnet.local"
+        remote_user.server = manager.irc_server
+        manager.irc_server.users = {remote_user.nickname: remote_user}
+
+        upstream = MagicMock()
+        upstream.name = "branch1.testnet.local"
+        upstream.add_user = MagicMock()
+
+        await manager.handle_prefixed_message(
+            upstream,
+            ":RemoteUser!remote@test.host PRIVMSG ServiceBot01 :HELP"
+        )
+
+        manager.irc_server._dispatch_service_target.assert_awaited_once_with(
+            remote_user,
+            "ServiceBot01",
+            "HELP",
+        )
+        manager.broadcast_to_servers.assert_not_awaited()
+
+    async def test_remote_kill_terminates_local_user_on_owning_server(self):
+        import linking
+
+        manager = object.__new__(linking.ServerLinkManager)
+        manager.irc_server = make_mock_server()
+        manager.server_role = "branch"
+        manager.broadcast_to_servers = AsyncMock()
+        manager.irc_server.quit_user = AsyncMock()
+
+        local_target = make_mock_user("Victim")
+        manager.irc_server.users = {local_target.nickname: local_target}
+
+        upstream = MagicMock()
+        upstream.name = "trunk.testnet.local"
+
+        await manager.handle_prefixed_message(
+            upstream,
+            ":Oper!oper@test.host KILL Victim :Policy violation"
+        )
+
+        local_target.send.assert_awaited_once_with(
+            ":test.server.local KILL Victim :Policy violation"
+        )
+        manager.irc_server.quit_user.assert_awaited_once_with(
+            local_target, reason='Killed: Policy violation'
+        )
+
+    async def test_messenger_push_propagates_to_linked_servers(self):
+        server = make_mock_server()
+        admin = make_mock_user("AdminUser", modes={'a': True})
+        local_user = make_mock_user("UserOne")
+        service = make_mock_user("Messenger")
+        service.is_virtual = True
+
+        server.users = {
+            admin.nickname: admin,
+            local_user.nickname: local_user,
+            service.nickname: service,
+        }
+        server.link_manager = MagicMock()
+        server.link_manager.enabled = True
+        server.link_manager.broadcast_to_servers = AsyncMock()
+        server._send_service_msg = AsyncMock()
+
+        await server._messenger_push(admin, "hello network")
+
+        expected = ":Messenger!Messenger@test.server.local PRIVMSG * :[Global] hello network"
+        admin.send.assert_awaited_once_with(expected)
+        local_user.send.assert_awaited_once_with(expected)
+        service.send.assert_not_awaited()
+        server.link_manager.broadcast_to_servers.assert_awaited_once_with(expected)
+
+    async def test_newsflash_push_propagates_to_linked_servers(self):
+        server = make_mock_server()
+        admin = make_mock_user("AdminUser", modes={'a': True})
+        local_user = make_mock_user("UserOne")
+        service = make_mock_user("NewsFlash")
+        service.is_virtual = True
+
+        server.users = {
+            admin.nickname: admin,
+            local_user.nickname: local_user,
+            service.nickname: service,
+        }
+        server.link_manager = MagicMock()
+        server.link_manager.enabled = True
+        server.link_manager.broadcast_to_servers = AsyncMock()
+        server._send_service_msg = AsyncMock()
+
+        await server._newsflash_push(admin, "urgent bulletin")
+
+        expected = ":NewsFlash!NewsFlash@test.server.local NOTICE * :[NEWS] urgent bulletin"
+        admin.send.assert_awaited_once_with(expected)
+        local_user.send.assert_awaited_once_with(expected)
+        service.send.assert_not_awaited()
+        server.link_manager.broadcast_to_servers.assert_awaited_once_with(expected)
+
+    async def test_linked_whisper_uses_case_insensitive_target_lookup(self):
+        import linking
+
+        manager = object.__new__(linking.ServerLinkManager)
+        manager.irc_server = make_mock_server()
+        manager.server_role = "branch"
+        manager.broadcast_to_servers = AsyncMock()
+
+        target_user = make_mock_user("TargetUser")
+        channel = make_mock_channel("#ops", members={target_user.nickname: target_user})
+        manager.irc_server.channels = {channel.name: channel}
+        manager.irc_server.users = {target_user.nickname: target_user}
+        manager.irc_server.users_lower = {target_user.nickname.lower(): target_user.nickname}
+
+        upstream = MagicMock()
+        upstream.name = "trunk.testnet.local"
+
+        line = ":Sender!sender@test.host WHISPER #ops targetuser :quiet hello"
+        await manager.handle_prefixed_message(upstream, line)
+
+        target_user.send.assert_awaited_once_with(line)
+        manager.broadcast_to_servers.assert_not_awaited()
+
+    async def test_linked_whisper_requires_target_membership(self):
+        import linking
+
+        manager = object.__new__(linking.ServerLinkManager)
+        manager.irc_server = make_mock_server()
+        manager.server_role = "trunk"
+        manager.broadcast_to_servers = AsyncMock()
+
+        target_user = make_mock_user("TargetUser")
+        channel = make_mock_channel("#ops", members={})
+        manager.irc_server.channels = {channel.name: channel}
+        manager.irc_server.users = {target_user.nickname: target_user}
+        manager.irc_server.users_lower = {target_user.nickname.lower(): target_user.nickname}
+
+        upstream = MagicMock()
+        upstream.name = "branch1.testnet.local"
+
+        await manager.handle_prefixed_message(
+            upstream,
+            ":Sender!sender@test.host WHISPER #ops TargetUser :quiet hello"
+        )
+
+        target_user.send.assert_not_awaited()
+        manager.broadcast_to_servers.assert_not_awaited()
+
+    async def test_linked_invite_uses_case_insensitive_target_lookup(self):
+        import linking
+
+        manager = object.__new__(linking.ServerLinkManager)
+        manager.irc_server = make_mock_server()
+        manager.server_role = "branch"
+        manager.broadcast_to_servers = AsyncMock()
+
+        target_user = make_mock_user("TargetUser")
+        target_user.invited_to = set()
+        manager.irc_server.users = {target_user.nickname: target_user}
+        manager.irc_server.users_lower = {target_user.nickname.lower(): target_user.nickname}
+        manager.irc_server.channels = {}
+
+        upstream = MagicMock()
+        upstream.name = "trunk.testnet.local"
+
+        line = ":Oper!oper@test.host INVITE targetuser :#ops"
+        await manager.handle_prefixed_message(upstream, line)
+
+        target_user.send.assert_awaited_once_with(line)
+        assert "#ops" in target_user.invited_to
+        manager.broadcast_to_servers.assert_not_awaited()
+
+    async def test_linked_invite_notifies_local_invite_notify_members(self):
+        import linking
+
+        manager = object.__new__(linking.ServerLinkManager)
+        manager.irc_server = make_mock_server()
+        manager.server_role = "branch"
+        manager.broadcast_to_servers = AsyncMock()
+
+        target_user = make_mock_user("TargetUser")
+        target_user.invited_to = set()
+        watcher = make_mock_user("Watcher", enabled_caps={"invite-notify"})
+        inviter = make_mock_user("Oper")
+        channel = make_mock_channel("#ops", members={
+            inviter.nickname: inviter,
+            watcher.nickname: watcher,
+        })
+
+        manager.irc_server.users = {
+            target_user.nickname: target_user,
+            watcher.nickname: watcher,
+            inviter.nickname: inviter,
+        }
+        manager.irc_server.users_lower = {
+            target_user.nickname.lower(): target_user.nickname,
+            watcher.nickname.lower(): watcher.nickname,
+            inviter.nickname.lower(): inviter.nickname,
+        }
+        manager.irc_server.channels = {channel.name: channel}
+
+        await manager.handle_prefixed_message(
+            MagicMock(name="upstream"),
+            ":Oper!oper@test.host INVITE TargetUser :#ops"
+        )
+
+        watcher.send.assert_awaited_once_with(":Oper!oper@test.host INVITE TargetUser #ops")
+
+    async def test_away_notify_only_targets_local_members(self):
+        server = make_mock_server()
+        away_user = make_mock_user("AwayUser")
+        away_user.away_msg = "busy"
+        away_user.channels = {"#ops"}
+        local_watcher = make_mock_user("LocalWatcher", enabled_caps={"away-notify"})
+        remote_watcher = make_mock_user("RemoteWatcher", enabled_caps={"away-notify"})
+        remote_watcher.is_remote = True
+        channel = make_mock_channel("#ops", members={
+            away_user.nickname: away_user,
+            local_watcher.nickname: local_watcher,
+            remote_watcher.nickname: remote_watcher,
+        })
+        server.channels = {channel.name: channel}
+        server.users = {
+            away_user.nickname: away_user,
+            local_watcher.nickname: local_watcher,
+            remote_watcher.nickname: remote_watcher,
+        }
+
+        await server.send_away_notify(away_user)
+
+        local_watcher.send.assert_awaited_once_with(":AwayUser!awayuser@test.host AWAY :busy")
+        remote_watcher.send.assert_not_awaited()
+
+    async def test_linked_away_notifies_local_away_notify_members(self):
+        import linking
+
+        manager = object.__new__(linking.ServerLinkManager)
+        manager.irc_server = make_mock_server()
+        manager.server_role = "branch"
+        manager.broadcast_to_servers = AsyncMock()
+
+        remote_user = make_mock_user("RemoteUser")
+        remote_user.is_remote = True
+        remote_user.channels = {"#ops"}
+        local_watcher = make_mock_user("LocalWatcher", enabled_caps={"away-notify"})
+        channel = make_mock_channel("#ops", members={
+            remote_user.nickname: remote_user,
+            local_watcher.nickname: local_watcher,
+        })
+        manager.irc_server.channels = {channel.name: channel}
+        manager.irc_server.users = {
+            remote_user.nickname: remote_user,
+            local_watcher.nickname: local_watcher,
+        }
+
+        await manager.handle_prefixed_message(
+            MagicMock(name="upstream"),
+            ":RemoteUser!remote@test.host AWAY :stepped out"
+        )
+
+        local_watcher.send.assert_awaited_once_with(":RemoteUser!remoteuser@test.host AWAY :stepped out")
+        assert remote_user.away_msg == "stepped out"
+        manager.broadcast_to_servers.assert_not_awaited()
+
+    async def test_account_notify_only_targets_local_members(self):
+        server = make_mock_server()
+        account_user = make_mock_user("AccountUser")
+        account_user.sasl_account = "AccountUser"
+        account_user.channels = {"#ops"}
+        local_watcher = make_mock_user("LocalWatcher", enabled_caps={"account-notify"})
+        remote_watcher = make_mock_user("RemoteWatcher", enabled_caps={"account-notify"})
+        remote_watcher.is_remote = True
+        channel = make_mock_channel("#ops", members={
+            account_user.nickname: account_user,
+            local_watcher.nickname: local_watcher,
+            remote_watcher.nickname: remote_watcher,
+        })
+        server.channels = {channel.name: channel}
+        server.users = {
+            account_user.nickname: account_user,
+            local_watcher.nickname: local_watcher,
+            remote_watcher.nickname: remote_watcher,
+        }
+
+        await server.send_account_notify(account_user)
+
+        local_watcher.send.assert_awaited_once_with(":AccountUser!accountuser@test.host ACCOUNT AccountUser")
+        remote_watcher.send.assert_not_awaited()
+
+    async def test_chghost_notify_only_targets_local_members(self):
+        server = make_mock_server()
+        changed_user = make_mock_user("ChangedUser")
+        changed_user.username = "newident"
+        changed_user.host = "new.host"
+        changed_user.channels = {"#ops"}
+        local_watcher = make_mock_user("LocalWatcher", enabled_caps={"chghost"})
+        remote_watcher = make_mock_user("RemoteWatcher", enabled_caps={"chghost"})
+        remote_watcher.is_remote = True
+        channel = make_mock_channel("#ops", members={
+            changed_user.nickname: changed_user,
+            local_watcher.nickname: local_watcher,
+            remote_watcher.nickname: remote_watcher,
+        })
+        server.channels = {channel.name: channel}
+        server.users = {
+            changed_user.nickname: changed_user,
+            local_watcher.nickname: local_watcher,
+            remote_watcher.nickname: remote_watcher,
+        }
+
+        await server.send_chghost_notify(changed_user, "oldident", "old.host")
+
+        local_watcher.send.assert_awaited_once_with(":ChangedUser!oldident@old.host CHGHOST newident new.host")
+        remote_watcher.send.assert_not_awaited()
+
+    async def test_linked_account_notifies_local_account_notify_members(self):
+        import linking
+
+        manager = object.__new__(linking.ServerLinkManager)
+        manager.irc_server = make_mock_server()
+        manager.server_role = "branch"
+        manager.broadcast_to_servers = AsyncMock()
+
+        remote_user = make_mock_user("RemoteUser")
+        remote_user.is_remote = True
+        remote_user.channels = {"#ops"}
+        remote_user.sasl_account = None
+        local_watcher = make_mock_user("LocalWatcher", enabled_caps={"account-notify"})
+        channel = make_mock_channel("#ops", members={
+            remote_user.nickname: remote_user,
+            local_watcher.nickname: local_watcher,
+        })
+        manager.irc_server.channels = {channel.name: channel}
+        manager.irc_server.users = {
+            remote_user.nickname: remote_user,
+            local_watcher.nickname: local_watcher,
+        }
+        manager.irc_server.users_lower = {remote_user.nickname.lower(): remote_user.nickname}
+
+        await manager.handle_prefixed_message(
+            MagicMock(name="upstream"),
+            ":RemoteUser!remoteuser@test.host ACCOUNT RemoteUser"
+        )
+
+        local_watcher.send.assert_awaited_once_with(":RemoteUser!remoteuser@test.host ACCOUNT RemoteUser")
+        assert remote_user.sasl_account == "RemoteUser"
+
+    async def test_linked_chghost_notifies_local_chghost_members(self):
+        import linking
+
+        manager = object.__new__(linking.ServerLinkManager)
+        manager.irc_server = make_mock_server()
+        manager.server_role = "branch"
+        manager.broadcast_to_servers = AsyncMock()
+
+        remote_user = make_mock_user("RemoteUser")
+        remote_user.is_remote = True
+        remote_user.channels = {"#ops"}
+        remote_user.username = "oldident"
+        remote_user.host = "old.host"
+        local_watcher = make_mock_user("LocalWatcher", enabled_caps={"chghost"})
+        channel = make_mock_channel("#ops", members={
+            remote_user.nickname: remote_user,
+            local_watcher.nickname: local_watcher,
+        })
+        manager.irc_server.channels = {channel.name: channel}
+        manager.irc_server.users = {
+            remote_user.nickname: remote_user,
+            local_watcher.nickname: local_watcher,
+        }
+        manager.irc_server.users_lower = {remote_user.nickname.lower(): remote_user.nickname}
+
+        await manager.handle_prefixed_message(
+            MagicMock(name="upstream"),
+            ":RemoteUser!oldident@old.host CHGHOST newident new.host"
+        )
+
+        local_watcher.send.assert_awaited_once_with(":RemoteUser!oldident@old.host CHGHOST newident new.host")
+        assert remote_user.username == "newident"
+        assert remote_user.host == "new.host"
+
+    async def test_setname_notify_only_targets_local_members(self):
+        server = make_mock_server()
+        changed_user = make_mock_user("ChangedUser")
+        changed_user.realname = "New Realname"
+        changed_user.channels = {"#ops"}
+        local_watcher = make_mock_user("LocalWatcher", enabled_caps={"setname"})
+        remote_watcher = make_mock_user("RemoteWatcher", enabled_caps={"setname"})
+        remote_watcher.is_remote = True
+        channel = make_mock_channel("#ops", members={
+            changed_user.nickname: changed_user,
+            local_watcher.nickname: local_watcher,
+            remote_watcher.nickname: remote_watcher,
+        })
+        server.channels = {channel.name: channel}
+        server.users = {
+            changed_user.nickname: changed_user,
+            local_watcher.nickname: local_watcher,
+            remote_watcher.nickname: remote_watcher,
+        }
+
+        await server.send_setname_notify(changed_user)
+
+        local_watcher.send.assert_awaited_once_with(":ChangedUser!changeduser@test.host SETNAME :New Realname")
+        remote_watcher.send.assert_not_awaited()
+
+    async def test_linked_setname_notifies_local_setname_members(self):
+        import linking
+
+        manager = object.__new__(linking.ServerLinkManager)
+        manager.irc_server = make_mock_server()
+        manager.server_role = "branch"
+        manager.broadcast_to_servers = AsyncMock()
+
+        remote_user = make_mock_user("RemoteUser")
+        remote_user.is_remote = True
+        remote_user.channels = {"#ops"}
+        remote_user.realname = "Old Name"
+        local_watcher = make_mock_user("LocalWatcher", enabled_caps={"setname"})
+        channel = make_mock_channel("#ops", members={
+            remote_user.nickname: remote_user,
+            local_watcher.nickname: local_watcher,
+        })
+        manager.irc_server.channels = {channel.name: channel}
+        manager.irc_server.users = {
+            remote_user.nickname: remote_user,
+            local_watcher.nickname: local_watcher,
+        }
+        manager.irc_server.users_lower = {remote_user.nickname.lower(): remote_user.nickname}
+
+        await manager.handle_prefixed_message(
+            MagicMock(name="upstream"),
+            ":RemoteUser!remoteuser@test.host SETNAME :Updated Name"
+        )
+
+        local_watcher.send.assert_awaited_once_with(":RemoteUser!remoteuser@test.host SETNAME :Updated Name")
+        assert remote_user.realname == "Updated Name"
+
+
 # =============================================================================
 # STANDARD REPLIES TESTS
 # =============================================================================
@@ -313,6 +1088,44 @@ class TestStandardReplies:
         msg = user.send.call_args[0][0]
         assert "#chan extra" in msg
         assert ":Bad name" in msg
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+class TestSaslAuthenticateFlow:
+    async def test_sasl_continuation_is_not_rate_limited(self):
+        server = make_mock_server()
+        user = make_mock_user(enabled_caps={"sasl"})
+        user.sasl_mechanism = "PLAIN"
+        user.sasl_authenticated = False
+        user.sasl_buffer = ""
+        user.check_rate_limit = MagicMock(return_value=False)
+        server.failed_auth_tracker = MagicMock()
+        server.failed_auth_tracker.is_locked_out.return_value = False
+        server._process_sasl = AsyncMock()
+        server.get_reply = MagicMock(side_effect=lambda code, _user, **kwargs: f"{code}:{kwargs.get('message', '')}")
+        server.SASL_MECHANISMS = {"PLAIN"}
+
+        await server.handle_authenticate(user, ["YXV0aHppZABhdXRoY2lkAHBhc3M="])
+
+        user.send.assert_not_awaited()
+        server._process_sasl.assert_awaited_once_with(user)
+
+    async def test_sasl_start_is_still_rate_limited(self):
+        server = make_mock_server()
+        user = make_mock_user(enabled_caps={"sasl"})
+        user.sasl_mechanism = None
+        user.sasl_authenticated = False
+        user.check_rate_limit = MagicMock(return_value=False)
+        server.failed_auth_tracker = MagicMock()
+        server.failed_auth_tracker.is_locked_out.return_value = False
+        server.get_reply = MagicMock(side_effect=lambda code, _user, **kwargs: f"{code}:{kwargs.get('message', '')}")
+        server.SASL_MECHANISMS = {"PLAIN"}
+
+        await server.handle_authenticate(user, ["PLAIN"])
+
+        user.send.assert_awaited_once()
+        assert user.send.await_args.args[0].startswith("904:")
 
 
 # =============================================================================
@@ -546,6 +1359,103 @@ class TestChathistoryHandler:
 
         # Should only send 50 messages (clamped)
         assert server.send_batched.call_count == 50
+
+
+@pytest.mark.unit
+class TestWhoisLinking:
+    @pytest.fixture
+    def server(self):
+        server = make_mock_server()
+        server.start_batch = AsyncMock(return_value="batch1")
+        server.end_batch = AsyncMock()
+        server.send_batched = AsyncMock()
+        server.get_reply = MagicMock(
+            side_effect=lambda code, recipient, **kwargs: f"reply {code} {kwargs.get('target', '')}"
+        )
+        return server
+
+    @pytest.fixture
+    def user(self):
+        user = make_mock_user(enabled_caps={'batch'})
+        user.rate_limiter = MagicMock()
+        user.rate_limiter.check.return_value = True
+        return user
+
+    @pytest.mark.asyncio
+    async def test_remote_whois_miss_waits_for_link_reply(self, server, user):
+        server.link_manager = MagicMock()
+        server.link_manager.enabled = True
+        server.link_manager.broadcast_to_servers = AsyncMock()
+
+        timeout_task = MagicMock()
+        def fake_create_task(coro):
+            coro.close()
+            return timeout_task
+
+        with patch('pyircx.asyncio.create_task', side_effect=fake_create_task):
+            await server.handle_whois(user, ["RemoteNick"])
+
+        assert server.send_batched.call_count == 0
+        assert server.end_batch.call_count == 0
+        assert len(server._pending_remote_whois) == 1
+
+        request_id, pending = next(iter(server._pending_remote_whois.items()))
+        assert pending['user'] is user
+        assert pending['batch_id'] == "batch1"
+        assert pending['target_nick'] == "RemoteNick"
+        server.link_manager.broadcast_to_servers.assert_awaited_once_with(
+            f"WHOISREQ {request_id} {user.nickname} RemoteNick"
+        )
+
+    @pytest.mark.asyncio
+    async def test_remote_whois_reply_and_done_close_batch(self, server, user):
+        timeout_task = MagicMock()
+        server._pending_remote_whois["req123"] = {
+            'user': user,
+            'batch_id': "batch1",
+            'target_nick': "RemoteNick",
+            'found': False,
+            'timeout_task': timeout_task,
+        }
+
+        handled = await server.handle_remote_whois_reply(
+            "req123", ":test.server.local 311 TestUser RemoteNick ident host * :Real"
+        )
+        assert handled is True
+        server.send_batched.assert_awaited_once_with(
+            user,
+            "batch1",
+            ":test.server.local 311 TestUser RemoteNick ident host * :Real"
+        )
+
+        finished = await server.handle_remote_whois_done("req123", found=True)
+        assert finished is True
+        timeout_task.cancel.assert_called_once()
+        server.end_batch.assert_awaited_once_with(user, "batch1")
+        assert "req123" not in server._pending_remote_whois
+
+    @pytest.mark.asyncio
+    async def test_remote_whois_done_not_found_sends_401_and_318(self, server, user):
+        timeout_task = MagicMock()
+        server._pending_remote_whois["req404"] = {
+            'user': user,
+            'batch_id': "batch1",
+            'target_nick': "MissingNick",
+            'found': False,
+            'timeout_task': timeout_task,
+        }
+
+        finished = await server.handle_remote_whois_done("req404", found=False)
+
+        assert finished is True
+        timeout_task.cancel.assert_called_once()
+        assert server.send_batched.await_args_list[0].args == (
+            user, "batch1", "reply 401 MissingNick"
+        )
+        assert server.send_batched.await_args_list[1].args == (
+            user, "batch1", "reply 318 MissingNick"
+        )
+        server.end_batch.assert_awaited_once_with(user, "batch1")
 
 
 # =============================================================================

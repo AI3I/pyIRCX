@@ -3,7 +3,7 @@
 **A production-ready Python implementation of the IRCX protocol — the modern IRCX server for distributed chat networks**
 
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![Version](https://img.shields.io/badge/version-2.0.0-brightgreen.svg)](#)
+[![Version](https://img.shields.io/badge/version-version.json-brightgreen.svg)](version.json)
 [![Tests](https://img.shields.io/badge/tests-243%20passing-brightgreen.svg)](#testing)
 
 ---
@@ -38,9 +38,9 @@ If you remember the days of **Microsoft Comic Chat**, chat rooms with real nicks
 
 > **Active Development:** pyIRCX is under active development with frequent updates, enhancements, and bug fixes. New features, security improvements, and performance optimizations are released regularly. See [CHANGELOG.md](CHANGELOG.md) for detailed release notes and version history.
 
-**Current Version:** 2.0.0 (friendly, modern IRCX experience)
+**Current Version:** See [version.json](version.json) for the canonical release metadata.
 
-**What's New in v2.0.0:**
+**Highlights in the current major release:**
 - 🎨 **Personalized Messaging** - ~185+ friendly, conversational messages throughout the system
 - 📚 **Enhanced Help System** - 100% command coverage with examples and fuzzy matching
 - ⚡ **Command Aliases** - 12 shortcuts for faster typing (/J, /P, /W, etc.)
@@ -458,12 +458,19 @@ sudo systemctl enable --now pyircx-webchat
 ```
 
 **Configuration** (`/etc/pyircx/webchat.conf`):
-```bash
-WS_HOST=0.0.0.0
-WS_PORT=8765
-IRC_HOST=127.0.0.1
-IRC_PORT=6667
-WEBIRC_PASS=<generated-webirc-password>
+```ini
+[websocket]
+host = 0.0.0.0
+port = 8765
+
+[irc]
+host = 127.0.0.1
+port = 6667
+
+[webirc]
+password = <generated-webirc-password>
+gateway = pyircx-webchat
+trusted_proxies = 127.0.0.1/32, ::1/128
 ```
 
 **Apache HTTPS Proxy** (for wss://):
@@ -780,7 +787,7 @@ python3 -m py_compile pyircx.py linking.py
 <p align="center">
   <i>Bringing back the chat rooms of yesterday, with the technology of today.</i>
   <br><br>
-  <b>pyIRCX 2.0.0</b> — The production-ready IRCX server for distributed networks
+  <b>pyIRCX</b> — The production-ready IRCX server for distributed networks
   <br><br>
   ⭐ <b>Star this project on GitHub if you find it useful!</b> ⭐
 </p>

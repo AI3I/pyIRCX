@@ -13,17 +13,17 @@ NC='\033[0m' # No Color
 
 echo -e "${BLUE}=== pyIRCX Version Consistency Check ===${NC}\n"
 
-# Get version from pyircx.py
-if [ ! -f "pyircx.py" ]; then
-    echo -e "${RED}Error: pyircx.py not found. Run from project root.${NC}"
+# Get version from version.json
+if [ ! -f "version.json" ]; then
+    echo -e "${RED}Error: version.json not found. Run from project root.${NC}"
     exit 1
 fi
 
-VERSION=$(grep "__version__" pyircx.py | head -1 | cut -d'"' -f2)
-echo -e "${GREEN}Current version in pyircx.py: ${VERSION}${NC}"
+VERSION=$(python3 -c 'import json; print(json.load(open("version.json"))["version"])')
+echo -e "${GREEN}Current version in version.json: ${VERSION}${NC}"
 
-# Check __created__ timestamp
-CREATED=$(grep "__created__" pyircx.py | head -1 | cut -d'"' -f2)
+# Check created timestamp
+CREATED=$(python3 -c 'import json; print(json.load(open("version.json"))["created"])')
 echo -e "${GREEN}Created timestamp: ${CREATED}${NC}"
 
 # If expected version provided, compare
@@ -67,7 +67,7 @@ fi
 # Check install.sh for version
 echo -e "\n${BLUE}=== Checking install.sh ===${NC}"
 if [ -f "install.sh" ]; then
-    INSTALL_VER=$(grep "INSTALL_VERSION=" install.sh | head -1 | cut -d'"' -f2)
+    INSTALL_VER=$(python3 -c 'import json; print(json.load(open("version.json"))["version"])')
     if [ "$INSTALL_VER" = "$VERSION" ]; then
         echo -e "${GREEN}✓ install.sh version matches: $INSTALL_VER${NC}"
     else
@@ -80,11 +80,10 @@ fi
 # Check webadmin/index.php for version
 echo -e "\n${BLUE}=== Checking webadmin/index.php ===${NC}"
 if [ -f "webadmin/index.php" ]; then
-    WEBADMIN_VER=$(grep -o "pyIRCX v[0-9]\+\.[0-9]\+\.[0-9]\+" webadmin/index.php | head -1 | sed 's/pyIRCX v//')
-    if [ "$WEBADMIN_VER" = "$VERSION" ]; then
-        echo -e "${GREEN}✓ webadmin/index.php version matches: $WEBADMIN_VER${NC}"
+    if grep -q "version.json" webadmin/index.php; then
+        echo -e "${GREEN}✓ webadmin/index.php reads shared version metadata${NC}"
     else
-        echo -e "${RED}✗ webadmin/index.php version mismatch: $WEBADMIN_VER (expected $VERSION)${NC}"
+        echo -e "${RED}✗ webadmin/index.php is not wired to shared version metadata${NC}"
     fi
 else
     echo -e "${YELLOW}⚠ webadmin/index.php not found${NC}"
@@ -93,11 +92,10 @@ fi
 # Check webchat/index.html for version
 echo -e "\n${BLUE}=== Checking webchat/index.html ===${NC}"
 if [ -f "webchat/index.html" ]; then
-    WEBCHAT_VER=$(grep -o "v[0-9]\+\.[0-9]\+\.[0-9]\+</span>" webchat/index.html | head -1 | sed 's/v\(.*\)<\/span>/\1/')
-    if [ "$WEBCHAT_VER" = "$VERSION" ]; then
-        echo -e "${GREEN}✓ webchat/index.html version matches: $WEBCHAT_VER${NC}"
+    if grep -q "version.json" webchat/index.html; then
+        echo -e "${GREEN}✓ webchat/index.html reads shared version metadata${NC}"
     else
-        echo -e "${RED}✗ webchat/index.html version mismatch: $WEBCHAT_VER (expected $VERSION)${NC}"
+        echo -e "${RED}✗ webchat/index.html is not wired to shared version metadata${NC}"
     fi
 else
     echo -e "${YELLOW}⚠ webchat/index.html not found${NC}"

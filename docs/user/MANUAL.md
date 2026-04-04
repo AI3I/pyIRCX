@@ -1,6 +1,6 @@
 # pyIRCX Server Manual
 
-**Version:** 1.2.0
+**Version:** Current release (see [`../../version.json`](../../version.json))
 **Last Updated:** 2026-01-16
 
 ---

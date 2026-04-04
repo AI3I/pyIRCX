@@ -1,6 +1,5 @@
 {
   "_comment": "pyIRCX Configuration File - Organized to match WebAdmin interface",
-
   "server": {
     "name": "irc.local",
     "network": "IRCX Network",
@@ -14,7 +13,6 @@
       "Enjoy your stay!"
     ]
   },
-
   "network": {
     "listen_addr": "0.0.0.0",
     "listen_ports": [
@@ -24,7 +22,6 @@
     "enable_ipv6": true,
     "resolve_hostnames": true
   },
-
   "admin": {
     "loc1": "pyIRCX Administration",
     "loc2": "Network Operations",
@@ -32,7 +29,6 @@
     "default_username": "admin",
     "default_password": "__CHANGE_ME__"
   },
-
   "limits": {
     "max_users": 10000,
     "max_channels": 2500,
@@ -44,7 +40,6 @@
     "msg_length": 512,
     "nick_change_cooldown": 60
   },
-
   "security": {
     "auth_require_ssl": true,
     "pass_require_ssl": true,
@@ -103,7 +98,6 @@
       }
     }
   },
-
   "services": {
     "enabled": true,
     "mode": "local",
@@ -112,12 +106,10 @@
     "servicebot_count": 10,
     "servicebot_max_channels": 10
   },
-
   "system": {
     "nick": "System",
     "ident": "System"
   },
-
   "servicebot": {
     "enabled": true,
     "profanity_filter": {
@@ -146,7 +138,6 @@
       "repeat_action": "warn"
     }
   },
-
   "ssl": {
     "enabled": false,
     "ports": [
@@ -164,7 +155,6 @@
       1
     ]
   },
-
   "linking": {
     "enabled": false,
     "server_role": "standalone",
@@ -181,24 +171,20 @@
     "links": [],
     "_comment": "Server role: 'standalone', 'trunk' (hub/services host), or 'branch' (leaf)"
   },
-
   "database": {
     "path": "pyircx.db",
     "pool_size": 10
   },
-
   "transcript": {
     "enabled": true,
     "directory": "transcripts",
     "max_lines": 10000,
     "format": "[{timestamp}] {event}"
   },
-
   "persistence": {
     "auto_save": true,
     "save_interval": 300
   },
-
   "messages": {
     "default_type": "NOTICE",
     "category_overrides": {

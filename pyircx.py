@@ -6,10 +6,8 @@ An async IRC/IRCX server implementation with database-backed authentication,
 channel persistence, flood protection, and staff management features.
 """
 
-# Version info - updated with each release
-__version__ = "2.0.0"
-__version_label__ = "pyIRCX"
-__created__ = "Sat Jan 25 02:24:37 PM EST 2026"
+# Version info - sourced from version.json
+from version import VERSION as __version__, VERSION_LABEL as __version_label__, CREATED as __created__
 
 import asyncio
 import aiosqlite
@@ -291,7 +289,7 @@ class pyIRCXServer:
 
     # Command aliases - short forms and IRCv3 equivalents mapped to full commands
     COMMAND_ALIASES = {
-        'J': 'JOIN', 'P': 'PART', 'W': 'WHOIS', 'M': 'MSG', 'N': 'NICK',
+        'J': 'JOIN', 'P': 'PART', 'W': 'WHOIS', 'M': 'PRIVMSG', 'N': 'NICK',
         'Q': 'QUIT', 'T': 'TOPIC', 'K': 'KICK', 'I': 'INVITE', 'L': 'LIST',
         'WW': 'WHOWAS', 'WH': 'WHISPER', 'H': 'HELP',
         'WATCH': 'MONITOR',   # IRCX WATCH -> IRCv3 MONITOR (both syntaxes supported)
@@ -392,6 +390,7 @@ class pyIRCXServer:
 
         # WATCH: maps nickname (lowercase) -> set of User objects watching that nick
         self.watchers = {}
+        self._pending_remote_whois = {}  # request_id -> pending cross-server WHOIS state
 
         self.servicebots = {}  # ServiceBot instances
         self.channel_monitors = {}  # Channel name -> ServiceBotMonitor
@@ -491,6 +490,239 @@ class pyIRCXServer:
                 flags += "*"
 
         return flags
+
+    async def _build_whois_replies(self, viewer, target):
+        """Build the full WHOIS numeric reply set for a target user."""
+        replies = []
+
+        display_host = mask_host(target.host, viewer.is_staff())
+        replies.append(self.get_reply(
+            "311", viewer, target=target.nickname, ident=target.username,
+            host=display_host, real=target.realname
+        ))
+
+        if target.channels:
+            chan_list = " ".join(target.channels)
+            replies.append(self.get_reply(
+                "319", viewer, target=target.nickname, channels=chan_list
+            ))
+
+        replies.append(self.get_reply("312", viewer, target=target.nickname))
+
+        if target.has_mode('S'):
+            role = "has an omnipresence"
+        elif target.has_mode('G'):
+            role = "is watching over you"
+        elif target.is_service():
+            role = "is an IRC service"
+        elif target.has_mode('a'):
+            role = "is an IRC administrator"
+        elif target.has_mode('o'):
+            role = "is an IRC operator"
+        elif target.has_mode('g'):
+            role = "is an IRC guide"
+        else:
+            role = None
+
+        if role:
+            replies.append(self.get_reply(
+                "313", viewer, target=target.nickname, role=role
+            ))
+
+        if target.has_mode('r'):
+            replies.append(self.get_reply(
+                "307", viewer, target=target.nickname,
+                message=SERVER_MESSAGES['whois_identified']
+            ))
+
+        if target.has_mode('b'):
+            replies.append(self.get_reply("335", viewer, target=target.nickname))
+
+        if target.away_msg:
+            replies.append(self.get_reply(
+                "301", viewer, target=target.nickname, message=target.away_msg
+            ))
+
+        idle = int(time.time() - target.last_activity)
+        replies.append(self.get_reply(
+            "317", viewer, target=target.nickname, idle=idle,
+            signon=target.signon_time
+        ))
+
+        if viewer.is_staff():
+            ip_info = target.ip
+            try:
+                hostname = await asyncio.wait_for(
+                    asyncio.get_event_loop().run_in_executor(
+                        None, socket.gethostbyaddr, target.ip
+                    ),
+                    timeout=2.0
+                )
+                ip_info = f"{target.ip} ({hostname[0]})"
+            except (socket.herror, socket.gaierror, asyncio.TimeoutError, OSError):
+                pass
+            replies.append(self.get_reply(
+                "320", viewer, target=target.nickname, ip=ip_info
+            ))
+
+        replies.append(self.get_reply("318", viewer, target=target.nickname))
+        return replies
+
+    async def _remote_whois_timeout(self, request_id):
+        """Expire a pending cross-server WHOIS lookup."""
+        await asyncio.sleep(0.75)
+
+        pending = self._pending_remote_whois.pop(request_id, None)
+        if not pending:
+            return
+
+        user = pending['user']
+        batch_id = pending['batch_id']
+        if not pending.get('found'):
+            await self.send_batched(user, batch_id, self.get_reply(
+                "401", user, target=pending['target_nick']
+            ))
+            await self.send_batched(user, batch_id, self.get_reply(
+                "318", user, target=pending['target_nick']
+            ))
+        await self.end_batch(user, batch_id)
+
+    async def _start_remote_whois_lookup(self, user, batch_id, target_nick):
+        """Dispatch a WHOIS lookup to linked servers and track the pending batch."""
+        request_id = uuid.uuid4().hex[:8]
+        timeout_task = asyncio.create_task(self._remote_whois_timeout(request_id))
+        self._pending_remote_whois[request_id] = {
+            'user': user,
+            'batch_id': batch_id,
+            'target_nick': target_nick,
+            'found': False,
+            'timeout_task': timeout_task,
+        }
+        await self.link_manager.broadcast_to_servers(
+            f"WHOISREQ {request_id} {user.nickname} {target_nick}"
+        )
+
+    async def handle_remote_whois_reply(self, request_id, message):
+        """Attach a routed WHOIS numeric to a pending local request."""
+        pending = self._pending_remote_whois.get(request_id)
+        if not pending:
+            return False
+
+        pending['found'] = True
+        await self.send_batched(pending['user'], pending['batch_id'], message)
+        return True
+
+    async def handle_remote_whois_done(self, request_id, found=True):
+        """Complete a pending routed WHOIS request."""
+        pending = self._pending_remote_whois.pop(request_id, None)
+        if not pending:
+            return False
+
+        timeout_task = pending.get('timeout_task')
+        if timeout_task:
+            timeout_task.cancel()
+
+        user = pending['user']
+        batch_id = pending['batch_id']
+        if not found and not pending.get('found'):
+            await self.send_batched(user, batch_id, self.get_reply(
+                "401", user, target=pending['target_nick']
+            ))
+            await self.send_batched(user, batch_id, self.get_reply(
+                "318", user, target=pending['target_nick']
+            ))
+
+        await self.end_batch(user, batch_id)
+        return True
+
+    def _service_target_names(self):
+        """Return all nicknames and aliases that should dispatch to services."""
+        targets = {
+            'system', 'god',
+            'registrar', 'messenger', 'newsflash',
+            'nickserv', 'chanserv', 'memoserv',
+            'servicebot',
+        }
+        targets.update(name.lower() for name in self.OTHER_SERVICES)
+        bot_count = CONFIG.get('services', 'servicebot_count', default=10)
+        for i in range(1, bot_count + 1):
+            targets.add(f"servicebot{i:02d}")
+        servicebots = getattr(self, 'servicebots', {})
+        targets.update(bot.lower() for bot in servicebots.keys())
+        return targets
+
+    async def _dispatch_service_target(self, user, target, text):
+        """Handle service-style targets using the same path for local and linked users."""
+        target_lower = target.lower()
+
+        if target_lower in ('system', 'god'):
+            entity_name = 'System' if target_lower == 'system' else 'God'
+            if not user.has_mode('a'):
+                await self._mystical_entity_random_response(user, entity_name)
+                return True
+            await self._handle_mystical_entity(user, entity_name, text)
+            return True
+
+        if target_lower in ('registrar', 'nickserv', 'chanserv'):
+            await self._handle_registrar_msg(user, text)
+            return True
+
+        if target_lower in ('messenger', 'memoserv'):
+            await self._handle_messenger_msg(user, text)
+            return True
+
+        if target_lower == 'newsflash':
+            await self._handle_newsflash_msg(user, text)
+            return True
+
+        if target_lower in self.OTHER_SERVICES:
+            service_name = self.OTHER_SERVICES[target_lower]
+            await self._send_service_msg(service_name, user, "svc_alias_title", service_name=service_name)
+            await self._send_service_msg(service_name, user, "svc_alias_implemented")
+            await self._send_service_msg(service_name, user, "svc_alias_available")
+            await self._send_service_msg(service_name, user, "svc_alias_registrar")
+            await self._send_service_msg(service_name, user, "svc_alias_chanserv")
+            await self._send_service_msg(service_name, user, "svc_alias_messenger")
+            await self._send_service_msg(service_name, user, "svc_alias_newsflash")
+            await self._send_service_msg(service_name, user, "svc_alias_servicebot")
+            await self._send_service_msg(service_name, user, "svc_alias_full_list")
+            return True
+
+        if target_lower == 'servicebot':
+            await self._handle_servicebot_msg(user, text, "ServiceBot")
+            return True
+
+        for botname in getattr(self, 'servicebots', {}):
+            if target_lower == botname.lower():
+                await self._handle_servicebot_msg(user, text, botname)
+                return True
+
+        return False
+
+    async def _join_virtual_service_to_channel(self, service_user, channel, chan_name):
+        """Join a local virtual service to a channel and propagate that state cleanly."""
+        channel.members[service_user.nickname] = service_user
+        service_user.channels.add(chan_name)
+        channel.owners.add(service_user.nickname)
+
+        join_msg = f":{service_user.prefix()} JOIN {chan_name}"
+        mode_msg = f":{self.servername} MODE {chan_name} +q {service_user.nickname}"
+
+        local_tasks = []
+        for member in channel.members.values():
+            if not member.is_remote:
+                local_tasks.append(member.send(join_msg))
+        await asyncio.gather(*local_tasks, return_exceptions=True)
+
+        local_mode_tasks = []
+        for member in channel.members.values():
+            if not member.is_remote:
+                local_mode_tasks.append(member.send(mode_msg))
+        await asyncio.gather(*local_mode_tasks, return_exceptions=True)
+
+        if self.link_manager and self.link_manager.enabled:
+            await self.link_manager.broadcast_to_servers(join_msg)
+            await self.link_manager.broadcast_to_servers(mode_msg)
 
     def get_clone_original(self, channel_name):
         """Get the original channel for a potential clone name.
@@ -894,7 +1126,7 @@ class pyIRCXServer:
         logger.info(get_log_message("server_header"))
 
         # Validate config file permissions for security
-        config_path = '/etc/pyircx/pyircx_config.json'
+        config_path = os.path.abspath(getattr(CONFIG, 'config_file', 'pyircx_config.json'))
         try:
             import stat
             st = os.stat(config_path)
@@ -907,7 +1139,10 @@ class pyIRCXServer:
                 logger.error(get_log_message("config_permissions_fix"))
                 logger.error(get_log_message("server_header"))
             elif mode & stat.S_IRGRP or mode & stat.S_IWGRP:
-                logger.warning(get_log_message("config_group_readable", file=config_path))
+                if os.path.abspath(config_path) == '/etc/pyircx/pyircx_config.json':
+                    logger.info(get_log_message("config_group_readable", file=config_path))
+                else:
+                    logger.warning(get_log_message("config_group_readable", file=config_path))
         except FileNotFoundError:
             pass  # Using alternate config location
         except Exception as e:
@@ -1190,6 +1425,8 @@ class pyIRCXServer:
 
     async def load_registered_channel(self, channel_name):
         """Load a registered channel from database if it exists"""
+        if not self.db_pool:
+            return None
         try:
             async with self.db_pool.connection() as db:
                 # Check registered_channels table
@@ -1826,7 +2063,8 @@ class pyIRCXServer:
             return
 
         elif cmd == "QUIT":
-            await self.quit_user(user)
+            reason = params[0].lstrip(':') if params else None
+            await self.quit_user(user, reason=reason)
             return  # Exit dispatch to break the read loop
 
         elif cmd == "ADMIN":
@@ -2004,7 +2242,12 @@ class pyIRCXServer:
             # Update user's IP and hostname to the real client values
             old_ip = user.ip
             user.ip = str(ip_obj)
-            user.hostname = hostname if hostname != client_ip else str(ip_obj)
+            if hostname != client_ip:
+                user.hostname = hostname
+                user.host = hostname
+            else:
+                user.hostname = await self.resolve_hostname(user.ip)
+                user.host = user.hostname
             user.webirc_gateway = gateway
             logger.info(get_log_message("webirc_spoofed", gateway=gateway, old_ip=old_ip, new_ip=user.ip, hostname=user.hostname))
         except ValueError:
@@ -2326,15 +2569,11 @@ class pyIRCXServer:
         # Check if we need to route to services hub (centralized services mode)
         services_mode = self.services_mode
         is_services_hub = self.is_services_hub
-
-        # List of service names that should be routed
-        service_names = ['system', 'registrar', 'messenger', 'newsflash',
-                        'nickserv', 'chanserv', 'memoserv'] + \
-                       [bot.lower() for bot in self.servicebots.keys()]
+        service_targets = self._service_target_names()
 
         # If we're in centralized mode and NOT the hub, route to hub
         if services_mode == 'centralized' and not is_services_hub:
-            if target.lower() in service_names:
+            if target.lower() in service_targets:
                 # Route to services hub
                 if self.link_manager and self.link_manager.enabled:
                     source = f":{user.prefix()}"
@@ -2349,65 +2588,8 @@ class pyIRCXServer:
                         await user.send(self.get_reply("912", user, message=SERVER_MESSAGES['services_trunk_offline']))
                         return
 
-        # System and God - Admin-controllable mystical entities
-        if target.lower() in ['system', 'god']:
-            # Normalize entity name to proper capitalization
-            entity_name = 'System' if target.lower() == 'system' else 'God'
-
-            # Only IRC administrators can command these entities
-            if not user.has_mode('a'):
-                # Non-admins get random funny responses
-                await self._mystical_entity_random_response(user, entity_name)
-                return
-
-            # Admin commands: PRIVMSG, NOTICE, KICK, KILL, HELP
-            await self._handle_mystical_entity(user, entity_name, text)
+        if await self._dispatch_service_target(user, target, text):
             return
-
-        # Route messages to services
-        if target.lower() == 'registrar':
-            await self._handle_registrar_msg(user, text)
-            return
-        if target.lower() == 'messenger':
-            await self._handle_messenger_msg(user, text)
-            return
-        if target.lower() == 'newsflash':
-            await self._handle_newsflash_msg(user, text)
-            return
-
-        # Traditional IRC service aliases
-        if target.lower() == 'nickserv':
-            # NickServ → Registrar (nickname registration)
-            await self._handle_registrar_msg(user, text)
-            return
-        if target.lower() == 'chanserv':
-            # ChanServ → Registrar (channel registration)
-            await self._handle_registrar_msg(user, text)
-            return
-        if target.lower() == 'memoserv':
-            # MemoServ → Messenger (offline messages)
-            await self._handle_messenger_msg(user, text)
-            return
-
-        # Other service aliases - provide help information
-        if target.lower() in self.OTHER_SERVICES:
-            service_name = self.OTHER_SERVICES[target.lower()]
-            await self._send_service_msg(service_name, user, "svc_alias_title", service_name=service_name)
-            await self._send_service_msg(service_name, user, "svc_alias_implemented")
-            await self._send_service_msg(service_name, user, "svc_alias_available")
-            await self._send_service_msg(service_name, user, "svc_alias_registrar")
-            await self._send_service_msg(service_name, user, "svc_alias_chanserv")
-            await self._send_service_msg(service_name, user, "svc_alias_messenger")
-            await self._send_service_msg(service_name, user, "svc_alias_newsflash")
-            await self._send_service_msg(service_name, user, "svc_alias_servicebot")
-            await self._send_service_msg(service_name, user, "svc_alias_full_list")
-            return
-
-        # Check if target is a ServiceBot (case-insensitive)
-        for botname in self.servicebots:
-            if target.lower() == botname.lower():
-                await self._handle_servicebot_msg(user, text, botname)
-                return
 
         source = f":{user.prefix()}"
         out = f"{source} {cmd} {target} {params[1] + ' ' if cmd in ['WHISPER', 'DATA'] and len(params) > 2 else ''}:{text}"
@@ -2457,9 +2639,19 @@ class pyIRCXServer:
 
             # Check if recipient is a remote user
             if recipient.is_remote:
-                # Route to linked servers for remote user delivery
-                if self.link_manager and self.link_manager.enabled:
-                    await self.link_manager.broadcast_to_servers(out)
+                # Route to the owning server when it is still directly reachable.
+                if self.link_manager and self.link_manager.enabled and recipient.from_server:
+                    target_server = self.link_manager.servers.get(recipient.from_server)
+                    if target_server and target_server.is_direct:
+                        await target_server.send(tag_prefix + out if tag_prefix else out)
+                    else:
+                        self.users.pop(recipient.nickname, None)
+                        self.users_lower.pop(recipient.nickname.lower(), None)
+                        await user.send(self.get_reply("401", user, target=target))
+                        return
+                else:
+                    await user.send(self.get_reply("401", user, target=target))
+                    return
             else:
                 # Local user - send with appropriate tags based on caps
                 if 'message-tags' in recipient.enabled_caps:
@@ -2566,7 +2758,7 @@ class pyIRCXServer:
             # Propagate channel message to linked servers (if not a remote user)
             if self.link_manager and self.link_manager.enabled:
                 if not (user.is_remote):
-                    await self.link_manager.broadcast_to_servers(chan_out)
+                    await self.link_manager.broadcast_to_servers(tag_prefix + chan_out if tag_prefix else chan_out)
             self.stats['messages_sent'] += 1
 
             # Track messages by channel (current session and all-time)
@@ -2594,13 +2786,8 @@ class pyIRCXServer:
             if cmd == "PRIVMSG":  # Only check regular messages, not notices
                 await self._check_servicebot_violations(channel, user, text)
         else:
-            # Target not found locally - try routing to linked servers
-            if self.link_manager and self.link_manager.enabled:
-                # Route to all linked servers (they'll determine if they have the target)
-                await self.link_manager.broadcast_to_servers(out)
-            else:
-                # No linked servers or target not found anywhere
-                await user.send(self.get_reply("401", user, target=target))
+            # Unknown nick: linked users are synchronized in-memory, so failing local lookup is final.
+            await user.send(self.get_reply("401", user, target=target))
 
     async def handle_tagmsg(self, user, params):
         """Handle TAGMSG - message with tags only, no text content.
@@ -3007,78 +3194,15 @@ class pyIRCXServer:
             if not target:
                 # Route WHOIS query to linked servers if target not found locally
                 if self.link_manager and self.link_manager.enabled:
-                    whois_msg = f":{user.prefix()} WHOIS {target_nick}"
-                    await self.link_manager.broadcast_to_servers(whois_msg)
-                # Still send error to user (remote server will send replies directly if found)
+                    await self._start_remote_whois_lookup(user, batch_id, target_nick)
+                    continue
                 await self.send_batched(user, batch_id, self.get_reply("401", user, target=target_nick))
+                await self.send_batched(user, batch_id, self.get_reply("318", user, target=target_nick))
                 await self.end_batch(user, batch_id)
                 continue
-            # Apply host masking (staff see real, non-staff see masked)
-            display_host = mask_host(target.host, user.is_staff())
-            await self.send_batched(user, batch_id, self.get_reply("311", user, target=target.nickname, ident=target.username,
-                                     host=display_host, real=target.realname))
-            if target.channels:
-                chan_list = " ".join(target.channels)
-                await self.send_batched(user, batch_id, self.get_reply(
-                    "319", user, target=target.nickname, channels=chan_list))
-            await self.send_batched(user, batch_id, self.get_reply("312", user, target=target.nickname))
 
-            # Mystical and staff roles (priority order)
-            if target.has_mode('S'):  # Omnipresent System (undeclared)
-                role = "has an omnipresence"
-            elif target.has_mode('G'):  # Divine God (undeclared)
-                role = "is watching over you"
-            elif target.is_service():  # Regular services
-                role = "is an IRC service"
-            elif target.has_mode('a'):
-                role = "is an IRC administrator"
-            elif target.has_mode('o'):
-                role = "is an IRC operator"
-            elif target.has_mode('g'):
-                role = "is an IRC guide"
-            else:
-                role = None
-            if role:
-                await self.send_batched(user, batch_id, self.get_reply(
-                    "313", user, target=target.nickname, role=role))
-
-            # Show registered nickname status
-            if target.has_mode('r'):
-                await self.send_batched(user, batch_id, self.get_reply("307", user, target=target.nickname, message=SERVER_MESSAGES['whois_identified']))
-
-            # Show bot status
-            if target.has_mode('b'):
-                await self.send_batched(user, batch_id, self.get_reply("335", user, target=target.nickname))
-
-            if target.away_msg:
-                await self.send_batched(user, batch_id, self.get_reply(
-                    "301", user, target=target.nickname, message=target.away_msg))
-
-            idle = int(time.time() - target.last_activity)
-            await self.send_batched(user, batch_id, self.get_reply("317", user, target=target.nickname,
-                      idle=idle, signon=target.signon_time))
-
-            if user.is_staff():
-                # Staff see IP with optional DNS lookup
-                ip_info = target.ip
-                try:
-                    # Attempt reverse DNS lookup (2 second timeout)
-                    import socket
-                    hostname = await asyncio.wait_for(
-                        asyncio.get_event_loop().run_in_executor(
-                            None, socket.gethostbyaddr, target.ip
-                        ),
-                        timeout=2.0
-                    )
-                    hostname = hostname[0]  # Primary hostname
-                    ip_info = f"{target.ip} ({hostname})"
-                except (socket.herror, socket.gaierror, asyncio.TimeoutError, OSError):
-                    # DNS failed/timeout - just show IP
-                    pass
-                await self.send_batched(user, batch_id, self.get_reply(
-                    "320", user, target=target.nickname, ip=ip_info))
-
-            await self.send_batched(user, batch_id, self.get_reply("318", user, target=target.nickname))
+            for reply in await self._build_whois_replies(user, target):
+                await self.send_batched(user, batch_id, reply)
             await self.end_batch(user, batch_id)
 
     async def handle_whowas(self, user, params):
@@ -3647,7 +3771,7 @@ class pyIRCXServer:
                 if member_nick in notified or member_nick == user.nickname:
                     continue
                 member = self.users.get(member_nick)
-                if member and 'away-notify' in member.enabled_caps:
+                if member and not member.is_remote and 'away-notify' in member.enabled_caps:
                     if user.away_msg:
                         await member.send(f":{user.prefix()} AWAY :{user.away_msg}")
                     else:
@@ -3667,7 +3791,7 @@ class pyIRCXServer:
                 if member_nick in notified or member_nick == user.nickname:
                     continue
                 member = self.users.get(member_nick)
-                if member and 'account-notify' in member.enabled_caps:
+                if member and not member.is_remote and 'account-notify' in member.enabled_caps:
                     await member.send(f":{user.prefix()} ACCOUNT {account}")
                     notified.add(member_nick)
 
@@ -3688,7 +3812,7 @@ class pyIRCXServer:
                 if member_nick in notified or member_nick == user.nickname:
                     continue
                 member = self.users.get(member_nick)
-                if member and 'chghost' in member.enabled_caps:
+                if member and not member.is_remote and 'chghost' in member.enabled_caps:
                     # Format: :nick!olduser@oldhost CHGHOST newuser newhost
                     await member.send(f":{user.nickname}!{old_user}@{old_host} CHGHOST {user.username} {user.host}")
                     notified.add(member_nick)
@@ -3704,7 +3828,7 @@ class pyIRCXServer:
                 if member_nick in notified or member_nick == user.nickname:
                     continue
                 member = self.users.get(member_nick)
-                if member and 'setname' in member.enabled_caps:
+                if member and not member.is_remote and 'setname' in member.enabled_caps:
                     await member.send(f":{user.prefix()} SETNAME :{user.realname}")
                     notified.add(member_nick)
 
@@ -4516,12 +4640,7 @@ class pyIRCXServer:
 
             bot_name, bot = available_bot
             # Auto-join the available bot
-            channel.members[bot_name] = bot
-            bot.channels.add(chan_name)
-            # Services always get +q (owner)
-            channel.owners.add(bot_name)
-            await channel.broadcast(f":{bot.prefix()} JOIN {chan_name}")
-            await channel.broadcast(f":{self.servername} MODE {chan_name} +q {bot_name}")
+            await self._join_virtual_service_to_channel(bot, channel, chan_name)
             await self.send_server_message(user, "servicebot_dispatched", bot=bot_name, channel=chan_name)
             logger.info(get_log_message("servicebot_dispatcher_assigned", bot=bot_name, channel=chan_name, nickname=user.nickname))
             return
@@ -4537,12 +4656,7 @@ class pyIRCXServer:
                 await user.send(self.get_reply("847", user, target=target.nickname, max=max_chans))
                 return
             # ServiceBot joins the channel automatically
-            channel.members[target.nickname] = bot
-            bot.channels.add(chan_name)
-            # Services always get +q (owner)
-            channel.owners.add(target.nickname)
-            await channel.broadcast(f":{bot.prefix()} JOIN {chan_name}")
-            await channel.broadcast(f":{self.servername} MODE {chan_name} +q {target.nickname}")
+            await self._join_virtual_service_to_channel(bot, channel, chan_name)
             await user.send(self.get_reply("341", user, target=target.nickname, channel=chan_name))
             logger.info(get_log_message("servicebot_invited", bot=target.nickname, channel=chan_name, nickname=user.nickname))
             return
@@ -4559,12 +4673,7 @@ class pyIRCXServer:
                 return
 
             # Auto-join the entity to the channel
-            channel.members[entity_name] = entity_user
-            entity_user.channels.add(chan_name)
-            # Mystical entities get +q (owner) but remain silent observers
-            channel.owners.add(entity_name)
-            await channel.broadcast(f":{entity_user.prefix()} JOIN {chan_name}")
-            await channel.broadcast(f":{self.servername} MODE {chan_name} +q {entity_name}")
+            await self._join_virtual_service_to_channel(entity_user, channel, chan_name)
             await user.send(self.get_reply("341", user, target=entity_name, channel=chan_name))
             logger.info(get_log_message("entity_invited", entity=entity_name, channel=chan_name, nickname=user.nickname))
             return
@@ -5815,8 +5924,7 @@ class pyIRCXServer:
 
         await user.send(self.get_reply("898", user))
         try:
-            linked_server = self.link_manager.linked_servers[target_server]
-            await self.link_manager.handle_server_split(linked_server, reason)
+            await self.link_manager.squit_server(target_server, reason)
             await user.send(self.get_reply("895", user, server=target_server))
             # Track network divergence in history
             self.stats['network_divergence_history'].append((int(time.time()), target_server, reason))
@@ -5908,6 +6016,17 @@ class pyIRCXServer:
 
         if subcmd in ("LIST", "L"):
             # List all staff accounts - SYSOP+ can view
+            if not self.is_services_hub and \
+               self.services_mode == 'centralized':
+                if self.link_manager and self.link_manager.servers:
+                    trunk_server = next((s for s in self.link_manager.servers.values() if s.role == 'trunk'), None)
+                    if trunk_server:
+                        await trunk_server.send(f"STAFFCMD {user.nickname} LIST")
+                        await self.send_notice(user, "staff_forwarded")
+                        return
+                await user.send(self.get_reply("912", user, message=SERVER_MESSAGES['trunk_unavailable']))
+                return
+
             try:
                 async with self.db_pool.connection() as db:
                     async with db.execute("SELECT username, level FROM users ORDER BY level, username") as cursor:
@@ -6603,7 +6722,7 @@ class pyIRCXServer:
         online_nicks = []
         for nick in nicks_to_check:
             target = self.get_user(nick)
-            if target and not target.is_virtual:
+            if target and not target.is_service():
                 online_nicks.append(target.nickname)
         await user.send(self.get_reply("303", user, nicks=" ".join(online_nicks)))
 
@@ -6626,7 +6745,7 @@ class pyIRCXServer:
 
         for nick in nicks_to_check:
             target = self.get_user(nick)
-            if target and not target.is_virtual:
+            if target and not target.is_service():
                 # Build userhost reply: nick*=+user@host
                 # * = operator, + = here, - = away
                 oper_flag = "*" if target.is_high_staff() else ""
@@ -7107,6 +7226,10 @@ class pyIRCXServer:
 
                         # IRCv3 account-notify: notify users in shared channels
                         await self.send_account_notify(user)
+                        if self.link_manager and self.link_manager.enabled and not user.is_remote:
+                            await self.link_manager.broadcast_to_servers(
+                                f":{user.prefix()} ACCOUNT {user.sasl_account or '*'}"
+                            )
 
                         # Deliver pending memos
                         await self.deliver_pending_memos(user)
@@ -7321,6 +7444,37 @@ class pyIRCXServer:
             await user.send(self.get_reply("763", user, remaining=remaining))
             logger.warning(get_log_message("auth_lockout", username=username, ip=user.ip))
             await self._send_system_alert(SERVER_MESSAGES['auth_alert_lockout'].format(username=username, nickname=user.nickname, ip=user.ip))
+            return
+
+        # In centralized-services mode, branch servers must proxy AUTH to the hub.
+        if self.services_mode == 'centralized' and not self.is_services_hub:
+            if self.link_manager and self.link_manager.enabled:
+                auth_result = await self.link_manager.route_staff_auth(username, password, user)
+                if not auth_result:
+                    logger.warning(f"AUTH routing to trunk failed for {username}")
+                    await user.send(self.get_reply("464", user, message=SERVER_MESSAGES['auth_failed']))
+                    return
+
+                if not auth_result.get('authenticated'):
+                    await self._record_auth_failure(username, user.ip)
+                    await user.send(self.get_reply("464", user, message=SERVER_MESSAGES['auth_failed']))
+                    logger.warning(get_log_message("auth_wrong_password", username=username, nickname=user.nickname, ip=user.ip))
+                    await self._send_system_alert(SERVER_MESSAGES['auth_alert_failed_password'].format(username=username, nickname=user.nickname, ip=user.ip))
+                    return
+
+                await self._record_auth_success(username, user.ip)
+                await self._apply_staff_auth(
+                    user,
+                    username,
+                    auth_result['level'],
+                    auth_result.get('email'),
+                    auth_result.get('realname'),
+                    auth_result.get('force_realname', False),
+                )
+                return
+
+            logger.warning(f"AUTH routing unavailable on branch for {username}")
+            await user.send(self.get_reply("464", user, message=SERVER_MESSAGES['auth_failed']))
             return
 
         # Authenticate against staff database
@@ -7641,6 +7795,10 @@ class pyIRCXServer:
         # IRCv3 chghost: notify users in shared channels
         if old_user != user.username or old_host != user.host:
             await self.send_chghost_notify(user, old_user, old_host)
+            if self.link_manager and self.link_manager.enabled and not user.is_remote:
+                await self.link_manager.broadcast_to_servers(
+                    f":{user.nickname}!{old_user}@{old_host} CHGHOST {user.username} {user.host}"
+                )
 
         if email:
             user.staff_email = email
@@ -7670,7 +7828,10 @@ class pyIRCXServer:
 
         # Send mode change to user
         if mode_char:
-            await user.send(f":{user.nickname} MODE {user.nickname} :{mode_char}")
+            mode_msg = f":{user.nickname} MODE {user.nickname} :{mode_char}"
+            await user.send(mode_msg)
+            if self.link_manager and self.link_manager.enabled and not user.is_remote:
+                await self.link_manager.broadcast_to_servers(mode_msg)
 
         # Send success message
         await self.send_server_message(user, "auth_success_as", level=mode_name)
@@ -7679,14 +7840,15 @@ class pyIRCXServer:
         # Log successful authentication
         logger.info(get_log_message("auth_success", username=username, nickname=user.nickname, ip=user.ip, level=level))
 
-        # Update last_login in database
-        try:
-            await self.db_pool.execute(
-                "UPDATE users SET last_login = ? WHERE username = ?",
-                (int(time.time()), username)
-            )
-        except Exception as e:
-            logger.error(get_log_message("auth_update_last_login_error", error=e))
+        # Branch servers in centralized-services mode do not keep a local users table.
+        if self.db_pool:
+            try:
+                await self.db_pool.execute(
+                    "UPDATE users SET last_login = ? WHERE username = ?",
+                    (int(time.time()), username)
+                )
+            except Exception as e:
+                logger.error(get_log_message("auth_update_last_login_error", error=e))
 
         # Alert #System channel
         await self._send_system_alert(SERVER_MESSAGES['auth_alert_success'].format(username=username, nickname=user.nickname, ip=user.ip, level=level))
@@ -7734,6 +7896,8 @@ class pyIRCXServer:
 
     async def _count_auth_failures(self, username, ip):
         """Count recent auth failures for username/IP within lockout window"""
+        if not self.db_pool:
+            return 0
         window = CONFIG.get('security', 'auth_lockout_window', default=600)
         cutoff = time.time() - window
 
@@ -7752,6 +7916,8 @@ class pyIRCXServer:
 
     async def _get_first_failure_time(self, username, ip):
         """Get timestamp of first failure in current window"""
+        if not self.db_pool:
+            return None
         window = CONFIG.get('security', 'auth_lockout_window', default=600)
         cutoff = time.time() - window
 
@@ -7813,6 +7979,10 @@ class pyIRCXServer:
         # IRCv3 chghost: notify users in shared channels
         if old_user_full != user.username or old_host != user.host:
             await self.send_chghost_notify(user, old_user_full, old_host)
+            if self.link_manager and self.link_manager.enabled and not user.is_remote:
+                await self.link_manager.broadcast_to_servers(
+                    f":{user.nickname}!{old_user_full}@{old_host} CHGHOST {user.username} {user.host}"
+                )
 
         # Clear pending staff auth if any
         user.pending_staff_auth = None
@@ -8122,6 +8292,10 @@ class pyIRCXServer:
 
         # IRCv3 setname: notify users in shared channels
         await self.send_setname_notify(user)
+        if self.link_manager and self.link_manager.enabled and not user.is_remote:
+            await self.link_manager.broadcast_to_servers(
+                f":{user.prefix()} SETNAME :{user.realname}"
+            )
 
         logger.debug(get_log_message("setname_changed", nickname=user.nickname, realname=new_realname))
 
@@ -8491,8 +8665,10 @@ class pyIRCXServer:
             await user.send(self.get_reply("904", user, message=SERVER_MESSAGES['sasl_lockout'].format(remaining=remaining)))
             return
 
-        # Rate limit AUTHENTICATE attempts
-        if not user.check_rate_limit('AUTHENTICATE'):
+        # Rate limit only the start of a SASL exchange. Continuation frames must
+        # be allowed to arrive back-to-back or normal SASL clients will fail.
+        starting_exchange = user.sasl_mechanism is None and arg.upper() in self.SASL_MECHANISMS
+        if starting_exchange and not user.check_rate_limit('AUTHENTICATE'):
             await user.send(self.get_reply("904", user, message=SERVER_MESSAGES['sasl_rate_limited']))
             return
 
@@ -8621,6 +8797,11 @@ class pyIRCXServer:
                         account_host = f"{user.nickname}!{username}@{user.host}"
                         await user.send(self.get_reply("900", user, account_host=account_host, username=username, message=SERVER_MESSAGES['sasl_logged_in'].format(username=username)))
                         await user.send(self.get_reply("903", user, message=SERVER_MESSAGES['sasl_successful']))
+                        await self.send_account_notify(user)
+                        if self.link_manager and self.link_manager.enabled and not user.is_remote:
+                            await self.link_manager.broadcast_to_servers(
+                                f":{user.prefix()} ACCOUNT {user.sasl_account or '*'}"
+                            )
                         logger.info(get_log_message("sasl_plain_success", username=username, ip=user.ip))
                         return
             except Exception as e:
@@ -8811,27 +8992,44 @@ class pyIRCXServer:
                 await self._send_service_msg(entity_name, admin, "entity_privmsg_usage")
                 return
             target = parts[1]
-            message = parts[2]
+            message = ' '.join(parts[2:])
 
             # Send PRIVMSG masquerading as the entity
             entity_prefix = f"{entity_name}!{entity_name}@{self.servername}"
+            entity_msg = f":{entity_prefix} PRIVMSG {target} :{message}"
 
-            # Check if target is a channel
-            if target.startswith('#') or target.startswith('&'):
+            if target == '*':
+                send_tasks = []
+                for recipient in self.users.values():
+                    if not recipient.is_virtual:
+                        send_tasks.append(recipient.send(entity_msg))
+                await asyncio.gather(*send_tasks, return_exceptions=True)
+                if self.link_manager and self.link_manager.enabled:
+                    await self.link_manager.broadcast_to_servers(entity_msg)
+            elif target.startswith('#') or target.startswith('&'):
                 channel = self.channels.get(target)
                 if not channel:
                     await self._send_service_msg(entity_name, admin, "entity_channel_not_found", target=target)
                     return
-                # Broadcast to channel as entity
-                msg = f":{entity_prefix} PRIVMSG {target} :{message}"
-                channel.broadcast(msg)
+                send_tasks = []
+                for member in channel.members.values():
+                    if not member.is_remote:
+                        send_tasks.append(member.send(entity_msg))
+                await asyncio.gather(*send_tasks, return_exceptions=True)
+                if self.link_manager and self.link_manager.enabled:
+                    await self.link_manager.broadcast_to_servers(entity_msg)
             else:
-                # Send to user
                 target_user = self.get_user(target)
                 if not target_user:
                     await self._send_service_msg(entity_name, admin, "entity_user_not_found", target=target)
                     return
-                await target_user.send(f":{entity_prefix} PRIVMSG {target} :{message}")
+                if target_user.is_remote:
+                    if self.link_manager and self.link_manager.enabled:
+                        await self.link_manager.broadcast_to_servers(entity_msg)
+                    else:
+                        await target_user.send(entity_msg)
+                else:
+                    await target_user.send(entity_msg)
 
             await self._send_service_msg(entity_name, admin, "entity_privmsg_sent", target=target, entity_name=entity_name)
             return
@@ -8841,27 +9039,44 @@ class pyIRCXServer:
                 await self._send_service_msg(entity_name, admin, "entity_notice_usage")
                 return
             target = parts[1]
-            message = parts[2]
+            message = ' '.join(parts[2:])
 
             # Send NOTICE masquerading as the entity
             entity_prefix = f"{entity_name}!{entity_name}@{self.servername}"
+            entity_msg = f":{entity_prefix} NOTICE {target} :{message}"
 
-            # Check if target is a channel
-            if target.startswith('#') or target.startswith('&'):
+            if target == '*':
+                send_tasks = []
+                for recipient in self.users.values():
+                    if not recipient.is_virtual:
+                        send_tasks.append(recipient.send(entity_msg))
+                await asyncio.gather(*send_tasks, return_exceptions=True)
+                if self.link_manager and self.link_manager.enabled:
+                    await self.link_manager.broadcast_to_servers(entity_msg)
+            elif target.startswith('#') or target.startswith('&'):
                 channel = self.channels.get(target)
                 if not channel:
                     await self._send_service_msg(entity_name, admin, "entity_channel_not_found", target=target)
                     return
-                # Broadcast to channel as entity
-                msg = f":{entity_prefix} NOTICE {target} :{message}"
-                channel.broadcast(msg)
+                send_tasks = []
+                for member in channel.members.values():
+                    if not member.is_remote:
+                        send_tasks.append(member.send(entity_msg))
+                await asyncio.gather(*send_tasks, return_exceptions=True)
+                if self.link_manager and self.link_manager.enabled:
+                    await self.link_manager.broadcast_to_servers(entity_msg)
             else:
-                # Send to user
                 target_user = self.get_user(target)
                 if not target_user:
                     await self._send_service_msg(entity_name, admin, "entity_user_not_found", target=target)
                     return
-                await target_user.send(f":{entity_prefix} NOTICE {target} :{message}")
+                if target_user.is_remote:
+                    if self.link_manager and self.link_manager.enabled:
+                        await self.link_manager.broadcast_to_servers(entity_msg)
+                    else:
+                        await target_user.send(entity_msg)
+                else:
+                    await target_user.send(entity_msg)
 
             await self._send_service_msg(entity_name, admin, "entity_notice_sent", target=target, entity_name=entity_name)
             return
@@ -8888,7 +9103,11 @@ class pyIRCXServer:
             # Send KICK as entity
             entity_prefix = f"{entity_name}!{entity_name}@{self.servername}"
             kick_msg = f":{entity_prefix} KICK {channel_name} {nick} :{reason}"
-            channel.broadcast(kick_msg)
+            send_tasks = []
+            for member in channel.members.values():
+                if not member.is_remote:
+                    send_tasks.append(member.send(kick_msg))
+            await asyncio.gather(*send_tasks, return_exceptions=True)
 
             # Remove user from channel
             del channel.members[nick]
@@ -8896,6 +9115,10 @@ class pyIRCXServer:
             channel.owners.discard(nick)
             channel.hosts.discard(nick)
             channel.voices.discard(nick)
+            channel.gagged.discard(nick)
+
+            if self.link_manager and self.link_manager.enabled:
+                await self.link_manager.broadcast_to_servers(kick_msg)
 
             await self._send_service_msg(entity_name, admin, "entity_kicked", nick=nick, channel=channel_name, entity_name=entity_name)
             return
@@ -8925,6 +9148,9 @@ class pyIRCXServer:
             kill_msg = f":{entity_prefix} KILL {nick} :{reason}"
             await target_user.send(kill_msg)
 
+            if self.link_manager and self.link_manager.enabled and not target_user.is_remote:
+                await self.link_manager.broadcast_to_servers(kill_msg)
+
             # Disconnect user
             await self.quit_user(target_user)
 
@@ -8936,6 +9162,15 @@ class pyIRCXServer:
 
     async def _service_reply(self, service_name, user, message):
         """Send a reply from a service to a user"""
+        if getattr(user, 'is_remote', False):
+            target_server_name = getattr(user, 'from_server', None)
+            if self.link_manager and self.link_manager.enabled and target_server_name:
+                target_server = self.link_manager.servers.get(target_server_name)
+                if target_server and target_server.is_direct:
+                    await target_server.send(
+                        f":{service_name}!{service_name}@{self.servername} NOTICE {user.nickname} :{message}"
+                    )
+                    return
         await user.send(f":{service_name}!{service_name}@{self.servername} NOTICE {user.nickname} :{message}")
 
     async def _send_service_msg(self, service_name, user, key, **kwargs):
@@ -9769,6 +10004,8 @@ class pyIRCXServer:
             if not recipient.is_virtual:
                 await recipient.send(out)
                 count += 1
+        if self.link_manager and self.link_manager.enabled:
+            await self.link_manager.broadcast_to_servers(out)
         await self._send_service_msg("Messenger", user, "messenger_pushed", count=count)
         logger.info(get_log_message("messenger_global_push", nickname=user.nickname, message=message))
 
@@ -9908,6 +10145,8 @@ class pyIRCXServer:
             if not recipient.is_virtual:
                 await recipient.send(out)
                 count += 1
+        if self.link_manager and self.link_manager.enabled:
+            await self.link_manager.broadcast_to_servers(out)
         await self._send_service_msg("NewsFlash", user, "newsflash_pushed", count=count)
         logger.info(get_log_message("newsflash_push", nickname=user.nickname, message=message))
 
@@ -10004,6 +10243,8 @@ class pyIRCXServer:
                                 if not recipient.is_virtual and recipient.registered:
                                     await recipient.send(out)
                                     count += 1
+                            if self.link_manager and self.link_manager.enabled:
+                                await self.link_manager.broadcast_to_servers(out)
                             if count > 0:
                                 logger.info(get_log_message("newsflash_periodic", count=count))
             except asyncio.CancelledError:
@@ -10587,7 +10828,7 @@ class pyIRCXServer:
                     msg = f":{self.servername} NOTICE #System :{SERVER_MESSAGES['ungag_global_notify'].format(nickname=user.nickname, target=target_nick)}"
                     self.channels["#System"].broadcast(msg)
 
-    async def quit_user(self, user):
+    async def quit_user(self, user, reason=None):
         nick = user.nickname
         # Prevent duplicate QUIT processing if already disconnected
         if user.disconnected:
@@ -10609,6 +10850,8 @@ class pyIRCXServer:
                 if not self.watchers[watched_nick]:
                     del self.watchers[watched_nick]
         user.watch_list.clear()
+
+        quit_reason = reason or SERVER_MESSAGES['quit_client_exited']
 
         if nick != "*" and user.registered:
             # Clean up expired WHOWAS entries
@@ -10643,7 +10886,7 @@ class pyIRCXServer:
                         if member != user:
                             # Each viewer sees appropriately masked host
                             prefix = user.prefix(viewer=member)
-                            msg = f":{prefix} QUIT :{SERVER_MESSAGES['quit_client_exited']}"
+                            msg = f":{prefix} QUIT :{quit_reason}"
                             tasks.append(member.send(msg))
                     if tasks:
                         await asyncio.gather(*tasks, return_exceptions=True)
@@ -10667,7 +10910,7 @@ class pyIRCXServer:
         # Propagate QUIT to linked servers (if not a remote user)
         if user.registered and self.link_manager and self.link_manager.enabled:
             if not (user.is_remote):
-                quit_msg = f":{user.prefix()} QUIT :{SERVER_MESSAGES['quit_client_exited']}"
+                quit_msg = f":{user.prefix()} QUIT :{quit_reason}"
                 await self.link_manager.broadcast_to_servers(quit_msg)
 
         if nick in self.users and self.users[nick] == user:
@@ -11303,7 +11546,7 @@ Examples:
   %(prog)s                      Run in standalone mode
   %(prog)s --systemd            Run under systemd (journald logging)
   %(prog)s --log-level DEBUG    Enable debug logging
-  %(prog)s --config /etc/pyircx/config.json  Use custom config
+  %(prog)s --config /etc/pyircx/pyircx_config.json  Use custom config
         """
     )
     parser.add_argument(
@@ -11331,7 +11574,7 @@ Examples:
     parser.add_argument(
         '--version', '-v',
         action='version',
-        version='pyIRCX 1.0.5'
+        version=f'{__version_label__} {__version__}'
     )
     return parser.parse_args()
 

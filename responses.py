@@ -2033,7 +2033,7 @@ LOG_MESSAGES = {
     "link_remote_invite": "Remote INVITE: {target} to {channel} from {source}",
     "link_remote_nick_change": "Remote NICK: {old} -> {new}",
     "link_remote_kill_ignored": "Remote KILL ignored: {target} is remote on this server",
-    "link_remote_kill": "Remote KILL: {target} ({reason})",
+    "link_remote_kill": "Remote KILL: {target_nick} ({reason})",
     "link_remote_whois": "Remote WHOIS: {requester} querying {target}",
     "link_remote_whisper": "Remote WHISPER: {source} to {target} in {channel}",
     "link_remote_access": "Remote ACCESS: {nickname} executed ACCESS {action} on {obj}",
@@ -2050,14 +2050,14 @@ LOG_MESSAGES = {
     "link_staff_auth_timeout": "Staff auth timeout for {username}",
 
     # Additional linking messages (auto-generated from linking.py conversion)
-    "link_added_remote_service": "Added remote service {nickname} from {server}",
-    "link_added_remote_user": "Added remote user {nickname} from {server} (total: {total})",
+    "link_added_remote_service": "Added remote service {nickname} from {origin_server}",
+    "link_added_remote_user": "Added remote user {nickname} from {origin_server} (total: {total_users})",
     "link_added_user_to_channel": "Added {nickname} to {channel}",
     "link_attempting_reconnect": "Attempting reconnect to {server}",
     "link_available_servers": "Available servers: {servers}, exclude={exclude}",
     "link_branch_staff_auth_failed": "Branch: Staff auth FAILED via trunk for {username}",
     "link_branch_staff_auth_success": "Branch: Staff auth SUCCESS via trunk for {username} ({level})",
-    "link_broadcast_to_servers": "broadcast_to_servers: {preview}",
+    "link_broadcast_to_servers": "broadcast_to_servers: {message_preview}",
     "link_burst_service": "Bursting service {nickname} to {server}",
     "link_burst_staff": "Burst {count} staff accounts to {server}",
     "link_burst_staff_error": "Error bursting staff to {server}: {error}",
@@ -2080,7 +2080,7 @@ LOG_MESSAGES = {
     "link_forwarded_nick": "Forwarded NICK for {nickname}",
     "link_forwarded_private_message": "Forwarded private message from {source} to {target}",
     "link_forwarding_to_servers": "Forwarding to other servers (exclude={exclude})",
-    "link_handle_remote_nick_called": "handle_remote_nick from {server}: {parts} parts",
+    "link_handle_remote_nick_called": "handle_remote_nick from {server}: {parts_count} parts ({parts_preview})",
     "link_handle_remote_nick_not_enough_parts": "handle_remote_nick: Not enough parts ({count})",
     "link_incoming_connection": "Incoming server connection from {peer}",
     "link_join_complete": "JOIN complete for {nickname} in {channel}",
@@ -2120,7 +2120,7 @@ LOG_MESSAGES = {
     "link_routed_privmsg": "Routed PRIVMSG from {nickname} to {target}",
     "link_scheduling_reconnect": "Scheduling reconnect to {server} in {delay}s (attempt #{attempt})",
     "link_sending_to_member": "  -> Sending to {nickname}",
-    "link_sending_to_server": "  Sending to {server}: {preview}",
+    "link_sending_to_server": "  Sending to {server}: {message_preview}",
     "link_sent_eob": "Sent EOB to {server}",
     "link_sent_ping": "Sent PING to {server}",
     "link_sent_staff_auth_request": "Sent staff auth request to trunk: {username} (id: {auth_id})",
@@ -2178,24 +2178,24 @@ LOG_MESSAGES = {
     "audit_staff_mfa_disabled": "MFA disabled by admin",
 }
 
-def get_log_message(key: str, **kwargs) -> str:
+def get_log_message(message_key: str, **kwargs) -> str:
     """
     Get a formatted log message from LOG_MESSAGES.
 
     Args:
-        key: The message key from LOG_MESSAGES
+        message_key: The message key from LOG_MESSAGES
         **kwargs: Format arguments
 
     Returns:
         Formatted message string, or the key itself if not found
     """
-    template = LOG_MESSAGES.get(key)
+    template = LOG_MESSAGES.get(message_key)
     if template is None:
-        return key
+        return message_key
     try:
         return template.format(**kwargs)
     except KeyError as e:
-        return f"{key}: Missing format key {e}"
+        return f"{message_key}: Missing format key {e}"
 
 # ==============================================================================
 # MESSAGE CATEGORIZATION AND ROUTING HELPERS

@@ -26,7 +26,7 @@ sudo restorecon -Rv /opt/pyircx
 
 ### `/opt/pyircx/webchat/` - WebChat Gateway
 
-**Context:** `httpd_sys_rw_content_t` (read by web server for symlink)
+**Context:** `httpd_sys_rw_content_t` (gateway runtime files accessed alongside the web stack)
 
 ```bash
 sudo semanage fcontext -a -t httpd_sys_rw_content_t "/opt/pyircx/webchat(/.*)?"
@@ -35,7 +35,7 @@ sudo restorecon -Rv /opt/pyircx/webchat
 
 **Files:**
 - `gateway.py` - WebSocket gateway (executed by systemd)
-- `index.html` - WebChat HTML interface (served via symlink)
+- `index.html` - WebChat HTML interface source
 
 ### `/opt/pyircx/transcripts/` - Channel Transcripts
 
@@ -56,7 +56,7 @@ sudo restorecon -Rv /etc/pyircx
 ```
 
 **Files:**
-- `pyircx_config.json` - Main configuration (needs read-write by web admin)
+- `pyircx_config.json` - Main configuration source of truth (real file in `/etc`, symlinked from `/opt/pyircx`)
 
 **Exception:** `webchat.conf` needs different context for systemd:
 
@@ -94,9 +94,10 @@ sudo restorecon -Rv /var/www/html/webchat
 ```
 
 **Files:**
-- `index.html` - Symlink to `/opt/pyircx/webchat/index.html`
+- `index.html` - WebChat HTML interface
 - `config.js` - WebChat configuration file (can be customized)
 - `favicon.svg` - Icon file
+- `version.json` - Shared version metadata for CTCP/version display
 
 ## Quick Reference Table
 
@@ -106,7 +107,7 @@ sudo restorecon -Rv /var/www/html/webchat
 | `/opt/pyircx/webchat/` | `httpd_sys_rw_content_t` | Symlink target |
 | `/opt/pyircx/transcripts/` | `httpd_sys_rw_content_t` | Web admin read access |
 | `/etc/pyircx/` | `httpd_sys_rw_content_t` | Config editor |
-| `/etc/pyircx/webchat.conf` | `etc_t` | Systemd environment file |
+| `/etc/pyircx/webchat.conf` | `etc_t` | WebChat gateway config |
 | `/var/www/html/webadmin/` | `httpd_sys_rw_content_t` | API operations |
 | `/var/www/html/webchat/` | `httpd_sys_content_t` | Static content |
 
@@ -126,7 +127,7 @@ sudo restorecon -Rv /opt/pyircx
 sudo semanage fcontext -a -t httpd_sys_rw_content_t "/etc/pyircx(/.*)?"
 sudo restorecon -Rv /etc/pyircx
 
-# WebChat config (systemd environment file)
+# WebChat config (gateway INI config)
 sudo semanage fcontext -a -t etc_t "/etc/pyircx/webchat.conf"
 sudo restorecon -v /etc/pyircx/webchat.conf
 
@@ -214,6 +215,8 @@ The `install.sh` script automatically configures all SELinux contexts. If you're
 
 ## Version History
 
+- **v2.0.1** - Updated for `/etc` config source-of-truth and static WebChat assets
+- Clarified that `/var/www/html/webchat/` serves copied frontend files, including `version.json`
 - **v2.0.0** - Initial comprehensive SELinux documentation
 - Added webchat.conf special handling for systemd
 - Fixed webadmin contexts (httpd_sys_rw_content_t required)

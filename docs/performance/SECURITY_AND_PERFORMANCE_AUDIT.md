@@ -132,7 +132,7 @@ asyncio.create_task(admin_api_server.run(host='127.0.0.1', port=8080))
 **Attack Scenario:**
 ```html
 <!-- Evil page -->
-<img src="http://victim-server/pyircx-admin/api.php?cmd=add-server-access&args[]=DENY&args[]=*!*@*&args[]=hacked&args[]=pwned">
+<img src="http://victim-server/webadmin/api.php?cmd=add-server-access&args[]=DENY&args[]=*!*@*&args[]=hacked&args[]=pwned">
 ```
 
 **Fix:**
@@ -150,7 +150,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // admin.js - Include token in requests
-fetch('/pyircx-admin/api.php', {
+fetch('/webadmin/api.php', {
     headers: { 'X-CSRF-Token': csrfToken }
 })
 ```

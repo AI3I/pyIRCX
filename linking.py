@@ -16,13 +16,14 @@ DO NOT attempt to link to non-pyIRCX servers.
 """
 
 import asyncio
-import bcrypt
+import base64
 import time
 import logging
 import ssl
 from typing import Dict, Set, Optional, Tuple
 
 from responses import SERVER_MESSAGES, get_log_message
+from version import VERSION as PYIRCX_VERSION, LINKING_PROTOCOL_VERSION, MIN_COMPATIBLE_VERSION
 
 logger = logging.getLogger(__name__)
 
@@ -30,9 +31,6 @@ logger = logging.getLogger(__name__)
 CONFIG = None
 
 # pyIRCX Linking Protocol
-PYIRCX_VERSION = "1.3.0"  # Software version
-LINKING_PROTOCOL_VERSION = "2"  # Protocol version (increment on breaking changes)
-MIN_COMPATIBLE_VERSION = "1.2.0"  # Minimum compatible pyIRCX version
 MAX_CLOCK_SKEW = 60  # Maximum acceptable clock skew in seconds (strict)
 CLOCK_SKEW_WARNING = 10  # Warn if skew exceeds this (non-fatal)
 _User = None  # Cache for User class to avoid reimporting
@@ -62,6 +60,7 @@ class LinkedServer:
         self.version = None  # e.g., "1.3.0"
         self.protocol_version = None  # e.g., "2"
         self.time_delta = 0  # Detected clock skew in seconds
+        self.split_handled = False
 
     async def send(self, message: str):
         """Send a message to this server"""
@@ -518,8 +517,11 @@ class ServerLinkManager:
                 logger.info(get_log_message("link_successfully_linked", server=remote_name))
                 await self.broadcast_to_local(f":{self.irc_server.servername} NOTICE * :{SERVER_MESSAGES['link_notice_linked_to'].format(server=remote_name)}", exclude_modes='a')
 
-                # Reset reconnect attempts on successful connection
+                # Reset reconnect attempts on successful connection and clear any queued retry
                 self.reconnect_attempts[servername] = 0
+                existing_task = self.reconnect_tasks.pop(servername, None)
+                if existing_task and existing_task is not asyncio.current_task():
+                    existing_task.cancel()
 
             elif parts[0] == 'ERROR':
                 logger.error(get_log_message("link_rejected", server=servername, reason=line))
@@ -612,7 +614,7 @@ class ServerLinkManager:
 
         # Burst all regular users
         for nickname, user in self.irc_server.users.items():
-            if not user.is_virtual and not hasattr(user, 'from_server'):
+            if not user.is_virtual and not user.is_remote:
                 # NICK <nick> <hop> <ts> <user> <host> <server> <modes> :<real>
                 modes = user.get_mode_str()
                 await server.send(
@@ -628,7 +630,7 @@ class ServerLinkManager:
             # Build nicklist with prefixes
             nicklist = []
             for nick, member in channel.members.items():
-                if member.is_virtual or hasattr(member, 'from_server'):
+                if member.is_virtual or member.is_remote:
                     continue
                 prefix = ''
                 if nick in channel.owners:
@@ -722,6 +724,12 @@ class ServerLinkManager:
         elif cmd == 'MEMOREPLY':
             # Memo command reply from trunk to user on branch
             await self.handle_memo_reply(server, parts)
+        elif cmd == 'WHOISREQ':
+            await self.handle_whois_request(server, parts)
+        elif cmd == 'WHOISREPLY':
+            await self.handle_whois_reply(server, parts)
+        elif cmd == 'WHOISDONE':
+            await self.handle_whois_done(server, parts)
         elif cmd == 'SVCNICK':
             # Service nickname from trunk
             await self.handle_service_nick(server, parts)
@@ -744,8 +752,12 @@ class ServerLinkManager:
         elif cmd == 'SQUIT':
             # Server quit
             if len(parts) >= 2:
-                await self.squit_server(parts[1].lstrip(':'), "Remote SQUIT")
-        elif line.startswith(':'):
+                target = parts[1].lstrip(':')
+                if target == self.irc_server.servername or target == server.name:
+                    await self.handle_server_split(server, reason="Remote SQUIT", schedule_reconnect=False)
+                else:
+                    await self.squit_server(target, "Remote SQUIT")
+        elif line.startswith(':') or line.startswith('@'):
             # Prefixed message from remote user/server
             await self.handle_prefixed_message(server, line)
 
@@ -799,10 +811,12 @@ class ServerLinkManager:
 
         # Send response back to branch
         if authenticated:
-            # STAFFOK <auth_id> <level> <email> <realname> <force_realname>
-            email_str = email if email else ""
-            realname_str = realname if realname else ""
-            await server.send(f"STAFFOK {auth_id} {level} {email_str} {realname_str} {int(force_realname)}")
+            # STAFFOK <auth_id> <level> <email_b64> <realname_b64> <force_realname>
+            email_bytes = (email or "").encode("utf-8")
+            realname_bytes = (realname or "").encode("utf-8")
+            email_b64 = base64.urlsafe_b64encode(email_bytes).decode("ascii")
+            realname_b64 = base64.urlsafe_b64encode(realname_bytes).decode("ascii")
+            await server.send(f"STAFFOK {auth_id} {level} {email_b64} {realname_b64} {int(force_realname)}")
         else:
             # STAFFFAIL <auth_id>
             await server.send(f"STAFFFAIL {auth_id}")
@@ -825,16 +839,22 @@ class ServerLinkManager:
         future = pending['future']
 
         if success:
-            # STAFFOK <auth_id> <level> <email> <realname> <force_realname>
-            if len(parts) < 3:
+            # STAFFOK <auth_id> <level> <email_b64> <realname_b64> <force_realname>
+            if len(parts) < 6:
                 future.set_result(None)
                 del self._pending_staff_auth[auth_id]
                 return
 
             level = parts[2]
-            email = parts[3] if len(parts) > 3 and parts[3] else None
-            realname = parts[4] if len(parts) > 4 and parts[4] else None
-            force_realname = bool(int(parts[5])) if len(parts) > 5 else False
+            try:
+                email = base64.urlsafe_b64decode(parts[3].encode("ascii")).decode("utf-8") or None
+                realname = base64.urlsafe_b64decode(parts[4].encode("ascii")).decode("utf-8") or None
+                force_realname = bool(int(parts[5]))
+            except Exception as e:
+                logger.error(f"Failed to parse STAFFOK response {auth_id}: {e}")
+                future.set_result(None)
+                del self._pending_staff_auth[auth_id]
+                return
 
             result = {
                 'authenticated': True,
@@ -863,6 +883,12 @@ class ServerLinkManager:
         """Handle STAFFSYNC from trunk during burst (branch only)"""
         if len(parts) < 4:
             logger.warning(get_log_message("link_invalid_staffsync", server=server.name, parts=parts))
+            return
+
+        # Branch servers in centralized mode do not initialize a local DB pool.
+        # Staff auth is proxied to trunk, so a missing branch-side DB is expected.
+        if not self.irc_server.db_pool:
+            logger.debug(f"Skipping STAFFSYNC on branch without local db pool from {server.name}")
             return
 
         # STAFFSYNC <username> <level> <password_hash>
@@ -906,14 +932,23 @@ class ServerLinkManager:
         subcmd = parts[2].upper()
 
         # Find the user on trunk (they're connected to branch, but we need to process command)
-        user = self.irc_server.users_by_nick.get(nickname)
+        user = self.irc_server.get_user(nickname)
         if not user:
             logger.warning(get_log_message("link_staffcmd_unknown_user", nickname=nickname, server=server.name))
             await server.send(f"STAFFREPLY {nickname} :{SERVER_MESSAGES['link_staff_user_not_found']}")
             return
 
         try:
-            if subcmd == 'PASSWORD':
+            if subcmd == 'LIST':
+                async with self.irc_server.db_pool.connection() as db:
+                    async with db.execute("SELECT username, level FROM users ORDER BY level, username") as cursor:
+                        rows = await cursor.fetchall()
+
+                await server.send(f"STAFFREPLY {nickname} :STAFF LIST ({len(rows)} accounts)")
+                for username, level in rows:
+                    await server.send(f"STAFFREPLY {nickname} :{level} {username}")
+
+            elif subcmd == 'PASSWORD':
                 # STAFFCMD <nickname> PASSWORD <old_pass> <new_pass>
                 if len(parts) < 5:
                     await server.send(f"STAFFREPLY {nickname} :{SERVER_MESSAGES['link_staff_password_syntax']}")
@@ -1134,7 +1169,7 @@ class ServerLinkManager:
         message = ' '.join(parts[2:]).lstrip(':')
 
         # Find user on this branch
-        user = self.irc_server.users_by_nick.get(nickname)
+        user = self.irc_server.get_user(nickname)
         if user:
             await user.send(f":{self.irc_server.servername} NOTICE {nickname} :{message}")
         else:
@@ -1151,7 +1186,7 @@ class ServerLinkManager:
         subcmd = parts[2].upper()
 
         # Find the user on trunk (they're connected to branch)
-        user = self.irc_server.users_by_nick.get(nickname)
+        user = self.irc_server.get_user(nickname)
         if not user:
             logger.warning(get_log_message("link_regcmd_unknown_user", nickname=nickname, server=server.name))
             await server.send(f"REGREPLY {nickname} :{SERVER_MESSAGES['link_reg_user_not_found']}")
@@ -1383,7 +1418,7 @@ class ServerLinkManager:
         nickname = parts[2]
 
         # Find user on this branch
-        user = self.irc_server.users_by_nick.get(nickname)
+        user = self.irc_server.get_user(nickname)
         if not user:
             logger.debug(get_log_message("link_regupdate_user_not_on_branch", nickname=nickname))
             return
@@ -1414,7 +1449,7 @@ class ServerLinkManager:
         message = ' '.join(parts[2:]).lstrip(':')
 
         # Find user on this branch
-        user = self.irc_server.users_by_nick.get(nickname)
+        user = self.irc_server.get_user(nickname)
         if user:
             await user.send(f":{self.irc_server.servername} NOTICE {nickname} :{message}")
         else:
@@ -1431,7 +1466,7 @@ class ServerLinkManager:
         subcmd = parts[2].upper()
 
         # Find the user on trunk (they're connected to branch)
-        user = self.irc_server.users_by_nick.get(nickname)
+        user = self.irc_server.get_user(nickname)
         if not user:
             logger.warning(get_log_message("link_memocmd_unknown_user", nickname=nickname, server=server.name))
             await server.send(f"MEMOREPLY {nickname} :{SERVER_MESSAGES['link_memo_user_not_found']}")
@@ -1469,10 +1504,10 @@ class ServerLinkManager:
                     logger.info(get_log_message("link_memo_sent", sender=nickname, recipient=target_nick, server=server.name))
 
                     # If recipient is online and identified, notify them
-                    target_user = self.irc_server.users_by_nick.get(target_nick)
+                    target_user = self.irc_server.get_user(target_nick)
                     if target_user and target_user.has_mode('r'):
                         # Find which server target_user is on
-                        if hasattr(target_user, 'from_server') and target_user.from_server:
+                        if target_user.is_remote and target_user.from_server:
                             target_server = self.servers.get(target_user.from_server)
                             if target_server:
                                 await target_server.send(f"MEMOREPLY {target_nick} :{SERVER_MESSAGES['link_memo_new_notification'].format(nickname=nickname)}")
@@ -1579,11 +1614,102 @@ class ServerLinkManager:
         message = ' '.join(parts[2:]).lstrip(':')
 
         # Find user on this branch
-        user = self.irc_server.users_by_nick.get(nickname)
+        user = self.irc_server.get_user(nickname)
         if user:
             await user.send(f":{self.irc_server.servername} NOTICE {nickname} :{message}")
         else:
             logger.warning(get_log_message("link_memoreply_unknown_user", nickname=nickname))
+
+    async def _route_whois_response(self, requester_nick: str, message: str, fallback_server: LinkedServer = None):
+        """Route WHOIS response traffic toward the requesting user's home server."""
+        requester = self.irc_server.get_user(requester_nick)
+        if requester and requester.is_remote and requester.from_server:
+            target_server = self.servers.get(requester.from_server)
+            if target_server and target_server.is_direct:
+                await target_server.send(message)
+                return True
+
+        if fallback_server and fallback_server.is_direct:
+            await fallback_server.send(message)
+            return True
+
+        return False
+
+    async def handle_whois_request(self, server: LinkedServer, parts: list):
+        """Handle a routed WHOIS request from another server."""
+        if len(parts) < 4:
+            return
+
+        request_id = parts[1]
+        requester_nick = parts[2]
+        target_nick = parts[3]
+
+        target = self.irc_server.get_user(target_nick)
+        if target and not target.is_remote:
+            logger.info(get_log_message(
+                "link_remote_whois", requester=requester_nick, target=target_nick
+            ))
+            requester = self.irc_server.get_user(requester_nick)
+            if not requester:
+                return
+
+            replies = await self.irc_server._build_whois_replies(requester, target)
+            for reply in replies:
+                routed = await self._route_whois_response(
+                    requester_nick,
+                    f"WHOISREPLY {request_id} {requester_nick} :{reply}",
+                    fallback_server=server
+                )
+                if not routed:
+                    return
+
+            await self._route_whois_response(
+                requester_nick,
+                f"WHOISDONE {request_id} {requester_nick} FOUND",
+                fallback_server=server
+            )
+        elif self.server_role == 'trunk':
+            await self.broadcast_to_servers(
+                f"WHOISREQ {request_id} {requester_nick} {target_nick}",
+                exclude_server=server.name
+            )
+
+    async def handle_whois_reply(self, server: LinkedServer, parts: list):
+        """Handle a routed WHOIS numeric line."""
+        if len(parts) < 4:
+            return
+
+        request_id = parts[1]
+        requester_nick = parts[2]
+        message = ' '.join(parts[3:]).lstrip(':')
+
+        if await self.irc_server.handle_remote_whois_reply(request_id, message):
+            return
+
+        await self._route_whois_response(
+            requester_nick,
+            f"WHOISREPLY {request_id} {requester_nick} :{message}",
+            fallback_server=server
+        )
+
+    async def handle_whois_done(self, server: LinkedServer, parts: list):
+        """Handle completion of a routed WHOIS request."""
+        if len(parts) < 4:
+            return
+
+        request_id = parts[1]
+        requester_nick = parts[2]
+        found = parts[3].upper() == 'FOUND'
+
+        if await self.irc_server.handle_remote_whois_done(request_id, found=found):
+            return
+
+        status = 'FOUND' if found else 'NOTFOUND'
+        await self._route_whois_response(
+            requester_nick,
+            f"WHOISDONE {request_id} {requester_nick} {status}",
+            fallback_server=server
+        )
 
     async def handle_service_nick(self, server: LinkedServer, parts: list):
         """Handle SVCNICK (service user) from services hub"""
@@ -1680,6 +1806,27 @@ class ServerLinkManager:
 
         # Check for nick collision
         existing_user = self.irc_server.users.get(nickname)
+        if (
+            existing_user
+            and existing_user.is_remote
+            and getattr(existing_user, 'from_server', None) == origin_server
+            and self.servers.get(origin_server) is not server
+        ):
+            # Stale ghost from a previous instance of the same linked server.
+            for chan_name in list(existing_user.channels):
+                channel = self.irc_server.channels.get(chan_name)
+                if channel:
+                    channel.members.pop(nickname, None)
+                    channel.owners.discard(nickname)
+                    channel.hosts.discard(nickname)
+                    channel.voices.discard(nickname)
+                    channel.gagged.discard(nickname)
+                    if not channel.members:
+                        self.irc_server.channels.pop(chan_name, None)
+            self.irc_server.users.pop(nickname, None)
+            self.irc_server.users_lower.pop(nickname.lower(), None)
+            existing_user = None
+
         if existing_user:
             # Nick collision detected
             existing_ts = getattr(existing_user, 'signon_time', 0)
@@ -1750,6 +1897,7 @@ class ServerLinkManager:
                     return
 
         self.irc_server.users[nickname] = user
+        self.irc_server.users_lower[nickname.lower()] = nickname
         server.add_user(nickname)
 
         logger.info(get_log_message("link_added_remote_user", nickname=nickname, origin_server=origin_server, total_users=len(self.irc_server.users)))
@@ -1883,6 +2031,10 @@ class ServerLinkManager:
 
     async def handle_prefixed_message(self, server: LinkedServer, line: str):
         """Handle prefixed messages (user actions) from remote servers"""
+        raw_line = line
+        if line.startswith('@'):
+            _, line = line.split(' ', 1)
+
         # Format: :nickname COMMAND params
         parts = line.split(' ')
         source = parts[0].lstrip(':')
@@ -1892,40 +2044,47 @@ class ServerLinkManager:
         cmd = parts[1].upper()
 
         # Route common commands
+        if cmd.isdigit():
+            if len(parts) >= 3:
+                target_nick = parts[2]
+                target_user = self.irc_server.get_user(target_nick)
+                if target_user and not target_user.is_remote:
+                    await target_user.send(line)
+                elif self.server_role == 'trunk':
+                    await self.broadcast_to_servers(line, exclude_server=server.name)
+            return
+
         if cmd in ('PRIVMSG', 'NOTICE'):
             # Extract target and message
             if len(parts) >= 3:
                 target = parts[2]
                 message_text = ' '.join(parts[3:]).lstrip(':')
+                source_nick = source.split('!')[0] if '!' in source else source
 
-                # Check if target is a service and handle it
+                # Wildcard server-wide messages need local fanout plus normal trunk forwarding
+                if target == '*':
+                    for recipient in self.irc_server.users.values():
+                        if not recipient.is_virtual and not recipient.is_remote:
+                            await recipient.send(raw_line if 'message-tags' in getattr(recipient, 'enabled_caps', set()) else line)
+                    if self.server_role == 'trunk':
+                        await self.broadcast_to_servers(raw_line, exclude_server=server.name)
+                    return
+
                 target_lower = target.lower()
-                service_handlers = {
-                    'registrar': '_handle_registrar_msg',
-                    'nickserv': '_handle_registrar_msg',
-                    'chanserv': '_handle_registrar_msg',
-                    'messenger': '_handle_messenger_msg',
-                    'memoserv': '_handle_messenger_msg',
-                    'newsflash': '_handle_newsflash_msg',
-                }
 
-                if target_lower in service_handlers and cmd == 'PRIVMSG':
-                    # Target is a service - create virtual user for the remote sender
-                    # Parse source (nickname!user@host)
-                    if '!' in source:
-                        nickname = source.split('!')[0]
-                        userhost = source.split('!')[1]
-                        username = userhost.split('@')[0].lstrip('~')
-                        hostname = userhost.split('@')[1] if '@' in userhost else 'unknown'
-                    else:
-                        nickname = source
-                        username = source
-                        hostname = server.name
+                # Parse source (nickname!user@host) for service routing
+                if '!' in source:
+                    userhost = source.split('!')[1]
+                    username = userhost.split('@')[0].lstrip('~')
+                    hostname = userhost.split('@')[1] if '@' in userhost else 'unknown'
+                else:
+                    username = source_nick
+                    hostname = server.name
 
-                    # Get or create remote user object
-                    remote_user = self.irc_server.users.get(nickname)
+                handled_service = False
+                if cmd == 'PRIVMSG' and target_lower in self.irc_server._service_target_names():
+                    remote_user = self.irc_server.users.get(source_nick)
                     if not remote_user:
-                        # Create temporary virtual user for service interaction
                         global _User
                         if _User is None:
                             import sys
@@ -1934,35 +2093,30 @@ class ServerLinkManager:
 
                         if _User:
                             remote_user = _User(None, None, is_virtual=True)
-                            remote_user.nickname = nickname
+                            remote_user.nickname = source_nick
                             remote_user.username = username
                             remote_user.host = hostname
                             remote_user.from_server = server.name
                             remote_user.is_remote = True
-                            remote_user.server = self.irc_server  # Link to server for routing responses
-                            self.irc_server.users[nickname] = remote_user
-                            server.add_user(nickname)
-                            logger.debug(get_log_message("link_created_virtual_user", nickname=nickname, server=server.name))
+                            remote_user.server = self.irc_server
+                            self.irc_server.users[source_nick] = remote_user
+                            server.add_user(source_nick)
+                            logger.debug(get_log_message("link_created_virtual_user", nickname=source_nick, server=server.name))
 
                     if remote_user:
-                        # Call the service handler directly
-                        handler_name = service_handlers[target_lower]
-                        handler = getattr(self.irc_server, handler_name, None)
-                        if handler:
-                            await handler(remote_user, message_text)
-                            logger.debug(get_log_message("link_routed_privmsg", nickname=nickname, target=target))
-                        else:
-                            logger.error(get_log_message("link_service_handler_not_found", handler_name=handler_name))
+                        handled = await self.irc_server._dispatch_service_target(
+                            remote_user,
+                            target,
+                            message_text
+                        )
+                        if handled:
+                            handled_service = True
+                            logger.debug(get_log_message("link_routed_privmsg", nickname=source_nick, target=target))
                     else:
-                        logger.error(get_log_message("link_failed_create_remote_user", nickname=nickname))
-                else:
-                    # Target is not a service - check if it's a local user or channel
-                    # Parse source to get nickname
-                    if '!' in source:
-                        source_nick = source.split('!')[0]
-                    else:
-                        source_nick = source
+                        logger.error(get_log_message("link_failed_create_remote_user", nickname=source_nick))
 
+                if not handled_service:
+                    # Target is not a service - check if it's a local user or channel
                     # Check if target is a channel
                     if target.startswith('#') or target.startswith('&'):
                         # Message to channel - broadcast to local members
@@ -1976,24 +2130,29 @@ class ServerLinkManager:
                                 logger.info(get_log_message("link_channel_member_detail", nickname=member.nickname, is_remote=is_remote))
                                 if not is_remote:
                                     logger.info(get_log_message("link_sending_to_member", nickname=member.nickname))
-                                    await member.send(line)
+                                    deliver_line = raw_line if 'message-tags' in getattr(member, 'enabled_caps', set()) else line
+                                    await member.send(deliver_line)
                             # Forward to other servers ONLY if we're trunk (hub forwards between branches)
                             if self.server_role == 'trunk':
                                 logger.info(get_log_message("link_forwarding_to_servers", exclude=server.name))
-                                await self.broadcast_to_servers(line, exclude_server=server.name)
+                                await self.broadcast_to_servers(raw_line, exclude_server=server.name)
                             else:
                                 logger.info(get_log_message("link_not_forwarding_branch"))
                     else:
                         # Message to user - check if user is local
                         target_user = self.irc_server.users.get(target)
                         if target_user and not (target_user.is_remote):
+                            source_user = self.irc_server.get_user(source_nick)
+                            if source_user and self.irc_server.is_silenced(source_user, target_user):
+                                return
                             # User is local, deliver message
-                            await target_user.send(line)
+                            deliver_line = raw_line if 'message-tags' in getattr(target_user, 'enabled_caps', set()) else line
+                            await target_user.send(deliver_line)
                             logger.debug(get_log_message("link_delivered_private_message", source=source_nick, target=target))
                         else:
                             # User not found locally - forward to other servers ONLY if we're trunk
                             if self.server_role == 'trunk':
-                                await self.broadcast_to_servers(line, exclude_server=server.name)
+                                await self.broadcast_to_servers(raw_line, exclude_server=server.name)
                                 logger.debug(get_log_message("link_forwarded_private_message", source=source_nick, target=target))
                             else:
                                 logger.debug(get_log_message("link_user_not_found_branch", target=target))
@@ -2064,6 +2223,7 @@ class ServerLinkManager:
             # Use lock to prevent race conditions
             async with self.irc_server.user_update_lock:
                 user = self.irc_server.users.pop(nickname, None)
+                self.irc_server.users_lower.pop(nickname.lower(), None)
             if user:
                 for chan_name in list(user.channels):
                     channel = self.irc_server.channels.get(chan_name)
@@ -2215,12 +2375,28 @@ class ServerLinkManager:
                                 adding = True
                             elif char == '-':
                                 adding = False
-                            elif char == 'i':
-                                # Update invisible mode
-                                user.set_mode('i', adding)
-                                logger.info(get_log_message("link_remote_mode_user_invisible", target=target, adding=adding))
-                            # Other user modes (o, a, g, s, etc.) are typically server-controlled
-                            # and shouldn't be propagated from remote servers for security
+                            elif char in user.modes:
+                                user.set_mode(char, adding)
+                                if char == 'a':
+                                    user.authenticated = adding
+                                    if adding:
+                                        user.staff_level = 'ADMIN'
+                                    elif user.staff_level == 'ADMIN':
+                                        user.staff_level = 'USER'
+                                elif char == 'o':
+                                    user.authenticated = adding
+                                    if adding:
+                                        user.staff_level = 'SYSOP'
+                                    elif user.staff_level == 'SYSOP':
+                                        user.staff_level = 'USER'
+                                elif char == 'g':
+                                    user.authenticated = adding
+                                    if adding:
+                                        user.staff_level = 'GUIDE'
+                                    elif user.staff_level == 'GUIDE':
+                                        user.staff_level = 'USER'
+                                elif char == 'i':
+                                    logger.info(get_log_message("link_remote_mode_user_invisible", target=target, adding=adding))
 
                         # Forward MODE to other linked servers ONLY if we're trunk
                         if self.server_role == 'trunk':
@@ -2235,6 +2411,12 @@ class ServerLinkManager:
 
                 channel = self.irc_server.channels.get(chan_name)
                 if channel:
+                    target_user = self.irc_server.users.get(target_nick)
+
+                    # Deliver the KICK to the local target before membership is removed.
+                    if target_user and not target_user.is_remote:
+                        await target_user.send(line)
+
                     # Remove target from channel
                     channel.members.pop(target_nick, None)
                     channel.owners.discard(target_nick)
@@ -2243,7 +2425,6 @@ class ServerLinkManager:
                     channel.gagged.discard(target_nick)
 
                     # Update target user's channel list if they're local
-                    target_user = self.irc_server.users.get(target_nick)
                     if target_user:
                         target_user.channels.discard(chan_name)
 
@@ -2264,9 +2445,8 @@ class ServerLinkManager:
             if len(parts) >= 4:
                 target_nick = parts[2]
                 chan_name = parts[3].lstrip(':')
+                target_user = self.irc_server.get_user(target_nick)
 
-                # Check if target is local
-                target_user = self.irc_server.users.get(target_nick)
                 if target_user and not (target_user.is_remote):
                     # Target is local, deliver INVITE
                     target_user.invited_to.add(chan_name)
@@ -2276,6 +2456,16 @@ class ServerLinkManager:
                     # Target not found locally - forward to other servers ONLY if we're trunk
                     if self.server_role == 'trunk':
                         await self.broadcast_to_servers(line, exclude_server=server.name)
+
+                channel = self.irc_server.channels.get(chan_name)
+                if channel:
+                    inviter_nick = source.split('!')[0] if '!' in source else source
+                    notify_msg = f":{source} INVITE {target_user.nickname if target_user else target_nick} {chan_name}"
+                    for member in channel.members.values():
+                        if member.nickname == inviter_nick or member.is_remote:
+                            continue
+                        if 'invite-notify' in getattr(member, 'enabled_caps', set()):
+                            await member.send(notify_msg)
 
         elif cmd == 'NICK':
             # Nickname change
@@ -2294,8 +2484,10 @@ class ServerLinkManager:
                     if user:
                         # Update users dictionary
                         del self.irc_server.users[old_nick]
+                        self.irc_server.users_lower.pop(old_nick.lower(), None)
                         user.nickname = new_nick
                         self.irc_server.users[new_nick] = user
+                        self.irc_server.users_lower[new_nick.lower()] = new_nick
 
                 if user:
                     # Update channel memberships
@@ -2341,42 +2533,20 @@ class ServerLinkManager:
                 # Find target user
                 target = self.irc_server.users.get(target_nick)
                 if target:
-                    # Don't kill local users via remote KILL (security)
                     if target.is_remote:
-                        logger.info(get_log_message("link_remote_kill_ignored", target_nick=target_nick))
+                        logger.info(get_log_message("link_remote_kill_ignored", target=target_nick))
                     else:
-                        # Send KILL message to local target
+                        # The local server owning the nick must honor the routed KILL.
                         await target.send(f":{self.irc_server.servername} KILL {target_nick} :{reason}")
                         logger.info(get_log_message("link_remote_kill", target_nick=target_nick, reason=reason))
-                        await self.irc_server.quit_user(target)
+                        await self.irc_server.quit_user(
+                            target,
+                            reason=SERVER_MESSAGES['quit_reason_killed'].format(reason=reason)
+                        )
 
                 # Forward KILL to other linked servers ONLY if we're trunk
                 if self.server_role == 'trunk':
                     await self.broadcast_to_servers(line, exclude_server=server.name)
-
-        elif cmd == 'WHOIS':
-            # WHOIS query
-            # Format: :nickname!user@host WHOIS target
-            if len(parts) >= 3:
-                # Extract requester from source
-                if '!' in source:
-                    requester_nick = source.split('!')[0]
-                else:
-                    requester_nick = source
-                target_nick = parts[2]
-
-                # Check if target is local
-                target = self.irc_server.users.get(target_nick)
-                if target and not (target.is_remote):
-                    # Target is local, send WHOIS replies back through the link
-                    # We need to route replies back to the requester
-                    # For now, log that we received the query
-                    logger.info(get_log_message("link_remote_whois", requester=requester_nick, target=target_nick))
-                    # TODO: Send WHOIS replies back through server link
-                else:
-                    # Target not found locally - forward to other servers ONLY if we're trunk
-                    if self.server_role == 'trunk':
-                        await self.broadcast_to_servers(line, exclude_server=server.name)
 
         elif cmd == 'AWAY':
             # Away status change
@@ -2393,13 +2563,63 @@ class ServerLinkManager:
                     # Setting away
                     away_msg = ' '.join(parts[2:]).lstrip(':')
                     user.away_msg = away_msg
-                    logger.info(get_log_message("link_remote_away_set", nickname=nickname, away_msg=away_msg))
+                    logger.info(get_log_message("link_remote_away_set", nickname=nickname, message=away_msg))
                 else:
                     # Returning from away
                     user.away_msg = None
                     logger.info(get_log_message("link_remote_away_unset", nickname=nickname))
 
+                await self.irc_server.send_away_notify(user)
+
             # Forward AWAY to other linked servers ONLY if we're trunk
+            if self.server_role == 'trunk':
+                await self.broadcast_to_servers(line, exclude_server=server.name)
+
+        elif cmd == 'ACCOUNT':
+            if '!' in source:
+                nickname = source.split('!')[0]
+            else:
+                nickname = source
+
+            user = self.irc_server.get_user(nickname)
+            if user and len(parts) >= 3:
+                account_name = parts[2].lstrip(':')
+                user.sasl_account = None if account_name == '*' else account_name
+                await self.irc_server.send_account_notify(user)
+
+            if self.server_role == 'trunk':
+                await self.broadcast_to_servers(line, exclude_server=server.name)
+
+        elif cmd == 'CHGHOST':
+            if '!' in source:
+                nickname = source.split('!')[0]
+                old_userhost = source.split('!', 1)[1]
+                old_user = old_userhost.split('@')[0]
+            else:
+                nickname = source
+                old_user = nickname
+
+            user = self.irc_server.get_user(nickname)
+            if user and len(parts) >= 4:
+                old_host = getattr(user, 'host', '')
+                user.username = parts[2]
+                user.host = parts[3].lstrip(':')
+                await self.irc_server.send_chghost_notify(user, old_user, old_host)
+
+            if self.server_role == 'trunk':
+                await self.broadcast_to_servers(line, exclude_server=server.name)
+
+        elif cmd == 'SETNAME':
+            if '!' in source:
+                nickname = source.split('!')[0]
+            else:
+                nickname = source
+
+            user = self.irc_server.get_user(nickname)
+            if user and len(parts) >= 3:
+                user.realname = ' '.join(parts[2:]).lstrip(':')
+                await self.irc_server.send_setname_notify(user)
+
             if self.server_role == 'trunk':
                 await self.broadcast_to_servers(line, exclude_server=server.name)
 
@@ -2409,11 +2629,16 @@ class ServerLinkManager:
             if len(parts) >= 5:
                 chan_name = parts[2]
                 target_nick = parts[3]
-                message_text = ' '.join(parts[4:]).lstrip(':')
+                channel = self.irc_server.channels.get(chan_name)
+                if not channel:
+                    return
+
+                target_user = self.irc_server.get_user(target_nick)
+                if not target_user or not channel.has_member(target_user.nickname):
+                    return
 
                 # Check if target is local
-                target_user = self.irc_server.users.get(target_nick)
-                if target_user and not (target_user.is_remote):
+                if not target_user.is_remote:
                     # Target is local, deliver WHISPER
                     await target_user.send(line)
                     logger.info(get_log_message("link_remote_whisper", source=source, target=target_nick, channel=chan_name))
@@ -2546,16 +2771,21 @@ class ServerLinkManager:
                 continue
             await user.send(message)
 
-    async def handle_server_split(self, server: LinkedServer):
-        """Handle a server disconnecting (network divergence)"""
+    async def handle_server_split(self, server: LinkedServer, reason: str = "", schedule_reconnect: bool = True):
+        """Handle a server disconnecting (network divergence)."""
+        if getattr(server, 'split_handled', False):
+            return
+        server.split_handled = True
+
         logger.warning(get_log_message("link_server_split", server=server.name))
 
-        # Remove the server
+        # Remove the server from direct-link tracking first.
         self.servers.pop(server.name, None)
 
         # QUIT all users from that server
         for nickname in list(server.users):
             user = self.irc_server.users.pop(nickname, None)
+            self.irc_server.users_lower.pop(nickname.lower(), None)
             if user:
                 try:
                     await self.irc_server.notify_watchers_offline(user)
@@ -2570,7 +2800,9 @@ class ServerLinkManager:
                         # Broadcast quit to local users
                         for member in channel.members.values():
                             if not member.is_remote:
-                                member.send(quit_msg)
+                                await member.send(quit_msg)
+                        if not channel.members:
+                            self.irc_server.channels.pop(chan_name, None)
 
         # Notify local users
         await self.broadcast_to_local(
@@ -2583,11 +2815,16 @@ class ServerLinkManager:
         await self.broadcast_to_servers(squit_msg, exclude_server=server.name)
         logger.info(get_log_message("link_propagated_squit", server=server.name))
 
-        # Schedule reconnect if this was an autoconnect link
-        for link_cfg in self.links_config:
-            if link_cfg['name'] == server.name:
-                await self.schedule_reconnect(link_cfg)
-                break
+        # Schedule reconnect only for unexpected disconnects.
+        if schedule_reconnect:
+            for link_cfg in self.links_config:
+                if link_cfg['name'] == server.name:
+                    await self.schedule_reconnect(link_cfg)
+                    break
+        else:
+            reconnect_task = self.reconnect_tasks.pop(server.name, None)
+            if reconnect_task and reconnect_task is not asyncio.current_task():
+                reconnect_task.cancel()
 
     async def squit_server(self, servername: str, reason: str = ""):
         """Disconnect a server"""
@@ -2600,8 +2837,8 @@ class ServerLinkManager:
             await server.send(f"SQUIT {servername} :{reason}")
             server.writer.close()
 
-        # Handle as split
-        await self.handle_server_split(server)
+        # Handle as explicit split without auto-reconnect
+        await self.handle_server_split(server, reason=reason, schedule_reconnect=False)
 
     async def authenticate_server(self, servername: str, password: str) -> bool:
         """Authenticate an incoming server connection using bcrypt"""

@@ -183,6 +183,11 @@ def timed_cache(seconds=60):
 
             return result
 
+        def cache_clear():
+            cache.clear()
+
+        wrapper.cache_clear = cache_clear
+
         return wrapper
     return decorator
 

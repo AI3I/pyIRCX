@@ -4,7 +4,7 @@ Polkit (PolicyKit) rules required for the Web Administration Panel to control th
 
 ## Overview
 
-Polkit provides fine-grained authorization for system services. These rules allow the Apache web server user to manage the pyIRCX systemd service through D-Bus.
+Polkit provides fine-grained authorization for system services. These rules allow the web server user to manage the pyIRCX systemd service through D-Bus.
 
 **Security Benefits:**
 - No sudo configuration needed
@@ -16,7 +16,7 @@ Polkit provides fine-grained authorization for system services. These rules allo
 
 ### 10-pyircx-admin.rules
 
-**Purpose:** Grant apache user permission to manage pyircx.service
+**Purpose:** Grant the web server user permission to manage `pyircx.service`
 
 **Location:** `/etc/polkit-1/rules.d/10-pyircx-admin.rules`
 
@@ -54,7 +54,7 @@ sudo systemctl reload polkit
 Try to manage the service via web admin:
 ```bash
 curl -X POST -d "cmd=service-control&action=status" \
-  http://localhost/pyircx-admin/api.php
+  http://localhost/webadmin/api.php
 ```
 
 Should return service status without errors.
@@ -75,10 +75,10 @@ sudo journalctl | grep polkit | grep pyircx
 
 ```javascript
 polkit.addRule(function(action, subject) {
-    // Allow apache user to manage pyircx.service
+    // Allow the web server user to manage pyircx.service
     if (action.id == "org.freedesktop.systemd1.manage-units" &&
         action.lookup("unit") == "pyircx.service" &&
-        subject.user == "apache") {
+        ["apache", "www-data"].indexOf(subject.user) !== -1) {
         return polkit.Result.YES;
     }
 });
@@ -98,7 +98,7 @@ polkit.addRule(function(action, subject) {
 
 **Limitations:**
 - Only works for `pyircx.service` (not other services)
-- Only grants access to `apache` user
+- Only grants access to the configured web server user (`apache` or `www-data` by default)
 - Only allows manage-units action
 
 ## Troubleshooting
@@ -118,7 +118,7 @@ sudo journalctl -u polkit | tail -20
 
 **Test D-Bus directly:**
 ```bash
-sudo -u apache busctl call \
+sudo -u www-data busctl call \
   org.freedesktop.systemd1 \
   /org/freedesktop/systemd1 \
   org.freedesktop.systemd1.Manager \
@@ -138,7 +138,7 @@ sudo -u apache busctl call \
 - Ensure file is in `/etc/polkit-1/rules.d/` (not `/usr/share/polkit-1/rules.d/`)
 
 **Works via command line but not web:**
-- Verify Apache is running as `apache` user: `ps aux | grep httpd`
+- Verify the web server/PHP worker is running as the expected user: `ps aux | egrep 'httpd|apache2|php-fpm'`
 - Check SELinux is allowing D-Bus communication (see selinux/README.md)
 - Verify PHP-FPM user matches: `grep '^user' /etc/php-fpm.d/www.conf`
 
@@ -155,10 +155,10 @@ If polkit is not available, you can use sudo with NOPASSWD:
 
 ```bash
 # Add to /etc/sudoers.d/pyircx-admin
-apache ALL=(ALL) NOPASSWD: /usr/bin/systemctl start pyircx.service
-apache ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop pyircx.service
-apache ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart pyircx.service
-apache ALL=(ALL) NOPASSWD: /usr/bin/systemctl status pyircx.service
+www-data ALL=(ALL) NOPASSWD: /usr/bin/systemctl start pyircx.service
+www-data ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop pyircx.service
+www-data ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart pyircx.service
+www-data ALL=(ALL) NOPASSWD: /usr/bin/systemctl status pyircx.service
 ```
 
 **Note:** Polkit is preferred as it provides better security and auditing.
@@ -166,10 +166,10 @@ apache ALL=(ALL) NOPASSWD: /usr/bin/systemctl status pyircx.service
 ## Security Considerations
 
 ### What This Grants
-- Apache can start/stop/restart pyircx service only
-- Apache cannot manage other services
-- Apache cannot modify unit files
-- Apache cannot reload systemd daemon
+- The web server user can start/stop/restart pyircx service only
+- The web server user cannot manage other services
+- The web server user cannot modify unit files
+- The web server user cannot reload systemd daemon
 
 ### What This Doesn't Grant
 - No shell access
@@ -188,12 +188,12 @@ sudo journalctl -u polkit | grep pyircx
 ### Test Service Control
 
 ```bash
-# As apache user, test systemctl via D-Bus
-sudo -u apache systemctl status pyircx.service
+# As the web server user, test systemctl via D-Bus
+sudo -u www-data systemctl status pyircx.service
 
 # Via web interface
 curl -X POST -d "cmd=service-control&action=restart" \
-  http://localhost/pyircx-admin/api.php
+  http://localhost/webadmin/api.php
 ```
 
 Both should work without password prompts.

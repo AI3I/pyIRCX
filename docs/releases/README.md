@@ -8,5 +8,5 @@ See [CHANGELOG.md](../../CHANGELOG.md) in the project root for the latest change
 
 ## Version History
 
-Release notes will be added here for major releases (1.0.0, 2.0.0, etc.).
+Release-specific notes can be added here when a standalone release document is needed.
 

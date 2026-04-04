@@ -91,7 +91,7 @@ console.log("=== admin.js LOADING ===");
     }
 
     // API wrapper
-    function callAPI(cmd, args = []) {
+    function callAPI(cmd, args = [], options = {}) {
         // Get CSRF token from meta tag
         const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
 
@@ -99,6 +99,9 @@ console.log("=== admin.js LOADING ===");
         const fd = new FormData();
         fd.append('cmd', cmd);
         args.forEach((a,i) => fd.append(`args[${i}]`, a));
+        if (options.stdinPayload) {
+            fd.append('stdin_payload', JSON.stringify(options.stdinPayload));
+        }
         if (csrfToken) {
             fd.append('csrf_token', csrfToken);
         }
@@ -174,6 +177,9 @@ console.log("=== admin.js LOADING ===");
         fetch('api.php?cmd=service-status')
             .then(r => r.json())
             .then(data => {
+                if (data.error || !data.status) {
+                    throw new Error(data.error || 'Missing service status');
+                }
                 const status = data.status.trim();
                 
                 let statusHtml = '<div class="service-status-card ';
@@ -1161,7 +1167,9 @@ console.log("=== admin.js LOADING ===");
             return;
         }
 
-        callAPI('add-staff', [username, password, level, realname, email, forceRealname]).then(res => {
+        callAPI('add-staff', [username, level, realname, email, forceRealname], {
+            stdinPayload: {password}
+        }).then(res => {
             if (res.error) {
                 showToast('Error', res.error, 'error');
             } else {
@@ -1213,7 +1221,9 @@ console.log("=== admin.js LOADING ===");
             return;
         }
 
-        callAPI('change-staff-password', [username, newPassword]).then(res => {
+        callAPI('change-staff-password', [username], {
+            stdinPayload: {password: newPassword}
+        }).then(res => {
             if (res.error) {
                 showToast('Error', res.error, 'error');
             } else {
@@ -1284,12 +1294,14 @@ console.log("=== admin.js LOADING ===");
             return;
         }
 
-        const args = [nickname, password];
+        const args = [nickname];
         if (email) {
             args.push(email);
         }
 
-        callAPI('register-nick', args).then(res => {
+        callAPI('register-nick', args, {
+            stdinPayload: {password}
+        }).then(res => {
             if (res.error) {
                 showToast('Error', res.error, 'error');
             } else {
@@ -1393,9 +1405,11 @@ console.log("=== admin.js LOADING ===");
             return;
         }
 
-        const args = [nickname, password || '', email || ''];
+        const args = [nickname, email || ''];
 
-        callAPI('edit-nick', args).then(res => {
+        callAPI('edit-nick', args, {
+            stdinPayload: {password: password || ''}
+        }).then(res => {
             if (res.error) {
                 showToast('Error', res.error, 'error');
             } else {
@@ -2966,7 +2980,9 @@ console.log("=== admin.js LOADING ===");
         const password = prompt(`Register user ${nickname}\n\nEnter password for this user:`, '');
         if (password === null || password === '') return;
         const email = prompt(`Register user ${nickname}\n\nEnter email (optional):`, '');
-        callAPI('register-nick', [nickname, password, email || '']).then(res => {
+        callAPI('register-nick', [nickname, email || ''], {
+            stdinPayload: {password}
+        }).then(res => {
             if (res.error) {
                 showToast('Error', res.error, 'error');
             } else {

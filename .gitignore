@@ -5,6 +5,7 @@
 
 # Log files
 *.log
+pyircx.log
 *.out
 tests/integration/logs/latest.md
 tests/integration/logs/test_run_*.md
@@ -16,6 +17,7 @@ __pycache__/
 
 # Claude Code session data
 .claude/
+.codex/
 
 # Transcripts (runtime generated)
 transcripts/

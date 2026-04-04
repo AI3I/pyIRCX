@@ -11,14 +11,28 @@ ini_set('session.cookie_samesite', 'Strict');
 ini_set('session.use_strict_mode', 1);
 
 session_start();
+require_once __DIR__ . '/session_auth.php';
 
-// Authentication check - redirect to login if not authenticated
-if (!isset($_SESSION["admin_user"]) || !isset($_SESSION["admin_level"]) || $_SESSION["admin_level"] !== "ADMIN") {
-    header("Location: login.php");
-    exit();
-}
+// Authentication check - redirect to login if not authenticated or expired
+pyircx_require_admin_session(false);
 
 $admin_user = htmlspecialchars($_SESSION["admin_user"]);
+$version_paths = [
+    '/opt/pyircx/version.json',
+    dirname(__DIR__) . '/version.json',
+    __DIR__ . '/../version.json',
+];
+$version_display = 'unknown';
+foreach ($version_paths as $version_path) {
+    if (!is_readable($version_path)) {
+        continue;
+    }
+    $version_data = json_decode(file_get_contents($version_path), true);
+    if (is_array($version_data) && !empty($version_data['version'])) {
+        $version_display = htmlspecialchars($version_data['version']);
+        break;
+    }
+}
 
 // Ensure CSRF token exists
 if (!isset($_SESSION['csrf_token'])) {
@@ -95,7 +109,7 @@ $csrf_token = $_SESSION['csrf_token'];
                     <span class="nav-label">Logout</span>
                 </a>
                 <div style="padding: 15px; text-align: center; font-size: 11px; opacity: 0.6; margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.1);">
-                    pyIRCX v2.0.0
+                    pyIRCX v<?php echo $version_display; ?>
                 </div>
             </nav>
         </aside>

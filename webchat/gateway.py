@@ -12,6 +12,7 @@ import argparse
 import signal
 import configparser
 import time
+import ipaddress
 from pathlib import Path
 from collections import defaultdict
 
@@ -102,6 +103,7 @@ def load_config(config_file='/etc/pyircx/webchat.conf'):
         'irc_verify_ssl': True,
         'webirc_password': None,
         'webirc_gateway': WEBIRC_GATEWAY,
+        'trusted_proxies': ['127.0.0.1/32', '::1/128'],
         'max_connections': MAX_CONNECTIONS,
         'max_connections_per_ip': MAX_CONNECTIONS_PER_IP,
         'max_messages_per_second': MAX_MESSAGES_PER_SECOND,
@@ -136,6 +138,11 @@ def load_config(config_file='/etc/pyircx/webchat.conf'):
             if webirc_pass and webirc_pass.strip():
                 settings['webirc_password'] = webirc_pass.strip()
             settings['webirc_gateway'] = config.get('webirc', 'gateway', fallback=settings['webirc_gateway'])
+            trusted_proxies = config.get('webirc', 'trusted_proxies', fallback=None)
+            if trusted_proxies is not None:
+                settings['trusted_proxies'] = [
+                    entry.strip() for entry in trusted_proxies.split(',') if entry.strip()
+                ]
 
         # Limits
         if config.has_section('limits'):
@@ -224,6 +231,7 @@ class IRCWebSocketGateway:
         self.verify_ssl = config['irc_verify_ssl']
         self.webirc_pass = config['webirc_password']
         self.webirc_gateway = config['webirc_gateway']
+        self.trusted_proxy_networks = self._parse_trusted_proxies(config.get('trusted_proxies', []))
         self.max_connections = config['max_connections']
         self.max_connections_per_ip = config['max_connections_per_ip']
         self.max_buffer_size = config['max_buffer_size']
@@ -240,6 +248,39 @@ class IRCWebSocketGateway:
         )
         self.logger = logging.getLogger('irc-gateway')
 
+    def _parse_trusted_proxies(self, trusted_proxies):
+        """Parse trusted proxy IPs/CIDRs from config."""
+        networks = []
+        for entry in trusted_proxies:
+            try:
+                if '/' in entry:
+                    networks.append(ipaddress.ip_network(entry, strict=False))
+                else:
+                    networks.append(ipaddress.ip_network(entry + ('/128' if ':' in entry else '/32'), strict=False))
+            except ValueError:
+                self.logger.warning("Ignoring invalid trusted proxy entry: %s", entry)
+        return networks
+
+    def _get_remote_ip(self, websocket):
+        """Return the direct peer IP for a websocket connection."""
+        try:
+            remote = websocket.remote_address
+            if remote:
+                return sanitize_ip(remote[0])
+        except (AttributeError, TypeError, IndexError):
+            pass
+        return '0.0.0.0'
+
+    def _is_trusted_proxy(self, remote_ip):
+        """Check whether a direct peer is allowed to supply forwarding headers."""
+        if remote_ip == '0.0.0.0':
+            return False
+        try:
+            remote_addr = ipaddress.ip_address(remote_ip)
+        except ValueError:
+            return False
+        return any(remote_addr in network for network in self.trusted_proxy_networks)
+
     def get_client_ip(self, websocket):
         """Get real client IP from WebSocket connection
 
@@ -249,6 +290,8 @@ class IRCWebSocketGateway:
         Returns:
             str: Client IP address (sanitized)
         """
+        remote_ip = self._get_remote_ip(websocket)
+
         # Try multiple ways to access headers (websockets library version compatibility)
         headers = None
 
@@ -262,29 +305,25 @@ class IRCWebSocketGateway:
         if not headers:
             headers = getattr(websocket, 'request_headers', None)
 
-        # Try to get X-Forwarded-For or X-Real-IP
-        if headers:
+        # Only trust forwarded headers from explicitly trusted reverse proxies.
+        if headers and self._is_trusted_proxy(remote_ip):
             # X-Forwarded-For header (Apache/nginx reverse proxy)
             forwarded_for = headers.get('X-Forwarded-For', '') or headers.get('x-forwarded-for', '')
             if forwarded_for:
                 # X-Forwarded-For can be comma-separated; first IP is the original client
                 client_ip = forwarded_for.split(',')[0].strip()
-                return sanitize_ip(client_ip)
+                sanitized = sanitize_ip(client_ip)
+                if sanitized != '0.0.0.0':
+                    return sanitized
 
             # X-Real-IP header (alternative)
             real_ip = headers.get('X-Real-IP', '') or headers.get('x-real-ip', '')
             if real_ip:
-                return sanitize_ip(real_ip.strip())
+                sanitized = sanitize_ip(real_ip.strip())
+                if sanitized != '0.0.0.0':
+                    return sanitized
 
-        # Fall back to direct connection IP
-        try:
-            remote = websocket.remote_address
-            if remote:
-                return sanitize_ip(remote[0])
-        except (AttributeError, TypeError, IndexError):
-            pass
-
-        return '0.0.0.0'
+        return remote_ip
 
     async def handle_websocket(self, websocket, path=None):
         """Handle a new WebSocket connection

@@ -2,7 +2,7 @@
 
 ## Overview
 
-This is a standalone web admin panel for pyIRCX that runs on any standard webserver (Apache/nginx) with PHP support. No Cockpit dependency required!
+This is the supported browser-based admin panel for pyIRCX. It runs on any standard web server (Apache/nginx) with PHP support.
 
 ## Features
 
@@ -23,7 +23,7 @@ This is a standalone web admin panel for pyIRCX that runs on any standard webser
 - Apache or nginx webserver
 - PHP 7.4 or higher
 - pyIRCX installed (api.py accessible)
-- sudo privileges for systemctl commands
+- polkit rules for `pyircx.service` control
 
 ## Installation
 
@@ -37,33 +37,27 @@ sudo chmod 755 /var/www/html/webadmin/
 
 ### 2. Configure api.php path
 
-Edit `/var/www/html/webadmin/api.php` and verify the path to your api.py:
+Edit `/var/www/html/webadmin/api.php` and verify the path to your `api.py`:
 
 ```php
 // Line ~55
-$API_PATH = '/usr/share/cockpit/pyircx/api.py';
+$API_PATH = '/opt/pyircx/api.py';
 ```
 
 Change to your actual api.py location if different:
-- System install: `/usr/share/cockpit/pyircx/api.py`
-- Opt install: `/opt/pyircx/cockpit/pyircx/api.py`
+- System install: `/opt/pyircx/api.py`
 - Custom: `/path/to/your/api.py`
 
-### 3. Configure sudo for service control
+### 3. Configure polkit for service control
 
-The web interface needs sudo privileges to control the pyIRCX service. Create a sudoers entry:
+The web interface should use the shipped polkit rule instead of sudo:
 
 ```bash
-sudo visudo -f /etc/sudoers.d/pyircx-web
+sudo cp polkit/10-pyircx-admin.rules /etc/polkit-1/rules.d/
+sudo chown root:root /etc/polkit-1/rules.d/10-pyircx-admin.rules
+sudo chmod 644 /etc/polkit-1/rules.d/10-pyircx-admin.rules
+sudo systemctl reload polkit
 ```
-
-Add this line (replace `www-data` with your web server user if different):
-
-```
-www-data ALL=(ALL) NOPASSWD: /usr/bin/systemctl start pyircx.service, /usr/bin/systemctl stop pyircx.service, /usr/bin/systemctl restart pyircx.service, /usr/bin/systemctl is-active pyircx.service
-```
-
-Save and exit.
 
 ### 4. Configure SELinux (if enabled)
 
@@ -90,7 +84,7 @@ Add the web server user to the pyircx group:
 sudo usermod -a -G pyircx apache
 sudo systemctl restart php-fpm
 
-# For Apache (Debian/Ubuntu)
+# For Apache/nginx (Debian/Ubuntu)
 sudo usermod -a -G pyircx www-data
 sudo systemctl restart php-fpm
 ```
@@ -102,8 +96,10 @@ Set proper directory and file permissions:
 sudo chmod 775 /opt/pyircx
 sudo chmod 775 /etc/pyircx
 
-# Set config file permissions (group write enabled)
-sudo chmod 664 /etc/pyircx/pyircx_config.json
+# Keep /etc as the config source of truth and /opt as a symlink
+sudo chown root:pyircx /etc/pyircx/pyircx_config.json
+sudo chmod 660 /etc/pyircx/pyircx_config.json
+sudo ln -sfn /etc/pyircx/pyircx_config.json /opt/pyircx/pyircx_config.json
 sudo chmod 664 /opt/pyircx/pyircx.db
 ```
 
@@ -111,10 +107,10 @@ sudo chmod 664 /opt/pyircx/pyircx.db
 
 ```bash
 # Test systemctl access
-sudo -u apache systemctl is-active pyircx.service
+sudo -u www-data systemctl is-active pyircx.service
 
 # Test file write access
-sudo -u apache test -w /etc/pyircx/pyircx_config.json && echo "Config writable" || echo "Config not writable"
+sudo -u www-data test -w /etc/pyircx/pyircx_config.json && echo "Config writable" || echo "Config not writable"
 ```
 
 Should return `active`, `inactive`, or `failed` without asking for a password, and config should be writable.
@@ -174,12 +170,12 @@ location /webadmin/ {
 
 ## Security Recommendations
 
-1. **Session Authentication**: Web admin uses IRC staff account authentication with CSRF protection (v2.0.0)
+1. **Session Authentication**: Web admin uses IRC staff account authentication with CSRF protection
 2. **Use HTTPS**: Configure SSL/TLS certificate for encrypted connections
 3. **Restrict access**: Use firewall rules or web server IP restrictions to limit admin panel access
 4. **SELinux Enforcement**: Keep SELinux enabled for mandatory access control (recommended on RHEL/Fedora/CentOS)
 5. **Group Permissions**: Web admin uses group-based permissions (775/664) instead of world-writable files
-6. **Limit sudo/polkit**: Service control uses polkit authorization (passwordless but restricted to pyircx.service)
+6. **Limit service control**: Use the shipped polkit authorization rule restricted to `pyircx.service`
 7. **Keep updated**: Ensure PHP, web server, and pyIRCX are kept up to date with security patches
 
 ## Troubleshooting
@@ -189,18 +185,21 @@ location /webadmin/ {
 Check file permissions and group membership:
 ```bash
 # Check ownership
-sudo chown -R apache:apache /var/www/html/webadmin/
-sudo chown pyircx:pyircx /etc/pyircx/pyircx_config.json
+sudo chown -R www-data:www-data /var/www/html/webadmin/
+sudo chown root:pyircx /etc/pyircx/pyircx_config.json
 
 # Check permissions
 sudo chmod 775 /etc/pyircx
-sudo chmod 664 /etc/pyircx/pyircx_config.json
+sudo chmod 660 /etc/pyircx/pyircx_config.json
+
+# Runtime config path should be a symlink back to /etc
+sudo ln -sfn /etc/pyircx/pyircx_config.json /opt/pyircx/pyircx_config.json
 
 # Verify web server user is in pyircx group
-groups apache
+groups www-data
 
 # If not in group, add and restart PHP-FPM
-sudo usermod -a -G pyircx apache
+sudo usermod -a -G pyircx www-data
 sudo systemctl restart php-fpm
 ```
 
@@ -225,23 +224,23 @@ sudo restorecon -Rv /var/www/html/webadmin
 
 ### Service control doesn't work
 
-Test sudo config:
+Test service access as the web user:
 ```bash
 sudo -u www-data systemctl is-active pyircx.service
 ```
 
-If it asks for password, check your sudoers file.
+If it asks for authentication, check your polkit rule and web server user.
 
 ### API returns errors
 
 Check api.py path in api.php:
 ```bash
-ls -l /usr/share/cockpit/pyircx/api.py
+ls -l /opt/pyircx/api.py
 ```
 
 Test api.py manually:
 ```bash
-python3 /usr/share/cockpit/pyircx/api.py stats
+python3 /opt/pyircx/api.py stats
 ```
 
 ### PHP errors
@@ -252,26 +251,6 @@ sudo tail -f /var/log/apache2/error.log
 # or for nginx
 sudo tail -f /var/log/nginx/error.log
 ```
-
-## Uninstalling Cockpit Module
-
-Since you're using the standalone web admin now, you can remove the Cockpit module:
-
-```bash
-sudo rm -rf /usr/share/cockpit/pyircx/
-```
-
-The api.py file should stay accessible at its location for the PHP backend to use.
-
-## Migrating from Cockpit
-
-The standalone version has these improvements:
-- ✅ No Cockpit dependency
-- ✅ Multi-page layout with sidebar (cleaner, less busy)
-- ✅ Runs on standard webserver
-- ✅ Easier to customize
-- ✅ Better mobile responsiveness
-- ✅ Same functionality as Cockpit version
 
 ## Support
 

@@ -13,6 +13,8 @@ import tempfile
 import json
 import time
 import sqlite3
+from io import StringIO
+from unittest.mock import patch
 
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -237,6 +239,7 @@ def api_module(setup_api_env, monkeypatch):
     _orig_get_server_stats = api.get_server_stats
     _orig_get_realtime_status = api.get_realtime_status
     _orig_get_server_config = api.get_server_config
+    _orig_get_full_config = api.get_full_config
     _orig_get_motd = api.get_motd
     _orig_get_staff_list = api.get_staff_list
     _orig_health_check = api.health_check
@@ -312,12 +315,21 @@ def api_module(setup_api_env, monkeypatch):
         if isinstance(result, dict) and 'error' in result:
             return {"success": False, "error": result['error']}
         return {"success": True, **result}
+    wrapped_get_server_config.cache_clear = getattr(_orig_get_server_config, 'cache_clear', lambda: None)
 
     def wrapped_get_motd():
         result = _orig_get_motd()
         if isinstance(result, dict) and 'error' in result:
             return {"success": False, "error": result['error']}
         return {"success": True, **result}
+    wrapped_get_motd.cache_clear = getattr(_orig_get_motd, 'cache_clear', lambda: None)
+
+    def wrapped_get_full_config():
+        result = _orig_get_full_config()
+        if isinstance(result, dict) and 'error' in result:
+            return {"success": False, "error": result['error']}
+        return {"success": True, **result}
+    wrapped_get_full_config.cache_clear = getattr(_orig_get_full_config, 'cache_clear', lambda: None)
 
     def wrapped_get_staff_list():
         result = _orig_get_staff_list()
@@ -365,6 +377,7 @@ def api_module(setup_api_env, monkeypatch):
     api.get_realtime_status = wrapped_get_realtime_status
     api.get_server_config = wrapped_get_server_config
     api.get_motd = wrapped_get_motd
+    api.get_full_config = wrapped_get_full_config
     api.get_staff_list = wrapped_get_staff_list
     api.health_check = wrapped_health_check
     api.add_server_access = wrapped_add_server_access
@@ -520,6 +533,21 @@ class TestStaffManagement:
             usernames = [s['username'] for s in staff]
             assert 'listedstaff' in usernames
 
+    def test_add_staff_stdin(self, api_module, monkeypatch):
+        monkeypatch.setattr(api_module.sys, 'stdin', StringIO(json.dumps({'password': 'TestPass123!'})))
+        result = api_module.add_staff_stdin('stdinstaff', 'GUIDE')
+        assert result['success'] == True
+
+    def test_change_staff_password_stdin(self, api_module, monkeypatch):
+        api_module.create_staff_account(
+            username='passchange',
+            password='OldPass123!',
+            level='GUIDE'
+        )
+        monkeypatch.setattr(api_module.sys, 'stdin', StringIO(json.dumps({'password': 'NewPass123!'})))
+        result = api_module.change_staff_password_stdin('passchange')
+        assert result['success'] == True
+
 
 # =============================================================================
 # NICKNAME MANAGEMENT TESTS
@@ -541,6 +569,18 @@ class TestNicknameManagement:
         result = api_module.search_registered_nick('nonexistent')
 
         # Should succeed but return no results
+        assert result['success'] == True
+
+    def test_register_nickname_stdin(self, api_module, monkeypatch):
+        monkeypatch.setattr(api_module.sys, 'stdin', StringIO(json.dumps({'password': 'NickPass123!'})))
+        result = api_module.register_nickname_stdin('StdInNick', 'stdin@example.com')
+        assert result['success'] == True
+
+    def test_edit_nickname_stdin(self, api_module, monkeypatch):
+        register_result = api_module.register_nickname('EditNick', 'BeforePass123!', 'before@example.com')
+        assert register_result['success'] == True
+        monkeypatch.setattr(api_module.sys, 'stdin', StringIO(json.dumps({'password': 'AfterPass123!'})))
+        result = api_module.edit_nickname_stdin('EditNick', 'after@example.com')
         assert result['success'] == True
 
 
@@ -690,6 +730,34 @@ class TestConfiguration:
 
         assert result['success'] == True
 
+    def test_set_motd_invalidates_cached_get_motd(self, api_module):
+        api_module.get_motd()
+        api_module.set_motd(json.dumps(["Updated MOTD"]))
+        result = api_module.get_motd()
+
+        assert result['success'] == True
+        assert result['motd'] == ["Updated MOTD"]
+
+    def test_set_config_invalidates_cached_full_config(self, api_module):
+        api_module.get_full_config()
+        updated = api_module.load_config()
+        updated['server']['network'] = 'UpdatedNet'
+        api_module.set_config(json.dumps(updated))
+        result = api_module.get_full_config()
+
+        assert result['success'] == True
+        assert result['server']['network'] == 'UpdatedNet'
+
+    def test_set_newsflash_settings_invalidates_cached_read(self, api_module):
+        api_module.get_newsflash_settings()
+        api_module.set_newsflash_settings('true', 'true', '45')
+        result = api_module.get_newsflash_settings()
+
+        assert result['success'] == True
+        assert result['on_connect'] is True
+        assert result['periodic_enabled'] is True
+        assert result['periodic_interval'] == 45
+
 
 # =============================================================================
 # ERROR HANDLING TESTS
@@ -718,6 +786,22 @@ class TestErrorHandling:
 
         if not result['success']:
             assert 'error' in result
+
+
+@pytest.mark.unit
+@pytest.mark.api
+class TestAdminQueueCommands:
+    """Tests for admin queue command formatting."""
+
+    def test_send_irc_ban_user_writes_duration_before_reason(self, api_module):
+        with patch.object(api_module, 'write_admin_command', return_value={'success': True}) as mock_write:
+            result = api_module.send_irc_ban_user('BanTarget', 'Testing ban', 7200)
+
+        assert result['success'] == True
+        mock_write.assert_called_once_with(
+            'BAN_USER:BanTarget:7200:Testing ban',
+            api_module.SERVER_MESSAGES['api_ban_success'].format(nickname='BanTarget', duration=7200)
+        )
 
 
 # =============================================================================

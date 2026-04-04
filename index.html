@@ -33,7 +33,7 @@
                 <p class="hero-subtitle">A production-ready Python implementation of the IRCX protocol — the technology that powered MSN Chat and TalkCity</p>
                 <div class="hero-badges">
                     <span class="badge">Python 3.8+</span>
-                    <span class="badge">Version 2.0.0</span>
+                    <span class="badge" id="siteVersionBadge">Version ...</span>
                     <span class="badge">243 Tests Passing</span>
                 </div>
                 <div class="hero-buttons">
@@ -392,7 +392,7 @@ python3 pyircx.py</code></pre>
                 <div class="footer-section">
                     <h4>pyIRCX</h4>
                     <p>Production-ready IRCX server for distributed chat networks</p>
-                    <p class="version">Version 2.0.0</p>
+                    <p class="version" id="siteVersionFooter">Version ...</p>
                 </div>
                 <div class="footer-section">
                     <h4>Resources</h4>
@@ -446,6 +446,17 @@ python3 pyircx.py</code></pre>
                 closeLightbox();
             }
         });
+
+        fetch('./version.json')
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('siteVersionBadge').textContent = `Version ${data.version}`;
+                document.getElementById('siteVersionFooter').textContent = `Version ${data.version}`;
+            })
+            .catch(() => {
+                document.getElementById('siteVersionBadge').textContent = 'Version unknown';
+                document.getElementById('siteVersionFooter').textContent = 'Version unknown';
+            });
     </script>
 </body>
 </html>

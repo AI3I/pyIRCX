@@ -215,7 +215,7 @@
         </div>
     </div>
     <div class="header">
-        <h1>pyIRCX WebChat <span style="font-size: 12px; opacity: 0.6; font-weight: 400; margin-left: 8px;">v2.0.0</span></h1>
+        <h1>pyIRCX WebChat <span id="appVersion" style="font-size: 12px; opacity: 0.6; font-weight: 400; margin-left: 8px;">v...</span></h1>
         <div class="header-status">
             <div style="display:flex;align-items:center;gap:5px"><div class="status-dot" id="statusDot"></div><span id="statusText">Disconnected</span></div>
             <span id="currentNick"></span>
@@ -383,6 +383,8 @@ const CMD_DELAY = WEBCHAT_CONFIG.commandDelayMs;
 const staffEmoji = WEBCHAT_CONFIG.staffEmoji;
 
 let ws = null, currentNick = '', currentChannel = '', channels = {}, myModes = new Set(), isIRCX = false, pendingJoinChannel = '';
+let isPageUnloading = false;
+let appVersion = '?';
 const staffUsers = new Map(); // Track server staff: nick -> 'ADMIN'|'SYSOP'|'GUIDE'
 const lastWhoTime = new Map(); // Track last WHO time per channel to throttle requests
 
@@ -394,6 +396,7 @@ const settings = {
     highlightSound: localStorage.getItem('highlightSound') !== 'false'
 };
 const ignoredUsers = new Set(JSON.parse(localStorage.getItem('ignoredUsers') || '[]'));
+const WEBCHAT_SESSION_KEY = 'pyircx_webchat_session';
 let notificationPermission = 'default';
 const $ = id => document.getElementById(id);
 const escapeHtml = t => { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; };
@@ -539,6 +542,92 @@ function processQueue() {
     const cmd = cmdQueue.shift();
     if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'raw', command: cmd }));
     cmdTimer = setTimeout(processQueue, CMD_DELAY);
+}
+
+function persistWebchatSession(extra = {}) {
+    const state = {
+        nick: currentNick || $('loginNick').value.trim(),
+        channel: currentChannel || pendingJoinChannel || $('loginChannel').value.trim() || '#pyIRCX',
+        password: $('loginPassword').value,
+        shouldReconnect: !!(ws && ws.readyState === 1),
+        ...extra
+    };
+    sessionStorage.setItem(WEBCHAT_SESSION_KEY, JSON.stringify(state));
+}
+
+function loadWebchatSession() {
+    try {
+        return JSON.parse(sessionStorage.getItem(WEBCHAT_SESSION_KEY) || 'null');
+    } catch (_) {
+        return null;
+    }
+}
+
+function clearWebchatSession() {
+    sessionStorage.removeItem(WEBCHAT_SESSION_KEY);
+}
+
+function sendRawNow(cmd) {
+    if (ws && ws.readyState === 1) {
+        ws.send(JSON.stringify({ type: 'raw', command: cmd }));
+    }
+}
+
+function handleDirectCtcp(fromNick, text) {
+    const ctcp = String.fromCharCode(1);
+    if (!text.startsWith(ctcp) || !text.endsWith(ctcp) || text.length < 2) return false;
+
+    const payload = text.slice(1, -1).trim();
+    if (!payload) return false;
+
+    const [rawCommand, ...rest] = payload.split(' ');
+    const command = rawCommand.toUpperCase();
+    const argument = rest.join(' ');
+
+    if (command === 'ACTION') return false;
+
+    let reply;
+    switch (command) {
+        case 'PING':
+            reply = `PING${argument ? ' ' + argument : ''}`;
+            break;
+        case 'VERSION':
+            reply = `VERSION pyIRCX WebChat ${appVersion}`;
+            break;
+        case 'TIME':
+            reply = `TIME ${new Date().toString()}`;
+            break;
+        case 'CLIENTINFO':
+            reply = 'CLIENTINFO ACTION CLIENTINFO ERRMSG FINGER PING SOURCE TIME USERINFO VERSION';
+            break;
+        case 'FINGER':
+            reply = 'FINGER pyIRCX WebChat user';
+            break;
+        case 'USERINFO':
+            reply = `USERINFO ${currentNick || 'WebChat User'}`;
+            break;
+        case 'SOURCE':
+            reply = 'SOURCE https://github.com/0x8007000E/pyIRCX';
+            break;
+        default:
+            reply = `ERRMSG ${command} :Unsupported CTCP query`;
+            break;
+    }
+
+    sendRawNow(`NOTICE ${fromNick} :${ctcp}${reply}${ctcp}`);
+    return true;
+}
+
+function parseCtcp(text) {
+    const ctcp = String.fromCharCode(1);
+    if (!text || !text.startsWith(ctcp) || !text.endsWith(ctcp) || text.length < 2) return null;
+    const payload = text.slice(1, -1).trim();
+    if (!payload) return null;
+    const [rawCommand, ...rest] = payload.split(' ');
+    return {
+        command: rawCommand.toUpperCase(),
+        argument: rest.join(' ')
+    };
 }
 
 // Throttled WHO - only send if enough time has passed since last WHO for this channel
@@ -771,6 +860,7 @@ function connect() {
         ws.onopen = () => {
             currentNick = nick;
             pendingJoinChannel = channel;
+            persistWebchatSession({ nick, channel, password, shouldReconnect: true });
             // Send connection registration (NICK/USER)
             ws.send(JSON.stringify({ type: 'connect', nick, username: password ? nick : 'webchat', realname: 'pyIRCX WebChat', password: password || undefined }));
         };
@@ -789,6 +879,7 @@ function setConnected() {
     $('sendBtn').disabled = false;
     $('emojiBtn').disabled = false;
     $('messageInput').focus();
+    persistWebchatSession({ shouldReconnect: true });
     // Create Status window and switch to it
     const status = getChannel('Status');
     status.isStatus = true;
@@ -801,6 +892,8 @@ function setDisconnected() {
     ws = null;
     cmdQueue.length = 0;
     if (cmdTimer) { clearTimeout(cmdTimer); cmdTimer = null; }
+    if (isPageUnloading) return;
+    clearWebchatSession();
     $('loginModal').classList.remove('hidden');
     $('statusDot').classList.remove('connected');
     $('statusText').textContent = 'Disconnected';
@@ -876,7 +969,7 @@ function handleMessage(data) {
         // Connection & Welcome
         case '001':
             // Sync nick from server response (p[0] is the accepted nick)
-            if (p[0]) { currentNick = p[0]; $('currentNick').textContent = p[0]; }
+            if (p[0]) { currentNick = p[0]; $('currentNick').textContent = p[0]; persistWebchatSession({ nick: p[0], shouldReconnect: true }); }
             setConnected();
             sysMsg(p[p.length-1]);
             // Enable IRCX mode after registration (channel join will happen after 800)
@@ -1183,6 +1276,7 @@ function handleMessage(data) {
                 const ch = getChannel(p[0]);
                 ch.users.set(nick, { prefix: '', away: null });
                 if (nick?.toLowerCase() === currentNick?.toLowerCase()) {
+                    persistWebchatSession({ channel: p[0], shouldReconnect: true });
                     switchChannel(p[0]);
                     addMsg(p[0], `You joined ${p[0]}`, 'event');
                     // Automatically WHO the channel to discover staff status
@@ -1269,7 +1363,7 @@ function handleMessage(data) {
                         addMsg(ch.name, `${escapeHtml(nick)} is now ${escapeHtml(p[0])}`, 'event');
                     }
                 });
-                if (nick?.toLowerCase() === currentNick?.toLowerCase()) { currentNick = p[0]; $('currentNick').textContent = p[0]; }
+                if (nick?.toLowerCase() === currentNick?.toLowerCase()) { currentNick = p[0]; $('currentNick').textContent = p[0]; persistWebchatSession({ nick: p[0], shouldReconnect: true }); }
                 if (currentChannel) renderUserList(getChannel(currentChannel));
             }
             break;
@@ -1337,6 +1431,15 @@ function handleMessage(data) {
                 const ctcp = String.fromCharCode(1);
                 const action = text.startsWith(ctcp + 'ACTION ') && text.endsWith(ctcp);
                 const isPM = !isChannel(target);
+                const ctcpData = parseCtcp(text);
+
+                if (isPM) {
+                    handleDirectCtcp(nick, text);
+                }
+
+                if (isPM && ctcpData && ctcpData.command !== 'ACTION') {
+                    break;
+                }
 
                 if (isPM) {
                     // Private message - create PM channel
@@ -1376,6 +1479,11 @@ function handleMessage(data) {
             if (p.length >= 2) {
                 const text = p[p.length-1];
                 const src = nick || prefix || 'Server';
+                const ctcpData = parseCtcp(text);
+                if (!isChannel(p[0]) && ctcpData) {
+                    sysMsg(`CTCP ${ctcpData.command} reply from ${src}${ctcpData.argument ? `: ${ctcpData.argument}` : ''}`, 'system');
+                    break;
+                }
                 const target = isChannel(p[0]) ? p[0] : currentChannel;
                 // Get staff emoji if applicable
                 const noticeStaff = staffUsers.get(src);
@@ -2039,6 +2147,23 @@ $('loginChannel').value = WEBCHAT_CONFIG.defaultChannel;
 if (WEBCHAT_CONFIG.defaultNick) {
     $('loginNick').value = WEBCHAT_CONFIG.defaultNick;
 }
+const savedSession = loadWebchatSession();
+if (savedSession) {
+    if (savedSession.nick) $('loginNick').value = savedSession.nick;
+    if (savedSession.channel) $('loginChannel').value = savedSession.channel;
+    if (savedSession.password) $('loginPassword').value = savedSession.password;
+}
+
+fetch('./version.json')
+    .then(response => response.json())
+    .then(data => {
+        appVersion = data.version || '?';
+        $('appVersion').textContent = `v${appVersion}`;
+    })
+    .catch(() => {
+        appVersion = '?';
+        $('appVersion').textContent = 'v?';
+    });
 
 // Event listeners
 $('connectBtn').onclick = connect;
@@ -2086,6 +2211,15 @@ document.addEventListener('click', (e) => {
 });
 
 $('loginNick').focus();
+
+window.addEventListener('beforeunload', () => {
+    isPageUnloading = true;
+    persistWebchatSession({ shouldReconnect: !!(ws && ws.readyState === 1) });
+});
+
+if (savedSession?.shouldReconnect && savedSession.nick) {
+    connect();
+}
 
 // Dark mode toggle
 function updateDarkIcon() {

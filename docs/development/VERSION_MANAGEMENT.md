@@ -9,14 +9,15 @@ This document explains how version management works in pyIRCX and the tools avai
 ### Core Files
 1. **`RELEASE_CHECKLIST.md`** - Complete checklist for releases (Claude & humans)
 2. **`utils/bump_version.sh`** - Automated version bumping script
-3. **`utils/version_check.sh`** - Pre-release verification script
-4. **`RELEASE_v{VERSION}.md`** - Release notes for each version
+3. **`utils/touch_version_timestamp.sh`** - Refresh the daemon's displayed created/build timestamp
+4. **`utils/version_check.sh`** - Pre-release verification script
+5. **`RELEASE_v{VERSION}.md`** - Release notes for each version
 
 ### Version Location in Code
 - `pyircx.py` lines 25-27:
   - `__version__` - Version string (e.g., "1.1.3")
   - `__version_label__` - Project label ("pyIRCX")
-  - `__created__` - Timestamp of version creation
+  - `created` - Shared created/build timestamp shown by the daemon
 
 ---
 
@@ -73,6 +74,18 @@ This document explains how version management works in pyIRCX and the tools avai
 
 Same workflow as above, but can manually edit files if preferred.
 
+### Refreshing The Daemon Timestamp Without A Version Bump
+
+If you make a notable protocol/compliance fix and want the daemon's displayed
+timestamp to move forward without changing the semantic version:
+
+```bash
+./utils/touch_version_timestamp.sh
+```
+
+This updates the shared `created` field in `version.json`, which is what the
+server uses for the created/build timestamp surfaced through the daemon.
+
 ---
 
 ## 🛠️ Available Scripts
@@ -87,24 +100,23 @@ Same workflow as above, but can manually edit files if preferred.
 ```
 
 **What it does:**
-- Updates `__version__` in pyircx.py
-- Updates `__created__` timestamp
+- Updates `version.json`
 - Updates README.md (if version mentioned)
 - Creates release notes template if missing
 - Shows next steps
 
 **Example:**
 ```bash
-$ ./utils/bump_version.sh 1.2.0
-Current version: 1.1.3
-New version:     1.2.0
+$ ./utils/bump_version.sh 2.1.0
+Current version: 2.0.1
+New version:     2.1.0
 
 Proceed with version bump? (y/n) y
 
 Updating files...
-  - pyircx.py ... ✓
+  - version.json ... ✓
   - README.md ... ✓
-  - Creating RELEASE_v1.2.0.md ... ✓
+  - Creating RELEASE_v2.1.0.md ... ✓
 
 Version bump complete!
 ```
@@ -121,7 +133,7 @@ Version bump complete!
 ```
 
 **What it checks:**
-- ✓ Version in pyircx.py
+- ✓ Version in version.json
 - ✓ Release notes file exists
 - ✓ Release date is current
 - ✓ Version mentioned in README.md
@@ -134,14 +146,14 @@ Version bump complete!
 
 **Example:**
 ```bash
-$ ./utils/version_check.sh 1.1.3
+$ ./utils/version_check.sh 2.0.1
 === pyIRCX Version Consistency Check ===
 
-Current version in pyircx.py: 1.1.3
-✓ Version matches expected: 1.1.3
+Current version in version.json: 2.0.1
+✓ Version matches expected: 2.0.1
 
 === Checking Release Notes ===
-✓ RELEASE_v1.1.3.md exists
+✓ RELEASE_v2.0.1.md exists
 ✓ Release date is current
 
 ...
@@ -151,10 +163,32 @@ Current version in pyircx.py: 1.1.3
 
 ---
 
+### 3. touch_version_timestamp.sh
+
+**Purpose:** Refresh the daemon's displayed created/build timestamp without
+changing the semantic version number.
+
+**Usage:**
+```bash
+./utils/touch_version_timestamp.sh
+```
+
+**What it does:**
+- Updates the `created` field in `version.json`
+- Leaves the semantic version unchanged
+- Makes the daemon show a fresh timestamp for notable fixes
+
+**Typical use cases:**
+- IRC RFC compliance corrections
+- protocol-behavior fixes you want visible in the daemon banner
+- small maintenance releases that are intentionally not version bumps
+
+---
+
 ## 📋 What Gets Updated During Release
 
 ### Automatic (via scripts)
-- ✅ `pyircx.py` - `__version__` and `__created__`
+- ✅ `version.json` - version metadata and created timestamp
 - ✅ Release notes template created
 - ✅ README.md - version mentions replaced
 

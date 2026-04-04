@@ -15,6 +15,14 @@ from responses import get_log_message, SERVER_MESSAGES
 logger = logging.getLogger(__name__)
 
 
+def _safe_log(method, message):
+    """Best-effort logging that stays quiet during interpreter shutdown."""
+    try:
+        method(message)
+    except Exception:
+        pass
+
+
 class ConnectionPool:
     """Thread-safe SQLite connection pool
 
@@ -136,12 +144,13 @@ class ConnectionPool:
                     except Exception as create_error:
                         logger.error(get_log_message("db_pool_replacement_failed", error=create_error))
 
-    def close_all(self):
+    def close_all(self, quiet=False):
         """Close all connections in the pool
 
         Should be called during shutdown to cleanly close all connections.
         """
-        logger.info(get_log_message("db_closing"))
+        if not quiet:
+            _safe_log(logger.info, get_log_message("db_closing"))
         closed_count = 0
 
         while not self.pool.empty():
@@ -152,9 +161,11 @@ class ConnectionPool:
             except Empty:
                 break
             except Exception as e:
-                logger.error(get_log_message("db_pool_close_error", error=e))
+                if not quiet:
+                    _safe_log(logger.error, get_log_message("db_pool_close_error", error=e))
 
-        logger.info(get_log_message("db_pool_closed", count=closed_count))
+        if not quiet:
+            _safe_log(logger.info, get_log_message("db_pool_closed", count=closed_count))
         self._initialized = False
 
     def get_stats(self):
@@ -221,13 +232,13 @@ def get_connection(timeout=5.0):
     return _pool.get_connection(timeout=timeout)
 
 
-def close_pool():
+def close_pool(quiet=False):
     """Close the global connection pool"""
     global _pool
 
     with _pool_lock:
         if _pool is not None:
-            _pool.close_all()
+            _pool.close_all(quiet=quiet)
             _pool = None
 
 
@@ -244,4 +255,4 @@ def get_pool_stats():
 
 # Cleanup on module unload
 import atexit
-atexit.register(close_pool)
+atexit.register(lambda: close_pool(quiet=True))

@@ -15,7 +15,7 @@ api.py has significant code redundancy and optimization opportunities. The prima
 3. ❌ **No transaction management** - Each operation commits immediately
 4. ❌ **Potential scalability issues** - Opening/closing connections is expensive
 5. ⚠️ **Missing error handling context** - Generic error returns
-6. ⚠️ **Stale references** - "Cockpit" references (fixed)
+6. ⚠️ **Historical wording cleanup** - older admin-interface terminology was normalized
 
 ---
 
@@ -533,16 +533,15 @@ async def get_server_stats():
 
 ---
 
-## Stale References (FIXED)
+## Historical Wording Cleanup (FIXED)
 
 ### Fixed Issues
-✅ Line 4: "Cockpit web interface" → "web administration"
-✅ Line 1323: "Cockpit Admin" → "API Admin"
+✅ Older admin-interface wording normalized to current WebAdmin terminology
+✅ API descriptions now refer to web administration rather than legacy wrappers
 
 ### Verification
 ```bash
-grep -i "cockpit" api.py
-# No results - all fixed
+grep -i "web administration" api.py
 ```
 
 ---

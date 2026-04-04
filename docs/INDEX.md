@@ -1,6 +1,6 @@
 # pyIRCX Documentation Index
 
-**Version:** 2.0.0+
+**Version:** Current release (see [`../version.json`](../version.json))
 **Last Updated:** 2026-01-18
 
 ---
@@ -118,7 +118,7 @@ docs/
 
 ## Version-Specific Documentation
 
-### Current Version (v2.0.0+)
+### Current Release
 - Server linking and distributed networks
 - IRCX CREATE command
 - Enhanced authentication (PASS, AUTH, SASL)

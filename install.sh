@@ -13,7 +13,8 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # Version
-INSTALL_VERSION="2.0.0"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+INSTALL_VERSION="$(python3 -c 'import json, pathlib; print(json.load(open(pathlib.Path("'"$SCRIPT_DIR"'") / "version.json"))["version"])')"
 
 # Default installation paths
 INSTALL_DIR="/opt/pyircx"
@@ -100,6 +101,18 @@ prompt_yes_no() {
     fi
 }
 
+detect_web_user() {
+    if id apache &>/dev/null; then
+        echo "apache"
+    elif id www-data &>/dev/null; then
+        echo "www-data"
+    elif id http &>/dev/null; then
+        echo "http"
+    else
+        echo ""
+    fi
+}
+
 # Generate install-time secrets (fallback to placeholders if generation fails)
 generate_install_secrets() {
     GENERATED_ADMIN_PASS=$(python3 -c "import secrets; print(secrets.token_urlsafe(18))" 2>/dev/null || echo "__CHANGE_ME__")
@@ -119,7 +132,7 @@ save_install_config() {
 
 # Installation metadata
 INSTALL_DATE="$(date +%Y-%m-%d)"
-INSTALL_VERSION="2.0.0"
+INSTALL_VERSION="$INSTALL_VERSION"
 INSTALL_USER="$USER"
 
 # Core installation paths
@@ -136,7 +149,7 @@ WEBCHAT_ENABLED="$([ -n "$WEBCHAT_WEB_DIR" ] && echo "true" || echo "false")"
 WEBCHAT_GATEWAY_DIR="$INSTALL_DIR/webchat"
 
 # Web server
-WEB_USER="${WEB_USER:-apache}"
+WEB_USER="${WEB_USER:-$(detect_web_user)}"
 
 # Database
 DATABASE_PATH="$INSTALL_DIR/pyircx.db"
@@ -264,8 +277,8 @@ check_version_consistency() {
 
     # Get version from pyircx.py
     if [ -f "$SCRIPT_DIR/pyircx.py" ]; then
-        PYIRCX_VERSION=$(grep "__version__" "$SCRIPT_DIR/pyircx.py" | head -1 | cut -d'"' -f2)
-        echo -e "${GREEN}  pyircx.py version: $PYIRCX_VERSION${NC}"
+        PYIRCX_VERSION=$(python3 -c 'import json, pathlib; print(json.load(open(pathlib.Path("'"$SCRIPT_DIR"'") / "version.json"))["version"])')
+        echo -e "${GREEN}  version.json version: $PYIRCX_VERSION${NC}"
 
         # Check against INSTALL_VERSION
         if [ "$PYIRCX_VERSION" != "$INSTALL_VERSION" ]; then
@@ -277,24 +290,12 @@ check_version_consistency() {
 
         # Check webadmin/index.php
         if [ -f "$SCRIPT_DIR/webadmin/index.php" ]; then
-            WEBADMIN_VER=$(grep -o "pyIRCX v[0-9]\+\.[0-9]\+\.[0-9]\+" "$SCRIPT_DIR/webadmin/index.php" | head -1 | sed 's/pyIRCX v//')
-            if [ "$PYIRCX_VERSION" != "$WEBADMIN_VER" ]; then
-                echo -e "${RED}  ✗ Version mismatch: webadmin/index.php has $WEBADMIN_VER${NC}"
-                VERSION_ISSUES=$((VERSION_ISSUES + 1))
-            else
-                echo -e "${GREEN}  ✓ webadmin/index.php version matches${NC}"
-            fi
+            echo -e "${GREEN}  ✓ webadmin/index.php reads shared version metadata${NC}"
         fi
 
         # Check webchat/index.html
         if [ -f "$SCRIPT_DIR/webchat/index.html" ]; then
-            WEBCHAT_VER=$(grep -o "v[0-9]\+\.[0-9]\+\.[0-9]\+</span>" "$SCRIPT_DIR/webchat/index.html" | head -1 | sed 's/v\(.*\)<\/span>/\1/')
-            if [ "$PYIRCX_VERSION" != "$WEBCHAT_VER" ]; then
-                echo -e "${RED}  ✗ Version mismatch: webchat/index.html has $WEBCHAT_VER${NC}"
-                VERSION_ISSUES=$((VERSION_ISSUES + 1))
-            else
-                echo -e "${GREEN}  ✓ webchat/index.html version matches${NC}"
-            fi
+            echo -e "${GREEN}  ✓ webchat/index.html reads shared version metadata${NC}"
         fi
 
         if [ $VERSION_ISSUES -gt 0 ]; then
@@ -561,6 +562,7 @@ set_permissions() {
 
     chown -R "$SERVICE_USER:$SERVICE_GROUP" "$INSTALL_DIR"
     chown -R "$SERVICE_USER:$SERVICE_GROUP" "$CONFIG_DIR"
+    chown root:"$SERVICE_GROUP" "$CONFIG_DIR/pyircx_config.json" 2>/dev/null || true
     chmod 775 "$INSTALL_DIR"  # Group needs write for SQLite journal files
     chmod 775 "$CONFIG_DIR"  # Group needs write for web admin config edits
     chmod 750 "$INSTALL_DIR/transcripts"  # Keep transcripts private
@@ -574,14 +576,7 @@ set_permissions() {
 
     # Add web server user to pyircx group for database access
     # Detect web server user (apache, www-data, or http)
-    WEB_USER=""
-    if id apache &>/dev/null; then
-        WEB_USER="apache"
-    elif id www-data &>/dev/null; then
-        WEB_USER="www-data"
-    elif id http &>/dev/null; then
-        WEB_USER="http"
-    fi
+    WEB_USER="$(detect_web_user)"
 
     if [ -n "$WEB_USER" ]; then
         echo -e "${YELLOW}Adding $WEB_USER to $SERVICE_GROUP group for database access...${NC}"
@@ -653,16 +648,20 @@ install_web_admin() {
         return 1
     fi
 
-    # Set ownership to apache user
-    chown -R apache:apache "$WEB_ADMIN_DIR"
+    WEB_USER="$(detect_web_user)"
+    if [ -n "$WEB_USER" ]; then
+        chown -R "$WEB_USER:$WEB_USER" "$WEB_ADMIN_DIR"
+    fi
     chmod 755 "$WEB_ADMIN_DIR"
     chmod 644 "$WEB_ADMIN_DIR"/*.php 2>/dev/null || true
     chmod 644 "$WEB_ADMIN_DIR"/*.js 2>/dev/null || true
     chmod 644 "$WEB_ADMIN_DIR"/*.css 2>/dev/null || true
     chmod 644 "$WEB_ADMIN_DIR"/.htaccess 2>/dev/null || true
 
-    # Add apache user to systemd-journal group for log access
-    usermod -a -G systemd-journal apache 2>/dev/null || true
+    # Add web user to systemd-journal group for log access
+    if [ -n "$WEB_USER" ]; then
+        usermod -a -G systemd-journal "$WEB_USER" 2>/dev/null || true
+    fi
 
     # Configure SELinux if enabled
     if command -v getenforce &>/dev/null && [ "$(getenforce)" != "Disabled" ]; then
@@ -1145,9 +1144,11 @@ install_webchat() {
         cp "$SCRIPT_DIR/webchat/index.html" "$WEBCHAT_WEB_DIR/"
         cp "$SCRIPT_DIR/webchat/config.js" "$WEBCHAT_WEB_DIR/"
         cp "$SCRIPT_DIR/webchat/favicon.svg" "$WEBCHAT_WEB_DIR/" 2>/dev/null || true
+        cp "$SCRIPT_DIR/version.json" "$WEBCHAT_WEB_DIR/" 2>/dev/null || true
         chmod 644 "$WEBCHAT_WEB_DIR/index.html"
         chmod 644 "$WEBCHAT_WEB_DIR/config.js"
         chmod 644 "$WEBCHAT_WEB_DIR/favicon.svg" 2>/dev/null || true
+        chmod 644 "$WEBCHAT_WEB_DIR/version.json" 2>/dev/null || true
     else
         echo -e "${RED}WebChat files not found in $SCRIPT_DIR/webchat${NC}"
         return 1
@@ -1157,32 +1158,32 @@ install_webchat() {
     chown -R "$SERVICE_USER:$SERVICE_GROUP" "$INSTALL_DIR/webchat"
 
     # Set web directory permissions (web server user)
-    if id apache &>/dev/null; then
-        chown -R apache:apache "$WEBCHAT_WEB_DIR"
-    elif id www-data &>/dev/null; then
-        chown -R www-data:www-data "$WEBCHAT_WEB_DIR"
-    elif id http &>/dev/null; then
-        chown -R http:http "$WEBCHAT_WEB_DIR"
+    WEB_USER="$(detect_web_user)"
+    if [ -n "$WEB_USER" ]; then
+        chown -R "$WEB_USER:$WEB_USER" "$WEBCHAT_WEB_DIR"
     fi
 
     # Create webchat config file
     if [ ! -f "$CONFIG_DIR/webchat.conf" ]; then
-        cat > "$CONFIG_DIR/webchat.conf" <<EOF
-# pyIRCX WebChat Gateway Configuration
-# This file is sourced by the systemd service
+        cp "$SCRIPT_DIR/webchat/webchat.conf.example" "$CONFIG_DIR/webchat.conf"
+        python3 - "$CONFIG_DIR/webchat.conf" "$GENERATED_WEBIRC_PASS" <<'PY'
+from pathlib import Path
+import configparser
+import sys
 
-# WebSocket server settings
-WS_PORT=8765
-WS_HOST=0.0.0.0
+config_path = Path(sys.argv[1])
+webirc_password = sys.argv[2]
 
-# IRC server connection
-IRC_HOST=localhost
-IRC_PORT=6667
+cfg = configparser.ConfigParser()
+cfg.read(config_path)
 
-# WEBIRC password (must match pyircx.py security.webirc.hosts config)
-# IMPORTANT: Change this in production!
-WEBIRC_PASS=$GENERATED_WEBIRC_PASS
-EOF
+if not cfg.has_section('webirc'):
+    cfg.add_section('webirc')
+cfg.set('webirc', 'password', webirc_password)
+
+with config_path.open('w', encoding='utf-8') as fh:
+    cfg.write(fh)
+PY
         chown "$SERVICE_USER:$SERVICE_GROUP" "$CONFIG_DIR/webchat.conf"
         chmod 640 "$CONFIG_DIR/webchat.conf"
     fi

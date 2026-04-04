@@ -32,6 +32,11 @@ password =
 # WEBIRC gateway identifier (appears in user hostmasks)
 gateway = pyircx-webchat
 
+# Only these reverse proxies may supply X-Forwarded-For / X-Real-IP.
+# Direct clients are ignored even if they send those headers.
+# Comma-separated IPs or CIDR ranges.
+trusted_proxies = 127.0.0.1/32, ::1/128
+
 [limits]
 # Connection and rate limits
 

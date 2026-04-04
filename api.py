@@ -11,8 +11,8 @@ import os
 import time
 import re
 import hashlib
-import bcrypt
 import socket
+import subprocess
 from pathlib import Path
 from datetime import datetime
 import logging
@@ -35,41 +35,91 @@ from responses import get_log_message, SERVER_MESSAGES
 # Setup logging
 logger = logging.getLogger(__name__)
 
-# Default paths - check system install location first, then user home
+# Default paths - check system install location first, then local checkout
 # System installation paths (from install.sh)
 SYSTEM_CONFIG = "/etc/pyircx/pyircx_config.json"
 SYSTEM_INSTALL = "/opt/pyircx"
+PROJECT_ROOT = Path(__file__).resolve().parent
+PROJECT_CONFIG = PROJECT_ROOT / "pyircx_config.json"
 
-# User installation paths (for manual/development installations)
+# User installation paths (legacy manual installations)
 USER_CONFIG = os.path.expanduser("~/pyIRCX/pyircx_config.json")
 USER_INSTALL = os.path.expanduser("~/pyIRCX")
 
+ENV_CONFIG = os.environ.get("PYIRCX_CONFIG")
+ENV_DB = os.environ.get("PYIRCX_DB")
+ENV_LOG = os.environ.get("PYIRCX_LOG")
+ENV_STATUS = os.environ.get("PYIRCX_STATUS")
+
 # Determine which installation is active
-if os.path.exists(SYSTEM_CONFIG):
+if ENV_CONFIG:
+    DEFAULT_CONFIG = ENV_CONFIG
+    DEFAULT_DB = ENV_DB or str(PROJECT_ROOT / "pyircx.db")
+    DEFAULT_LOG = ENV_LOG or str(PROJECT_ROOT / "pyircx.log")
+    DEFAULT_STATUS = ENV_STATUS or str(PROJECT_ROOT / "pyircx_status.json")
+elif os.path.exists(SYSTEM_CONFIG):
     # System installation detected
     DEFAULT_CONFIG = SYSTEM_CONFIG
     DEFAULT_DB = os.path.join(SYSTEM_INSTALL, "pyircx.db")
     DEFAULT_LOG = os.path.join(SYSTEM_INSTALL, "pyircx.log")
     DEFAULT_STATUS = os.path.join(SYSTEM_INSTALL, "pyircx_status.json")
+elif PROJECT_CONFIG.exists():
+    # Running from a source checkout
+    DEFAULT_CONFIG = str(PROJECT_CONFIG)
+    DEFAULT_DB = str(PROJECT_ROOT / "pyircx.db")
+    DEFAULT_LOG = str(PROJECT_ROOT / "pyircx.log")
+    DEFAULT_STATUS = str(PROJECT_ROOT / "pyircx_status.json")
 else:
-    # Fall back to user installation
+    # Fall back to legacy user installation
     DEFAULT_CONFIG = USER_CONFIG
     DEFAULT_DB = os.path.join(USER_INSTALL, "pyircx.db")
     DEFAULT_LOG = os.path.join(USER_INSTALL, "pyircx.log")
     DEFAULT_STATUS = os.path.join(USER_INSTALL, "pyircx_status.json")
 
-@api_error_handler
+
+def _get_bcrypt():
+    """Import bcrypt only when password operations are needed."""
+    try:
+        import bcrypt
+    except ImportError as e:
+        raise RuntimeError("bcrypt is required for password operations") from e
+    return bcrypt
+
+
+def _hash_password(password):
+    bcrypt = _get_bcrypt()
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+
+def _check_password(password, password_hash):
+    bcrypt = _get_bcrypt()
+    return bcrypt.checkpw(password.encode('utf-8'), password_hash.encode('utf-8'))
+
+
+def ensure_db_pool(pool_size=10):
+    """Initialize the shared DB pool on first use."""
+    if db_pool.get_pool_stats() is not None:
+        return True
+    return init_db_pool(pool_size=pool_size)
+
 def load_config():
     """Load pyIRCX configuration"""
     with open(DEFAULT_CONFIG, 'r') as f:
         return json.load(f)
 
-@api_error_handler
 def save_config(config):
     """Save pyIRCX configuration"""
     with open(DEFAULT_CONFIG, 'w') as f:
         json.dump(config, f, indent=2)
-    return {"success": True}
+    return config
+
+
+def invalidate_config_caches():
+    """Clear cached config-derived API responses after writes."""
+    for func in (get_motd, get_server_config, get_full_config, get_newsflash_settings):
+        cache_clear = getattr(func, 'cache_clear', None)
+        if callable(cache_clear):
+            cache_clear()
 
 @timed_cache(seconds=60)
 @api_error_handler
@@ -107,7 +157,9 @@ def set_motd(motd_lines):
             motd_lines = [line.rstrip() for line in motd_lines.split('\n')]
 
     config['server']['motd'] = motd_lines
-    return save_config(config)
+    save_config(config)
+    invalidate_config_caches()
+    return {"success": True}
 
 def get_db_path():
     """Get database path from config or use default"""
@@ -116,11 +168,11 @@ def get_db_path():
         db_path = config['database']['path']
         # Handle relative paths
         if not os.path.isabs(db_path):
-            # Use the appropriate base directory
-            if os.path.exists(SYSTEM_CONFIG):
-                db_path = os.path.join(SYSTEM_INSTALL, db_path)
+            if os.path.abspath(DEFAULT_CONFIG) == os.path.abspath(SYSTEM_CONFIG):
+                db_path = os.path.normpath(os.path.join(SYSTEM_INSTALL, db_path))
             else:
-                db_path = os.path.join(USER_INSTALL, db_path)
+                config_dir = os.path.dirname(os.path.abspath(DEFAULT_CONFIG))
+                db_path = os.path.normpath(os.path.join(config_dir, db_path))
         return db_path
     return DEFAULT_DB
 
@@ -128,6 +180,8 @@ def get_admin_queue_path():
     """Get admin command queue path based on installation type"""
     if os.path.exists(SYSTEM_CONFIG):
         return os.path.join(SYSTEM_INSTALL, "admin_commands.queue")
+    elif PROJECT_CONFIG.exists():
+        return str(PROJECT_ROOT / "admin_commands.queue")
     else:
         return os.path.join(USER_INSTALL, "admin_commands.queue")
 
@@ -168,15 +222,6 @@ def init_db_pool(pool_size=10):
         logger.error(get_log_message("api_pool_init_failed", error=e))
         return False
 
-
-# Initialize pool on module import
-try:
-    init_db_pool()
-except Exception as e:
-    # If pool init fails, log but don't crash - will fall back to direct connections
-    logger.warning(get_log_message("api_pool_init_warning", error=e))
-
-
 # ============================================================================
 # HEALTH CHECK
 # ============================================================================
@@ -196,6 +241,7 @@ def health_check():
 
     # Check 1: Database connectivity
     try:
+        ensure_db_pool()
         with db_pool.get_connection(timeout=2.0) as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT 1")
@@ -1056,7 +1102,7 @@ def add_staff(username, password, level, realname=None, email=None, force_realna
             return {"error": SERVER_MESSAGES['api_staff_already_exists'].format(username=username)}
 
         # Hash password (same method as pyircx.py uses)
-        password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        password_hash = _hash_password(password)
 
         # Insert new staff member
         cursor.execute("""
@@ -1104,7 +1150,7 @@ def change_staff_password(username, new_password):
             return {"error": SERVER_MESSAGES['api_staff_not_found'].format(username=username)}
 
         # Hash password
-        password_hash = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        password_hash = _hash_password(new_password)
 
         # Update password
         cursor.execute("""
@@ -1192,10 +1238,17 @@ def get_full_config():
     return load_config()
 
 @api_error_handler
+def get_config():
+    """Get raw configuration wrapped in an API response."""
+    return {"config": load_config()}
+
+@api_error_handler
 def set_config(config_json):
     """Set configuration from JSON string"""
     config = json.loads(config_json)
-    return save_config(config)
+    save_config(config)
+    invalidate_config_caches()
+    return {"success": True}
 
 # ============================================================================
 # LOG FUNCTIONS
@@ -1205,8 +1258,6 @@ def set_config(config_json):
 def get_logs(lines=100, level_filter=None, search=None):
     """Get server logs from journalctl (systemd) or log file"""
     # Try to get logs from journalctl (systemd journal) first
-    import subprocess
-
     cmd = ['journalctl', '-u', 'pyircx.service', '-n', str(lines), '--no-pager', '--output=short-iso']
 
     try:
@@ -1252,6 +1303,49 @@ def get_logs(lines=100, level_filter=None, search=None):
         'source': 'file'
     }
 
+
+def _run_systemctl(*args):
+    """Run systemctl safely and return completed process."""
+    return subprocess.run(
+        ['systemctl', *args],
+        capture_output=True,
+        text=True,
+        timeout=10
+    )
+
+
+@api_error_handler
+def get_service_status():
+    """Return pyIRCX service status."""
+    try:
+        result = _run_systemctl('is-active', 'pyircx.service')
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return {'status': 'unavailable'}
+
+    status = (result.stdout or result.stderr).strip() or 'unknown'
+    return {'status': status}
+
+
+@api_error_handler
+def control_service(action):
+    """Control the pyIRCX systemd service."""
+    if action not in {'start', 'stop', 'restart', 'reload', 'status'}:
+        raise ValueError('Invalid service action')
+
+    if action == 'status':
+        return get_service_status()
+
+    try:
+        result = _run_systemctl(action, 'pyircx.service')
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return {'error': 'Service control unavailable'}
+
+    if result.returncode == 0:
+        return {'success': True, 'message': f'Service {action} successful'}
+
+    message = (result.stderr or result.stdout).strip()
+    return {'error': f'Failed to control service: {message}'}
+
 # ============================================================================
 # NEWSFLASH SETTINGS
 # ============================================================================
@@ -1279,9 +1373,8 @@ def set_newsflash_settings(on_connect, periodic_enabled, periodic_interval):
     config['newsflash']['periodic_enabled'] = periodic_enabled == 'true' or periodic_enabled == True
     config['newsflash']['periodic_interval'] = int(periodic_interval)
 
-    result = save_config(config)
-    if 'error' in result:
-        return result
+    save_config(config)
+    invalidate_config_caches()
     return {"success": True, "message": SERVER_MESSAGES['api_newsflash_settings_updated']}
 
 # ============================================================================
@@ -1310,7 +1403,7 @@ def register_nickname(nickname, password, email=None):
         # Generate UUID and hash password
         import uuid
         nick_uuid = str(uuid.uuid4())
-        password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        password_hash = _hash_password(password)
         now = int(time.time())
 
         # Set email (None if '*' was provided)
@@ -1445,7 +1538,7 @@ def edit_nickname(nickname, new_password=None, new_email=None):
         if new_password:
             if len(new_password) < 8:
                 raise ValueError(SERVER_MESSAGES['api_password_too_short'])
-            password_hash = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+            password_hash = _hash_password(new_password)
             updates.append("password_hash = ?")
             params.append(password_hash)
 
@@ -1522,7 +1615,7 @@ def test_identify(nickname, password):
         password_hash, mfa_enabled = row
 
         # Verify password
-        if bcrypt.checkpw(password.encode('utf-8'), password_hash.encode('utf-8')):
+        if _check_password(password, password_hash):
             if mfa_enabled:
                 return {"success": True, "message": SERVER_MESSAGES['api_identify_mfa_required'], "mfa_required": True}
             else:
@@ -1554,7 +1647,7 @@ def test_staff_login(username, password):
         password_hash, level = row
 
         # Verify password
-        if bcrypt.checkpw(password.encode('utf-8'), password_hash.encode('utf-8')):
+        if _check_password(password, password_hash):
             return {"success": True, "message": SERVER_MESSAGES['api_login_success_with_level'].format(level=level), "level": level}
         else:
             return {"success": False, "message": SERVER_MESSAGES['api_staff_login_password_incorrect']}
@@ -1567,6 +1660,43 @@ def test_staff_login_stdin(username):
 
     # Use the existing test_staff_login function
     return test_staff_login(username, password)
+
+
+def _read_stdin_json():
+    """Read a JSON payload from stdin for secret-bearing API commands."""
+    raw = sys.stdin.read()
+    if not raw:
+        raise ValueError("Missing stdin payload")
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid stdin payload: {exc}") from exc
+
+
+def add_staff_stdin(username, level, realname=None, email=None, force_realname=False):
+    """Add a staff member with password provided via stdin JSON."""
+    payload = _read_stdin_json()
+    return add_staff(username, payload.get('password', ''), level, realname, email, force_realname)
+
+
+def change_staff_password_stdin(username):
+    """Change a staff password with the new password provided via stdin JSON."""
+    payload = _read_stdin_json()
+    return change_staff_password(username, payload.get('password', ''))
+
+
+def register_nickname_stdin(nickname, email=None):
+    """Register a nickname with password provided via stdin JSON."""
+    payload = _read_stdin_json()
+    return register_nickname(nickname, payload.get('password', ''), email)
+
+
+def edit_nickname_stdin(nickname, new_email=None):
+    """Edit a nickname with optional password provided via stdin JSON."""
+    payload = _read_stdin_json()
+    password = payload.get('password', '')
+    new_password = password if password else None
+    return edit_nickname(nickname, new_password, new_email)
 
 @api_error_handler
 def get_staff_details(username):
@@ -1932,6 +2062,23 @@ def main():
     command = sys.argv[1]
     result = None
 
+    db_commands = {
+        "health", "health-check", "stats", "server-access-list", "add-server-access",
+        "remove-server-access", "newsflash-list", "add-newsflash", "delete-newsflash",
+        "newsflash-settings", "set-newsflash-settings", "mailbox-list", "send-mailbox-message",
+        "delete-mailbox-message", "search-nicknames", "search-channels", "add-staff",
+        "delete-staff", "change-staff-password", "change-staff-level", "update-staff-profile",
+        "register-nick", "register-channel", "unregister-nick", "unregister-channel",
+        "edit-nick", "reset-mfa", "test-identify", "test-staff-login", "test-staff-login-stdin",
+        "get-staff-details", "edit-channel", "list-nicknames-paginated", "list-channels-paginated",
+        "get-channel-access", "get-channel-details", "set-channel-access", "recent-registrations",
+        "channels", "staff", "services", "list-services", "config", "get-config",
+        "full-config", "set-config", "get-motd", "set-motd"
+    }
+
+    if command in db_commands:
+        ensure_db_pool()
+
     # Health check
     if command == "health" or command == "health-check":
         result = health_check()
@@ -2012,7 +2159,7 @@ def main():
     elif command == "config":
         result = get_server_config()
     elif command == "get-config":
-        result = {"config": load_config()}
+        result = get_config()
     elif command == "full-config":
         result = get_full_config()
     elif command == "set-config":
@@ -2036,6 +2183,13 @@ def main():
         level = sys.argv[3] if len(sys.argv) > 3 else None
         search_term = sys.argv[4] if len(sys.argv) > 4 else None
         result = get_logs(lines, level, search_term)
+    elif command == "service-status":
+        result = get_service_status()
+    elif command == "service-control":
+        if len(sys.argv) < 3:
+            result = {"error": "Invalid service action"}
+        else:
+            result = control_service(sys.argv[2])
 
     # Staff management
     elif command == "add-staff":
@@ -2046,6 +2200,14 @@ def main():
             email = sys.argv[6] if len(sys.argv) > 6 and sys.argv[6] else None
             force_realname = sys.argv[7] if len(sys.argv) > 7 and sys.argv[7] == '1' else False
             result = add_staff(sys.argv[2], sys.argv[3], sys.argv[4], realname, email, force_realname)
+    elif command == "add-staff-stdin":
+        if len(sys.argv) < 4:
+            result = {"error": SERVER_MESSAGES['api_usage_add_staff']}
+        else:
+            realname = sys.argv[4] if len(sys.argv) > 4 and sys.argv[4] else None
+            email = sys.argv[5] if len(sys.argv) > 5 and sys.argv[5] else None
+            force_realname = sys.argv[6] if len(sys.argv) > 6 and sys.argv[6] == '1' else False
+            result = add_staff_stdin(sys.argv[2], sys.argv[3], realname, email, force_realname)
     elif command == "delete-staff":
         if len(sys.argv) < 3:
             result = {"error": SERVER_MESSAGES['api_usage_delete_staff']}
@@ -2056,6 +2218,11 @@ def main():
             result = {"error": SERVER_MESSAGES['api_usage_change_staff_password']}
         else:
             result = change_staff_password(sys.argv[2], sys.argv[3])
+    elif command == "change-staff-password-stdin":
+        if len(sys.argv) < 3:
+            result = {"error": SERVER_MESSAGES['api_usage_change_staff_password']}
+        else:
+            result = change_staff_password_stdin(sys.argv[2])
     elif command == "change-staff-level":
         if len(sys.argv) < 4:
             result = {"error": SERVER_MESSAGES['api_usage_change_staff_level']}
@@ -2077,6 +2244,12 @@ def main():
         else:
             email = sys.argv[4] if len(sys.argv) > 4 else None
             result = register_nickname(sys.argv[2], sys.argv[3], email)
+    elif command == "register-nick-stdin":
+        if len(sys.argv) < 3:
+            result = {"error": SERVER_MESSAGES['api_usage_register_nick']}
+        else:
+            email = sys.argv[3] if len(sys.argv) > 3 else None
+            result = register_nickname_stdin(sys.argv[2], email)
     elif command == "register-channel":
         if len(sys.argv) < 4:
             result = {"error": SERVER_MESSAGES['api_usage_register_channel']}
@@ -2099,6 +2272,12 @@ def main():
             new_password = sys.argv[3] if len(sys.argv) > 3 and sys.argv[3] else None
             new_email = sys.argv[4] if len(sys.argv) > 4 else None
             result = edit_nickname(sys.argv[2], new_password, new_email)
+    elif command == "edit-nick-stdin":
+        if len(sys.argv) < 3:
+            result = {"error": SERVER_MESSAGES['api_usage_edit_nick']}
+        else:
+            new_email = sys.argv[3] if len(sys.argv) > 3 else None
+            result = edit_nickname_stdin(sys.argv[2], new_email)
     elif command == "reset-mfa":
         if len(sys.argv) < 3:
             result = {"error": SERVER_MESSAGES['api_usage_reset_mfa']}

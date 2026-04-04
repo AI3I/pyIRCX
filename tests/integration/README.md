@@ -1,4 +1,4 @@
-# pyIRCX v2.0.0 Test Suite
+# pyIRCX Test Suite
 
 Comprehensive test infrastructure for pyIRCX IRC/IRCX server.
 
@@ -181,7 +181,7 @@ python3 tests/integration/ircx/access.py
 - Fuzzy matching ("Did you mean?")
 - Command examples
 - Service help text
-- v2.0.0 personalized help
+- Personalized help responses
 
 **Example:**
 ```bash
@@ -193,7 +193,7 @@ python3 tests/integration/core/help.py
 - STATS c (connections)
 - STATS a/o/g (admins/operators/guides)
 - STATS v (version)
-- Enhanced v2.0.0 formatting
+- Enhanced formatting and response coverage
 
 **Example:**
 ```bash
@@ -336,7 +336,7 @@ Ensure your test servers have:
 - Unit Tests (testing/): 241 tests
 - Distributed Tests: 20+ tests
 
-### v2.0.0 Features Covered
+### v2.0.1 Features Covered
 
 - ✅ Distributed networking (trunk/branch)
 - ✅ Cross-server operations
@@ -348,10 +348,9 @@ Ensure your test servers have:
 
 ### Gaps to Address
 
-See `docs/testing/TEST_AUDIT_v2.0.0.md` for detailed gap analysis:
-- ❌ v2.0.0 personalized messages
+See `docs/testing/TEST_AUDIT_v2.0.0.md` for historical gap analysis:
+- ❌ Personalized message coverage in the historical audit
 - ❌ Command aliases comprehensive tests
-- ❌ ServiceBot dispatcher
 - ❌ PROFANITY command
 - ❌ Enhanced STATS formatting verification
 

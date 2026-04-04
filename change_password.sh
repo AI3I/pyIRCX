@@ -7,7 +7,7 @@
 #   ./change_password.sh staff <username>        - Change staff account password
 #   ./change_password.sh webirc                  - Change WEBIRC gateway password
 #   ./change_password.sh webchat                 - Change WebChat gateway password
-#   ./change_password.sh webadmin <username>     - Change WebAdmin password
+#   ./change_password.sh webadmin <username>     - Change WebAdmin staff login password
 #   ./change_password.sh all                     - Interactive password change for all components
 
 set -e
@@ -25,7 +25,6 @@ CONFIG_DIR="/etc/pyircx"
 API_SCRIPT="$INSTALL_DIR/api.py"
 CONFIG_FILE="$CONFIG_DIR/pyircx_config.json"
 WEBCHAT_CONF="$CONFIG_DIR/webchat.conf"
-WEBADMIN_CONF="$CONFIG_DIR/webadmin_config.json"
 
 # Functions
 show_usage() {
@@ -35,7 +34,7 @@ show_usage() {
     echo "  $0 staff <username>        - Change staff account password (admin/sysop/guide)"
     echo "  $0 webirc                  - Change WEBIRC gateway password"
     echo "  $0 webchat                 - Change WebChat gateway password"
-    echo "  $0 webadmin <username>     - Change WebAdmin password"
+    echo "  $0 webadmin <username>     - Change WebAdmin staff login password"
     echo "  $0 all                     - Interactive password change for all components"
     echo ""
     echo "Examples:"
@@ -79,8 +78,12 @@ change_staff_password() {
         exit 1
     fi
 
-    # Change password using API
-    python3 "$API_SCRIPT" change-staff-password "$username" "$password"
+    # Change password using API via stdin to avoid exposing it in argv
+    python3 - "$password" <<'PY' | python3 "$API_SCRIPT" change-staff-password-stdin "$username"
+import json
+import sys
+print(json.dumps({"password": sys.argv[1]}))
+PY
 
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}✓ Password changed successfully for $username${NC}"
@@ -193,8 +196,22 @@ update_webchat_env() {
     # Backup config
     cp "$WEBCHAT_CONF" "$WEBCHAT_CONF.backup.$(date +%Y%m%d_%H%M%S)"
 
-    # Update WEBIRC_PASS in environment file
-    sed -i "s/^WEBIRC_PASS=.*/WEBIRC_PASS=$password/" "$WEBCHAT_CONF"
+    python3 - "$WEBCHAT_CONF" "$password" <<'PY'
+import configparser
+import sys
+
+config_path = sys.argv[1]
+password = sys.argv[2]
+
+cfg = configparser.ConfigParser()
+cfg.read(config_path)
+if not cfg.has_section('webirc'):
+    cfg.add_section('webirc')
+cfg.set('webirc', 'password', password)
+
+with open(config_path, 'w', encoding='utf-8') as fh:
+    cfg.write(fh)
+PY
 
     echo -e "${GREEN}✓ WebChat config updated${NC}"
     echo -e "${YELLOW}Restart pyircx-webchat service to apply: systemctl restart pyircx-webchat${NC}"
@@ -231,13 +248,8 @@ change_webadmin_password() {
         exit 1
     fi
 
-    echo -e "${BLUE}Changing WebAdmin password for: ${YELLOW}$username${NC}"
+    echo -e "${BLUE}Changing WebAdmin staff login password for: ${YELLOW}$username${NC}"
     echo ""
-
-    if [ ! -f "$WEBADMIN_CONF" ]; then
-        echo -e "${RED}Error: $WEBADMIN_CONF not found${NC}"
-        exit 1
-    fi
 
     # Prompt for new password
     read -sp "Enter new password: " password
@@ -250,51 +262,15 @@ change_webadmin_password() {
         exit 1
     fi
 
-    # Generate bcrypt hash using Python
-    password_hash=$(python3 -c "
-import bcrypt
-import sys
-password = '''$password'''
-hashed = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-print(hashed)
-")
-
-    # Backup config
-    cp "$WEBADMIN_CONF" "$WEBADMIN_CONF.backup.$(date +%Y%m%d_%H%M%S)"
-
-    # Update config
-    python3 -c "
+    python3 - "$password" <<'PY' | python3 "$API_SCRIPT" change-staff-password-stdin "$username"
 import json
 import sys
-
-config_file = '$WEBADMIN_CONF'
-username = '$username'
-password_hash = '''$password_hash'''
-
-try:
-    with open(config_file, 'r') as f:
-        config = json.load(f)
-
-    if 'users' not in config:
-        config['users'] = {}
-
-    if username not in config['users']:
-        print(f'Warning: User {username} not found, creating new user')
-        config['users'][username] = {'level': 'admin'}
-
-    config['users'][username]['password'] = password_hash
-
-    with open(config_file, 'w') as f:
-        json.dump(config, f, indent=2)
-
-    print(f'Password updated for {username}')
-except Exception as e:
-    print(f'Error: {e}', file=sys.stderr)
-    sys.exit(1)
-"
+print(json.dumps({"password": sys.argv[1]}))
+PY
 
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}✓ WebAdmin password changed successfully${NC}"
+        echo -e "${YELLOW}Note:${NC} WebAdmin authenticates against the IRC staff account database."
     else
         echo -e "${RED}✗ Failed to change WebAdmin password${NC}"
         exit 1

@@ -17,9 +17,10 @@ ini_set('session.cookie_samesite', 'Strict');
 ini_set('session.use_strict_mode', 1);
 
 session_start();
+require_once __DIR__ . '/session_auth.php';
 
 // If already logged in, redirect to admin panel
-if (isset($_SESSION['admin_user']) && isset($_SESSION['admin_level'])) {
+if (pyircx_webadmin_session_status()['authenticated']) {
     header('Location: index.php');
     exit();
 }
@@ -132,6 +133,8 @@ $success = '';
 // Check if logged out
 if (isset($_GET['logout']) && $_GET['logout'] == '1') {
     $success = 'You have been successfully logged out';
+} elseif (isset($_GET['expired']) && $_GET['expired'] == '1') {
+    $error = 'Your session expired. Please sign in again.';
 }
 
 // Handle login form submission
@@ -152,7 +155,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Path to api.py
         $API_PATH = '/opt/pyircx/api.py';
         if (!file_exists($API_PATH)) {
-            $API_PATH = dirname(__FILE__) . '/api.py';
+            $API_PATH = dirname(__DIR__) . '/api.py';
         }
 
         // Call test-staff-login via Python API using stdin for password (security)
@@ -197,6 +200,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['admin_user'] = $username;
                 $_SESSION['admin_level'] = $json['level'];
                 $_SESSION['login_time'] = time();
+                $_SESSION['last_activity'] = $_SESSION['login_time'];
 
                 // Generate CSRF token
                 $_SESSION['csrf_token'] = bin2hex(random_bytes(32));

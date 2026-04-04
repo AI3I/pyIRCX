@@ -9,7 +9,6 @@ Type=simple
 User=pyircx
 Group=pyircx
 WorkingDirectory=/opt/pyircx/webchat
-EnvironmentFile=-/etc/pyircx/webchat.conf
 ExecStart=/usr/bin/python3 /opt/pyircx/webchat/gateway.py --config /etc/pyircx/webchat.conf
 Restart=on-failure
 RestartSec=5

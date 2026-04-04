@@ -8,9 +8,65 @@ import tempfile
 import os
 import sys
 import sqlite3
+import asyncio
+import inspect
+import json
+import types
 
 # Add project root to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+def _install_import_stub(module_name, **attrs):
+    """Install a minimal stub for optional runtime dependencies in tests."""
+    try:
+        __import__(module_name)
+    except ImportError:
+        stub = types.ModuleType(module_name)
+        for key, value in attrs.items():
+            setattr(stub, key, value)
+        sys.modules[module_name] = stub
+
+
+_install_import_stub(
+    "bcrypt",
+    gensalt=lambda *args, **kwargs: b"stub-salt",
+    hashpw=lambda password, salt: password if isinstance(password, bytes) else str(password).encode("utf-8"),
+    checkpw=lambda password, hashed: (
+        password if isinstance(password, bytes) else str(password).encode("utf-8")
+    ) == hashed,
+)
+_install_import_stub("pyotp", random_base32=lambda *args, **kwargs: "A" * 32, TOTP=lambda *args, **kwargs: None)
+_install_import_stub("aiosqlite", connect=None)
+
+
+def pytest_configure(config):
+    """Register local markers used by the suite."""
+    config.addinivalue_line("markers", "asyncio: run test in an asyncio event loop")
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_pyfunc_call(pyfuncitem):
+    """Run asyncio-marked coroutine tests without external plugins."""
+    if "asyncio" not in pyfuncitem.keywords:
+        return None
+
+    test_func = pyfuncitem.obj
+    if not inspect.iscoroutinefunction(test_func):
+        return None
+
+    loop = asyncio.new_event_loop()
+    try:
+        asyncio.set_event_loop(loop)
+        kwargs = {
+            name: pyfuncitem.funcargs[name]
+            for name in pyfuncitem._fixtureinfo.argnames
+        }
+        loop.run_until_complete(test_func(**kwargs))
+    finally:
+        asyncio.set_event_loop(None)
+        loop.close()
+    return True
 
 
 # =============================================================================
@@ -235,6 +291,40 @@ def temp_config():
     yield config_path
 
     # Cleanup
+    try:
+        os.unlink(config_path)
+    except OSError:
+        pass
+
+
+@pytest.fixture
+def api_module():
+    """Import api.py with a temporary checkout-local config path."""
+    import importlib
+
+    module = importlib.import_module("api")
+    original_config = module.DEFAULT_CONFIG
+    original_db = module.DEFAULT_DB
+    original_log = module.DEFAULT_LOG
+    original_status = module.DEFAULT_STATUS
+
+    fd, config_path = tempfile.mkstemp(suffix='.json')
+    os.close(fd)
+
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump({"server": {"name": "Test", "network": "TestNet"}}, f)
+
+    module.DEFAULT_CONFIG = config_path
+    module.DEFAULT_DB = os.path.join(tempfile.gettempdir(), "pyircx-test.db")
+    module.DEFAULT_LOG = os.path.join(tempfile.gettempdir(), "pyircx-test.log")
+    module.DEFAULT_STATUS = os.path.join(tempfile.gettempdir(), "pyircx-test-status.json")
+
+    yield module
+
+    module.DEFAULT_CONFIG = original_config
+    module.DEFAULT_DB = original_db
+    module.DEFAULT_LOG = original_log
+    module.DEFAULT_STATUS = original_status
     try:
         os.unlink(config_path)
     except OSError:

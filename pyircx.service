@@ -11,7 +11,7 @@ Type=simple
 User=pyircx
 Group=pyircx
 WorkingDirectory=/opt/pyircx
-ExecStart=/usr/bin/python3 /opt/pyircx/pyircx.py --systemd
+ExecStart=/usr/bin/python3 /opt/pyircx/pyircx.py --systemd --config /etc/pyircx/pyircx_config.json
 ExecReload=/bin/kill -HUP $MAINPID
 ExecStop=/bin/kill -TERM $MAINPID
 

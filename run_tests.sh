@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# pyIRCX Test Runner v2.0.0
+# pyIRCX Test Runner
 # Automated test execution with server management
 #
 # NOTE: For best results, configure server with relaxed connection throttling:
@@ -10,6 +10,9 @@
 
 set -e
 set -o pipefail  # Ensure pipeline failures are detected
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PYIRCX_VERSION="$(python3 -c 'import json, pathlib; print(json.load(open(pathlib.Path("'"$SCRIPT_DIR"'") / "version.json"))["version"])')"
 
 # Colors
 RED='\033[0;31m'
@@ -29,7 +32,9 @@ BRANCH2_LINK_PORT="${PYIRCX_TEST_BRANCH2_LINK_PORT:-7003}"
 TEST_ADMIN_PASS="${PYIRCX_TEST_ADMIN_PASS:-testpass}"
 LINK_PASSWORD="testlink"
 SERVER_WAIT=5
-TEST_TIMEOUT=120
+TEST_TIMEOUT="${PYIRCX_TEST_TIMEOUT:-120}"
+NETWORK_TEST_TIMEOUT="${PYIRCX_NETWORK_TEST_TIMEOUT:-300}"
+TEST_SUITE_FILTER="${PYIRCX_TEST_SUITES:-}"
 
 # Logging
 TIMESTAMP=$(date +%s)
@@ -233,6 +238,12 @@ def make_config(name, port, role, bind_port, links, db_path, is_hub, hub_server)
     cfg["services"]["is_services_hub"] = is_hub
     cfg["services"]["hub_server"] = hub_server
     cfg["ssl"]["enabled"] = False
+    cfg["linking"]["tls"]["enabled"] = False
+    cfg["linking"]["tls"]["required"] = False
+    cfg["linking"]["tls"]["verify"] = False
+    cfg["linking"]["tls"]["cert_file"] = None
+    cfg["linking"]["tls"]["key_file"] = None
+    cfg["linking"]["tls"]["ca_file"] = None
     cfg["security"]["auth_require_ssl"] = False
     cfg["security"]["pass_require_ssl"] = False
     return cfg
@@ -264,6 +275,7 @@ configs = {
 
 for path, cfg in configs.items():
     Path(path).write_text(json.dumps(cfg, indent=2))
+    Path(path).chmod(0o600)
 PY
 
     # Start servers in background
@@ -328,6 +340,13 @@ PY
 run_test_suite() {
     local test_file=$1
     local test_name=$2
+    local suite_timeout="$TEST_TIMEOUT"
+
+    case "$test_file" in
+        tests/integration/network/distributed.py|tests/integration/network/topology.py)
+            suite_timeout="$NETWORK_TEST_TIMEOUT"
+            ;;
+    esac
 
     echo ""
     echo "========================================"
@@ -359,7 +378,7 @@ run_test_suite() {
     echo '```' >> "$LOG_FILE"
 
     # Run test with tee to show output AND capture it
-    if timeout $TEST_TIMEOUT python3 "$test_file" 2>&1 | tee -a "$temp_log"; then
+    if timeout "$suite_timeout" python3 "$test_file" 2>&1 | tee -a "$temp_log"; then
         local end_time=$(date +%s)
         local duration=$((end_time - start_time))
 
@@ -394,6 +413,24 @@ run_test_suite() {
     fi
 }
 
+should_run_suite() {
+    local test_file=$1
+
+    if [ -z "$TEST_SUITE_FILTER" ]; then
+        return 0
+    fi
+
+    local normalized_filter=",${TEST_SUITE_FILTER},"
+    local suite_name
+    suite_name=$(basename "$test_file" .py)
+
+    if [[ "$normalized_filter" == *",$suite_name,"* ]] || [[ "$normalized_filter" == *",$test_file,"* ]]; then
+        return 0
+    fi
+
+    return 1
+}
+
 # Write markdown header
 write_log_header() {
     cat > "$LOG_FILE" <<EOF
@@ -419,7 +456,7 @@ main() {
 
     echo ""
     echo "========================================"
-    echo "pyIRCX v2.0.0 TEST RUNNER"
+    echo "pyIRCX v${PYIRCX_VERSION} TEST RUNNER"
     echo "========================================"
     echo ""
     echo "📝 Logging to: $LOG_FILE"
@@ -427,7 +464,7 @@ main() {
 
     # Log to markdown
     {
-        echo "**Test Runner**: pyIRCX v2.0.0"
+        echo "**Test Runner**: pyIRCX v${PYIRCX_VERSION}"
         echo ""
     } >> "$LOG_FILE"
 
@@ -448,45 +485,45 @@ main() {
     TESTS_FOUND=0
 
     # Core functionality tests
-    if [ -f "tests/integration/core/users.py" ]; then
+    if [ -f "tests/integration/core/users.py" ] && should_run_suite "tests/integration/core/users.py"; then
         echo -e "${GREEN}✓ tests/integration/core/users.py (115 tests)${NC}"
         TESTS_FOUND=$((TESTS_FOUND + 1))
     fi
-    if [ -f "tests/integration/staff/staff.py" ]; then
+    if [ -f "tests/integration/staff/staff.py" ] && should_run_suite "tests/integration/staff/staff.py"; then
         echo -e "${GREEN}✓ tests/integration/staff/staff.py (39 tests)${NC}"
         TESTS_FOUND=$((TESTS_FOUND + 1))
     fi
-    if [ -f "tests/integration/staff/authentication.py" ]; then
+    if [ -f "tests/integration/staff/authentication.py" ] && should_run_suite "tests/integration/staff/authentication.py"; then
         echo -e "${GREEN}✓ tests/integration/staff/authentication.py (18 tests)${NC}"
         TESTS_FOUND=$((TESTS_FOUND + 1))
     fi
-    if [ -f "tests/integration/network/links.py" ]; then
+    if [ -f "tests/integration/network/links.py" ] && should_run_suite "tests/integration/network/links.py"; then
         echo -e "${GREEN}✓ tests/integration/network/links.py (4 tests)${NC}"
         TESTS_FOUND=$((TESTS_FOUND + 1))
     fi
-    if [ -f "tests/integration/network/distributed.py" ]; then
+    if [ -f "tests/integration/network/distributed.py" ] && should_run_suite "tests/integration/network/distributed.py"; then
         echo -e "${GREEN}✓ tests/integration/network/distributed.py (multi-server tests)${NC}"
         TESTS_FOUND=$((TESTS_FOUND + 1))
     fi
-    if [ -f "tests/integration/network/topology.py" ]; then
+    if [ -f "tests/integration/network/topology.py" ] && should_run_suite "tests/integration/network/topology.py"; then
         echo -e "${GREEN}✓ tests/integration/network/topology.py (split/rejoin tests)${NC}"
         TESTS_FOUND=$((TESTS_FOUND + 1))
     fi
-    if [ -f "tests/integration/ircx/access.py" ]; then
+    if [ -f "tests/integration/ircx/access.py" ] && should_run_suite "tests/integration/ircx/access.py"; then
         echo -e "${GREEN}✓ tests/integration/ircx/access.py (10 tests)${NC}"
         TESTS_FOUND=$((TESTS_FOUND + 1))
     fi
 
     # Feature tests
-    if [ -f "tests/integration/core/stats.py" ]; then
+    if [ -f "tests/integration/core/stats.py" ] && should_run_suite "tests/integration/core/stats.py"; then
         echo -e "${GREEN}✓ tests/integration/core/stats.py (16 tests)${NC}"
         TESTS_FOUND=$((TESTS_FOUND + 1))
     fi
-    if [ -f "tests/integration/core/help.py" ]; then
+    if [ -f "tests/integration/core/help.py" ] && should_run_suite "tests/integration/core/help.py"; then
         echo -e "${GREEN}✓ tests/integration/core/help.py (15 tests)${NC}"
         TESTS_FOUND=$((TESTS_FOUND + 1))
     fi
-    if [ -f "tests/integration/ircx/services.py" ]; then
+    if [ -f "tests/integration/ircx/services.py" ] && should_run_suite "tests/integration/ircx/services.py"; then
         echo -e "${GREEN}✓ tests/integration/ircx/services.py (13 tests)${NC}"
         TESTS_FOUND=$((TESTS_FOUND + 1))
     fi
@@ -533,7 +570,7 @@ main() {
     FAILED_SUITES=0
 
     # Core IRC/IRCX tests
-    if [ -f "tests/integration/core/users.py" ]; then
+    if [ -f "tests/integration/core/users.py" ] && should_run_suite "tests/integration/core/users.py"; then
         TOTAL_SUITES=$((TOTAL_SUITES + 1))
         if run_test_suite "tests/integration/core/users.py" "IRC/IRCX Protocol Tests (115 tests)"; then
             PASSED_SUITES=$((PASSED_SUITES + 1))
@@ -543,7 +580,7 @@ main() {
     fi
 
     # Staff authentication tests
-    if [ -f "tests/integration/staff/staff.py" ]; then
+    if [ -f "tests/integration/staff/staff.py" ] && should_run_suite "tests/integration/staff/staff.py"; then
         TOTAL_SUITES=$((TOTAL_SUITES + 1))
         if run_test_suite "tests/integration/staff/staff.py" "Staff PASS Authentication Tests (39 tests)"; then
             PASSED_SUITES=$((PASSED_SUITES + 1))
@@ -553,7 +590,7 @@ main() {
     fi
 
     # AUTH command tests
-    if [ -f "tests/integration/staff/authentication.py" ]; then
+    if [ -f "tests/integration/staff/authentication.py" ] && should_run_suite "tests/integration/staff/authentication.py"; then
         TOTAL_SUITES=$((TOTAL_SUITES + 1))
         if run_test_suite "tests/integration/staff/authentication.py" "AUTH Command & MFA Tests (18 tests)"; then
             PASSED_SUITES=$((PASSED_SUITES + 1))
@@ -563,7 +600,7 @@ main() {
     fi
 
     # Server linking tests
-    if [ -f "tests/integration/network/links.py" ]; then
+    if [ -f "tests/integration/network/links.py" ] && should_run_suite "tests/integration/network/links.py"; then
         TOTAL_SUITES=$((TOTAL_SUITES + 1))
         if run_test_suite "tests/integration/network/links.py" "Server Linking Tests (4 tests)"; then
             PASSED_SUITES=$((PASSED_SUITES + 1))
@@ -573,7 +610,7 @@ main() {
     fi
 
     # Distributed networking tests (trunk + 2 branches)
-    if [ -f "tests/integration/network/distributed.py" ]; then
+    if [ -f "tests/integration/network/distributed.py" ] && should_run_suite "tests/integration/network/distributed.py"; then
         TOTAL_SUITES=$((TOTAL_SUITES + 1))
         if run_test_suite "tests/integration/network/distributed.py" "Distributed Networking Tests (multi-server)"; then
             PASSED_SUITES=$((PASSED_SUITES + 1))
@@ -583,7 +620,7 @@ main() {
     fi
 
     # Network topology tests (splits/rejoins)
-    if [ -f "tests/integration/network/topology.py" ]; then
+    if [ -f "tests/integration/network/topology.py" ] && should_run_suite "tests/integration/network/topology.py"; then
         TOTAL_SUITES=$((TOTAL_SUITES + 1))
         if run_test_suite "tests/integration/network/topology.py" "Network Topology Tests (splits/joins)"; then
             PASSED_SUITES=$((PASSED_SUITES + 1))
@@ -593,7 +630,7 @@ main() {
     fi
 
     # Access control tests
-    if [ -f "tests/integration/ircx/access.py" ]; then
+    if [ -f "tests/integration/ircx/access.py" ] && should_run_suite "tests/integration/ircx/access.py"; then
         TOTAL_SUITES=$((TOTAL_SUITES + 1))
         if run_test_suite "tests/integration/ircx/access.py" "Access Control Tests (10 tests)"; then
             PASSED_SUITES=$((PASSED_SUITES + 1))
@@ -603,7 +640,7 @@ main() {
     fi
 
     # STATS system tests
-    if [ -f "tests/integration/core/stats.py" ]; then
+    if [ -f "tests/integration/core/stats.py" ] && should_run_suite "tests/integration/core/stats.py"; then
         TOTAL_SUITES=$((TOTAL_SUITES + 1))
         if run_test_suite "tests/integration/core/stats.py" "STATS System Tests (16 tests)"; then
             PASSED_SUITES=$((PASSED_SUITES + 1))
@@ -613,7 +650,7 @@ main() {
     fi
 
     # HELP system tests
-    if [ -f "tests/integration/core/help.py" ]; then
+    if [ -f "tests/integration/core/help.py" ] && should_run_suite "tests/integration/core/help.py"; then
         TOTAL_SUITES=$((TOTAL_SUITES + 1))
         if run_test_suite "tests/integration/core/help.py" "HELP System Tests (15 tests)"; then
             PASSED_SUITES=$((PASSED_SUITES + 1))
@@ -623,7 +660,7 @@ main() {
     fi
 
     # Service improvements tests
-    if [ -f "tests/integration/ircx/services.py" ]; then
+    if [ -f "tests/integration/ircx/services.py" ] && should_run_suite "tests/integration/ircx/services.py"; then
         TOTAL_SUITES=$((TOTAL_SUITES + 1))
         if run_test_suite "tests/integration/ircx/services.py" "Service Improvements Tests (13 tests)"; then
             PASSED_SUITES=$((PASSED_SUITES + 1))
@@ -633,7 +670,7 @@ main() {
     fi
 
     # WebChat gateway tests (optional - requires gateway running)
-    if [ -f "tests/integration/web/webchat.py" ]; then
+    if [ -f "tests/integration/web/webchat.py" ] && should_run_suite "tests/integration/web/webchat.py"; then
         TOTAL_SUITES=$((TOTAL_SUITES + 1))
         if run_test_suite "tests/integration/web/webchat.py" "WebChat Gateway Tests"; then
             PASSED_SUITES=$((PASSED_SUITES + 1))
@@ -753,5 +790,7 @@ main() {
     fi
 }
 
-# Run main function
-main "$@"
+# Run main only when executed directly.
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    main "$@"
+fi

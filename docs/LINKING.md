@@ -48,15 +48,14 @@ All linked servers **MUST** run the **EXACT same pyIRCX version**.
 # Check version
 python pyircx.py --version
 
-# All servers must show IDENTICAL version:
-pyIRCX 1.3.0
+# All servers must show IDENTICAL version metadata
 ```
 
 **Why:** Prevents protocol mismatches, unexpected behavior, and crashes.
 
 **Failure:** Link will be rejected with error:
 ```
-ERROR :Version mismatch. Remote: 1.2.0, Local: 1.3.0. Versions must match exactly.
+ERROR :Version mismatch. Remote: 2.0.1, Local: 2.0.2. Versions must match exactly.
 ```
 
 **Solution:** Upgrade or downgrade all servers to the same version before linking.
@@ -213,9 +212,12 @@ When converting a standalone server to a branch:
 
 Each branch needs its own admin accounts for:
 - Local `/CONFIG` commands (server-specific settings)
-- Local `/KILL` commands (managing local users)
 - Local troubleshooting and maintenance
 - Emergency access if trunk is down
+
+Operational note:
+- Staff accounts remain local to each server
+- Staff-issued `/KILL` and other routed actions now propagate across the linked network when appropriate
 
 ### Example Scenario
 
@@ -432,6 +434,12 @@ Received EOB from branch1.network.local - burst complete
 
 /MAP
 # Should show network topology
+
+/WHOIS RemoteNick
+# Should return a normal WHOIS reply even when the nick is on another linked server
+
+/WHISPER #channel RemoteNick :hello
+# Should reach a remote channel member without duplicate delivery
 ```
 
 ---

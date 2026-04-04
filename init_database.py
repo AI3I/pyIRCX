@@ -196,7 +196,7 @@ def create_database(db_path, admin_username=None, admin_password=None):
 
     # Define default staff accounts
     staff_accounts = [
-        {'username': 'admin', 'level': 'ADMIN', 'password': admin_pass},
+        {'username': admin_user, 'level': 'ADMIN', 'password': admin_pass},
         {'username': 'sysop', 'level': 'SYSOP', 'password': admin_pass},
         {'username': 'guide', 'level': 'GUIDE', 'password': admin_pass},
     ]

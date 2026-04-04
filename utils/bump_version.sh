@@ -30,13 +30,13 @@ fi
 echo -e "${BLUE}=== Bumping pyIRCX Version to ${NEW_VERSION} ===${NC}\n"
 
 # Check if in project root
-if [ ! -f "pyircx.py" ]; then
-    echo -e "${RED}Error: pyircx.py not found. Run from project root.${NC}"
+if [ ! -f "version.json" ]; then
+    echo -e "${RED}Error: version.json not found. Run from project root.${NC}"
     exit 1
 fi
 
 # Get current version
-CURRENT_VERSION=$(grep "__version__" pyircx.py | head -1 | cut -d'"' -f2)
+CURRENT_VERSION=$(python3 -c 'import json; print(json.load(open("version.json"))["version"])')
 echo -e "Current version: ${YELLOW}${CURRENT_VERSION}${NC}"
 echo -e "New version:     ${GREEN}${NEW_VERSION}${NC}\n"
 
@@ -53,10 +53,18 @@ TIMESTAMP=$(date "+%a %b %d %I:%M:%S %p %Z %Y")
 
 echo -e "\n${BLUE}Updating files...${NC}"
 
-# 1. Update pyircx.py
-echo -n "  - pyircx.py ... "
-sed -i "s/__version__ = \".*\"/__version__ = \"${NEW_VERSION}\"/" pyircx.py
-sed -i "s/__created__ = \".*\"/__created__ = \"${TIMESTAMP}\"/" pyircx.py
+# 1. Update version.json
+echo -n "  - version.json ... "
+python3 - <<PY
+import json
+from pathlib import Path
+
+path = Path("version.json")
+data = json.loads(path.read_text(encoding="utf-8"))
+data["version"] = "${NEW_VERSION}"
+data["created"] = "${TIMESTAMP}"
+path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+PY
 echo -e "${GREEN}✓${NC}"
 
 # 2. Update README.md if version is mentioned

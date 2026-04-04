@@ -165,12 +165,19 @@ The WebSocket gateway (`pyircx-webchat.service`) bridges browser WebSocket conne
 
 **File:** `/etc/pyircx/webchat.conf`
 
-```bash
-WS_PORT=8765
-WS_HOST=0.0.0.0
-IRC_HOST=localhost
-IRC_PORT=6667
-WEBIRC_PASSWORD=changeme
+```ini
+[websocket]
+host = 0.0.0.0
+port = 8765
+
+[irc]
+host = localhost
+port = 6667
+
+[webirc]
+password = changeme
+gateway = pyircx-webchat
+trusted_proxies = 127.0.0.1/32, ::1/128
 ```
 
 ### Service Management
@@ -310,8 +317,9 @@ The gateway uses WEBIRC to preserve client IP addresses. Change the default pass
    ```
 
 2. **Update gateway config** (`/etc/pyircx/webchat.conf`):
-   ```bash
-   WEBIRC_PASSWORD=your-secure-password
+   ```ini
+   [webirc]
+   password = your-secure-password
    ```
 
 3. **Restart services:**

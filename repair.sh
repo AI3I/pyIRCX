@@ -6,6 +6,9 @@
 #
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CURRENT_PACKAGE_VERSION="$(python3 -c 'import json, pathlib; print(json.load(open(pathlib.Path("'"$SCRIPT_DIR"'") / "version.json"))["version"])')"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -29,9 +32,21 @@ load_install_config() {
     fi
 }
 
+detect_web_user() {
+    if id apache &>/dev/null; then
+        echo "apache"
+    elif id www-data &>/dev/null; then
+        echo "www-data"
+    elif id http &>/dev/null; then
+        echo "http"
+    else
+        echo ""
+    fi
+}
+
 echo ""
 echo "========================================"
-echo "  pyIRCX Repair & Validation Script"
+echo "  pyIRCX Repair & Validation Script v${CURRENT_PACKAGE_VERSION}"
 echo "========================================"
 echo ""
 
@@ -62,18 +77,16 @@ echo ""
 # Check 0: Version consistency
 echo "=== Checking Version Consistency ==="
 if [ -f "$INSTALL_DIR/pyircx.py" ]; then
-    PYIRCX_VERSION=$(grep "__version__" "$INSTALL_DIR/pyircx.py" | head -1 | cut -d'"' -f2)
-    echo -e "${GREEN}pyircx.py version: $PYIRCX_VERSION${NC}"
+    if [ -f "$INSTALL_DIR/version.json" ]; then
+        PYIRCX_VERSION=$(python3 -c 'import json, pathlib; print(json.load(open(pathlib.Path("'"$INSTALL_DIR"'") / "version.json"))["version"])')
+    else
+        PYIRCX_VERSION=$(grep "__version__" "$INSTALL_DIR/pyircx.py" | head -1 | cut -d'"' -f2)
+    fi
+    echo -e "${GREEN}Installed version: $PYIRCX_VERSION${NC}"
 
     # Check webadmin/index.php
     if [ -f "/var/www/html/webadmin/index.php" ]; then
-        WEBADMIN_VER=$(grep -o "pyIRCX v[0-9]\+\.[0-9]\+\.[0-9]\+" /var/www/html/webadmin/index.php | head -1 | sed 's/pyIRCX v//')
-        if [ "$PYIRCX_VERSION" != "$WEBADMIN_VER" ]; then
-            echo -e "${YELLOW}⚠${NC} webadmin/index.php version mismatch: $WEBADMIN_VER (expected $PYIRCX_VERSION)"
-            ((ISSUES_FOUND+=1))
-        else
-            echo -e "${GREEN}✓${NC} webadmin/index.php version matches"
-        fi
+        echo -e "${GREEN}✓${NC} webadmin/index.php reads shared version metadata"
     fi
 
     # Check webchat/index.html
@@ -83,13 +96,7 @@ if [ -f "$INSTALL_DIR/pyircx.py" ]; then
     )
     for location in "${WEBCHAT_LOCATIONS[@]}"; do
         if [ -f "$location" ]; then
-            WEBCHAT_VER=$(grep -o "v[0-9]\+\.[0-9]\+\.[0-9]\+</span>" "$location" | head -1 | sed 's/v\(.*\)<\/span>/\1/')
-            if [ "$PYIRCX_VERSION" != "$WEBCHAT_VER" ]; then
-                echo -e "${YELLOW}⚠${NC} webchat/index.html version mismatch: $WEBCHAT_VER (expected $PYIRCX_VERSION)"
-                ((ISSUES_FOUND+=1))
-            else
-                echo -e "${GREEN}✓${NC} webchat/index.html version matches"
-            fi
+            echo -e "${GREEN}✓${NC} webchat/index.html reads shared version metadata"
             break
         fi
     done
@@ -236,18 +243,19 @@ if [ -d "$WEB_ADMIN_DIR" ]; then
 
     # Check ownership
     OWNER=$(stat -c '%U' "$WEB_ADMIN_DIR" 2>/dev/null || echo "unknown")
-    if [ "$OWNER" == "apache" ]; then
-        echo -e "${GREEN}✓${NC} Web admin owned by apache"
+    WEB_USER="$(detect_web_user)"
+    if [ -n "$WEB_USER" ] && [ "$OWNER" == "$WEB_USER" ]; then
+        echo -e "${GREEN}✓${NC} Web admin owned by $WEB_USER"
     else
-        echo -e "${YELLOW}⚠${NC} Web admin owned by $OWNER (should be apache) ${YELLOW}(FIXABLE)${NC}"
+        echo -e "${YELLOW}⚠${NC} Web admin owned by $OWNER (should be ${WEB_USER:-the web server user}) ${YELLOW}(FIXABLE)${NC}"
         ((WEB_ISSUES+=1))
     fi
 
-    # Check apache in systemd-journal group
-    if groups apache 2>/dev/null | grep -q systemd-journal; then
-        echo -e "${GREEN}✓${NC} apache user in systemd-journal group"
+    # Check web user in systemd-journal group
+    if [ -n "$WEB_USER" ] && groups "$WEB_USER" 2>/dev/null | grep -q systemd-journal; then
+        echo -e "${GREEN}✓${NC} $WEB_USER user in systemd-journal group"
     else
-        echo -e "${YELLOW}⚠${NC} apache not in systemd-journal group ${YELLOW}(FIXABLE)${NC}"
+        echo -e "${YELLOW}⚠${NC} ${WEB_USER:-web user} not in systemd-journal group ${YELLOW}(FIXABLE)${NC}"
         ((WEB_ISSUES+=1))
     fi
 
@@ -359,6 +367,13 @@ if [ -d "$INSTALL_DIR/webchat" ]; then
         echo -e "${GREEN}✓${NC} webchat/config.js exists"
     else
         echo -e "${YELLOW}⚠${NC} webchat/config.js missing ${YELLOW}(FIXABLE)${NC}"
+        ((WEBCHAT_ISSUES+=1))
+    fi
+
+    if [ -f "/var/www/html/webchat/version.json" ]; then
+        echo -e "${GREEN}✓${NC} webchat/version.json exists"
+    else
+        echo -e "${YELLOW}⚠${NC} webchat/version.json missing ${YELLOW}(FIXABLE)${NC}"
         ((WEBCHAT_ISSUES+=1))
     fi
 
@@ -547,6 +562,7 @@ if [[ ! $REPLY =~ ^[Nn]$ ]]; then
         echo -e "${YELLOW}Fixing permissions...${NC}"
         chown -R "$SERVICE_USER:$SERVICE_GROUP" "$INSTALL_DIR" 2>/dev/null || true
         chown -R "$SERVICE_USER:$SERVICE_GROUP" "$CONFIG_DIR" 2>/dev/null || true
+        chown root:"$SERVICE_GROUP" "$CONFIG_DIR/pyircx_config.json" 2>/dev/null || true
         chmod 775 "$INSTALL_DIR" 2>/dev/null || true  # Group needs write for SQLite journal files
         chmod 775 "$CONFIG_DIR" 2>/dev/null || true  # Group needs write for web admin config edits
         chmod 750 "$INSTALL_DIR/transcripts" 2>/dev/null || true  # Keep transcripts private
@@ -560,14 +576,7 @@ if [[ ! $REPLY =~ ^[Nn]$ ]]; then
 
         # Add web server user to pyircx group for database access
         # Detect web server user (apache, www-data, or http)
-        WEB_USER=""
-        if id apache &>/dev/null; then
-            WEB_USER="apache"
-        elif id www-data &>/dev/null; then
-            WEB_USER="www-data"
-        elif id http &>/dev/null; then
-            WEB_USER="http"
-        fi
+        WEB_USER="$(detect_web_user)"
 
         if [ -n "$WEB_USER" ]; then
             echo -e "${YELLOW}Adding $WEB_USER to $SERVICE_GROUP group for database access...${NC}"
@@ -660,18 +669,19 @@ if [[ ! $REPLY =~ ^[Nn]$ ]]; then
     # Fix web admin ownership if installed
     if [ -d "$WEB_ADMIN_DIR" ]; then
         OWNER=$(stat -c '%U' "$WEB_ADMIN_DIR" 2>/dev/null || echo "unknown")
-        if [ "$OWNER" != "apache" ]; then
+        WEB_USER="$(detect_web_user)"
+        if [ -n "$WEB_USER" ] && [ "$OWNER" != "$WEB_USER" ]; then
             echo -e "${YELLOW}Fixing web admin ownership...${NC}"
-            chown -R apache:apache "$WEB_ADMIN_DIR"
+            chown -R "$WEB_USER:$WEB_USER" "$WEB_ADMIN_DIR"
             echo -e "${GREEN}✓ Web admin ownership fixed${NC}"
             ((FIXES_APPLIED+=1))
         fi
 
-        # Add apache to systemd-journal group
-        if ! groups apache 2>/dev/null | grep -q systemd-journal; then
-            echo -e "${YELLOW}Adding apache to systemd-journal group...${NC}"
-            usermod -a -G systemd-journal apache
-            echo -e "${GREEN}✓ apache added to systemd-journal group${NC}"
+        # Add web user to systemd-journal group
+        if [ -n "$WEB_USER" ] && ! groups "$WEB_USER" 2>/dev/null | grep -q systemd-journal; then
+            echo -e "${YELLOW}Adding $WEB_USER to systemd-journal group...${NC}"
+            usermod -a -G systemd-journal "$WEB_USER"
+            echo -e "${GREEN}✓ $WEB_USER added to systemd-journal group${NC}"
             ((FIXES_APPLIED+=1))
         fi
     fi
@@ -716,14 +726,25 @@ if [[ ! $REPLY =~ ^[Nn]$ ]]; then
         # Create webchat.conf if missing
         if [ ! -f "$CONFIG_DIR/webchat.conf" ]; then
             echo -e "${YELLOW}Creating webchat.conf...${NC}"
-            cat > "$CONFIG_DIR/webchat.conf" <<EOF
-# pyIRCX WebChat Gateway Configuration
-WS_PORT=8765
-WS_HOST=0.0.0.0
-IRC_HOST=localhost
-IRC_PORT=6667
-WEBIRC_PASS=changeme
+            if [ -f "$SCRIPT_DIR/webchat/webchat.conf.example" ]; then
+                cp "$SCRIPT_DIR/webchat/webchat.conf.example" "$CONFIG_DIR/webchat.conf"
+            else
+                cat > "$CONFIG_DIR/webchat.conf" <<EOF
+[server]
+host = 0.0.0.0
+port = 8765
+
+[irc]
+host = localhost
+port = 6667
+ssl = false
+
+[webirc]
+password = changeme
+gateway_name = pyircx-webchat
+trusted_proxies = 127.0.0.1/32, ::1/128
 EOF
+            fi
             chown "$SERVICE_USER:$SERVICE_GROUP" "$CONFIG_DIR/webchat.conf"
             chmod 640 "$CONFIG_DIR/webchat.conf"
             echo -e "${GREEN}✓ webchat.conf created${NC}"

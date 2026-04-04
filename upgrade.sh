@@ -3,9 +3,12 @@
 # pyIRCX Upgrade Script
 #
 # Upgrades an existing installation to the latest version
-# Version 2.0.0
+# Version sourced from version.json
 #
 set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CURRENT_PACKAGE_VERSION="$(python3 -c 'import json, pathlib; print(json.load(open(pathlib.Path("'"$SCRIPT_DIR"'") / "version.json"))["version"])')"
 
 # Colors for output
 RED='\033[0;31m'
@@ -36,9 +39,43 @@ load_install_config() {
     fi
 }
 
+detect_web_user() {
+    if id apache &>/dev/null; then
+        echo "apache"
+    elif id www-data &>/dev/null; then
+        echo "www-data"
+    elif id http &>/dev/null; then
+        echo "http"
+    else
+        echo ""
+    fi
+}
+
+print_service_diagnostics() {
+    local service_name="$1"
+    echo -e "${RED}Recent status for ${service_name}:${NC}"
+    systemctl status "$service_name" --no-pager -l || true
+    echo -e "${RED}Recent journal for ${service_name}:${NC}"
+    journalctl -u "$service_name" -n 50 --no-pager || true
+}
+
+require_service_active() {
+    local service_name="$1"
+    local display_name="$2"
+
+    if systemctl is-active --quiet "$service_name"; then
+        echo -e "${GREEN}✓ ${display_name} restarted successfully${NC}"
+        return 0
+    fi
+
+    echo -e "${RED}✗ ${display_name} failed to start${NC}"
+    print_service_diagnostics "$service_name"
+    exit 1
+}
+
 echo ""
 echo "========================================"
-echo "  pyIRCX Upgrade Script v2.0.0"
+echo "  pyIRCX Upgrade Script v${CURRENT_PACKAGE_VERSION}"
 echo "========================================"
 echo ""
 
@@ -58,7 +95,6 @@ if [ ! -d "$INSTALL_DIR" ]; then
     exit 1
 fi
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 load_install_config
 
 echo -e "${BLUE}Detecting current installation...${NC}"
@@ -91,26 +127,18 @@ if [ -f "$INSTALL_DIR/pyircx.py" ]; then
     echo -e "${GREEN}Currently installed version: $INSTALLED_VERSION${NC}"
 
     if [ -f "$SCRIPT_DIR/pyircx.py" ]; then
-        NEW_VERSION=$(grep "__version__" "$SCRIPT_DIR/pyircx.py" | head -1 | cut -d'"' -f2)
+        NEW_VERSION=$(python3 -c 'import json, pathlib; print(json.load(open(pathlib.Path("'"$SCRIPT_DIR"'") / "version.json"))["version"])')
         echo -e "${GREEN}Upgrade package version: $NEW_VERSION${NC}"
 
         # Check if webadmin and webchat versions match in upgrade package
         VERSION_ISSUES=0
 
         if [ -f "$SCRIPT_DIR/webadmin/index.php" ]; then
-            WEBADMIN_VER=$(grep -o "pyIRCX v[0-9]\+\.[0-9]\+\.[0-9]\+" "$SCRIPT_DIR/webadmin/index.php" | head -1 | sed 's/pyIRCX v//')
-            if [ "$NEW_VERSION" != "$WEBADMIN_VER" ]; then
-                echo -e "${YELLOW}⚠ Upgrade package webadmin version mismatch: $WEBADMIN_VER${NC}"
-                VERSION_ISSUES=1
-            fi
+            echo -e "${GREEN}Shared version metadata drives webadmin version display${NC}"
         fi
 
         if [ -f "$SCRIPT_DIR/webchat/index.html" ]; then
-            WEBCHAT_VER=$(grep -o "v[0-9]\+\.[0-9]\+\.[0-9]\+</span>" "$SCRIPT_DIR/webchat/index.html" | head -1 | sed 's/v\(.*\)<\/span>/\1/')
-            if [ "$NEW_VERSION" != "$WEBCHAT_VER" ]; then
-                echo -e "${YELLOW}⚠ Upgrade package webchat version mismatch: $WEBCHAT_VER${NC}"
-                VERSION_ISSUES=1
-            fi
+            echo -e "${GREEN}Shared version metadata drives webchat version display${NC}"
         fi
 
         if [ $VERSION_ISSUES -eq 1 ]; then
@@ -127,7 +155,7 @@ echo ""
 
 # Check for core modules
 NEEDS_CORE_MODULES=0
-CORE_MODULES=(channel.py config.py database.py help_text.py modes.py responses.py security.py service_bot.py ssl_manager.py user.py validation.py)
+CORE_MODULES=(channel.py config.py database.py help_text.py modes.py responses.py security.py service_bot.py ssl_manager.py user.py validation.py version.py)
 MISSING_MODULES=()
 for module in "${CORE_MODULES[@]}"; do
     if [ ! -f "$INSTALL_DIR/$module" ]; then
@@ -186,12 +214,13 @@ elif [ -d "$WEB_ADMIN_DIR" ]; then
     echo -e "${GREEN}✓ Polkit rules installed${NC}"
 fi
 
-# Check if apache user is in systemd-journal group
-if [ -d "$WEB_ADMIN_DIR" ] && id apache &>/dev/null; then
-    if groups apache | grep -q systemd-journal; then
-        echo -e "${GREEN}✓ Apache user configured for journal access${NC}"
+# Check if web user is in systemd-journal group
+WEB_USER="$(detect_web_user)"
+if [ -d "$WEB_ADMIN_DIR" ] && [ -n "$WEB_USER" ]; then
+    if groups "$WEB_USER" | grep -q systemd-journal; then
+        echo -e "${GREEN}✓ $WEB_USER configured for journal access${NC}"
     else
-        echo -e "${YELLOW}✗ Apache user needs systemd-journal group${NC}"
+        echo -e "${YELLOW}✗ $WEB_USER needs systemd-journal group${NC}"
         NEEDS_APACHE_SETUP=1
     fi
 fi
@@ -289,8 +318,13 @@ echo -e "${BLUE}Updating core files...${NC}"
 cp "$SCRIPT_DIR/pyircx.py" "$INSTALL_DIR/"
 echo -e "${GREEN}✓ Updated pyircx.py${NC}"
 
+if [ -f "$SCRIPT_DIR/version.json" ]; then
+    cp "$SCRIPT_DIR/version.json" "$INSTALL_DIR/"
+    echo -e "${GREEN}✓ Updated version.json${NC}"
+fi
+
 # Copy core modules
-for module in channel.py config.py database.py help_text.py modes.py responses.py security.py service_bot.py ssl_manager.py user.py validation.py; do
+for module in "${CORE_MODULES[@]}"; do
     if [ -f "$SCRIPT_DIR/$module" ]; then
         cp "$SCRIPT_DIR/$module" "$INSTALL_DIR/"
         echo -e "${GREEN}✓ Updated $module${NC}"
@@ -332,11 +366,22 @@ if [ ! -f "$CONFIG_DIR/pyircx_config.json" ]; then
         echo -e "${GREEN}✓ Generated default config${NC}"
     fi
 else
-    echo -e "${YELLOW}⚠ Preserving existing config${NC}"
+    echo -e "${YELLOW}⚠ Preserving existing config at $CONFIG_DIR/pyircx_config.json${NC}"
 fi
 
-# Ensure config symlink exists
-ln -sf "$CONFIG_DIR/pyircx_config.json" "$INSTALL_DIR/pyircx_config.json" 2>/dev/null || true
+# Refresh runtime config symlink without discarding an existing local copy silently
+if [ -e "$INSTALL_DIR/pyircx_config.json" ] && [ ! -L "$INSTALL_DIR/pyircx_config.json" ]; then
+    cp "$INSTALL_DIR/pyircx_config.json" "$BACKUP_DIR/runtime_pyircx_config.json" 2>/dev/null || true
+    echo -e "${YELLOW}⚠ Backed up non-symlink runtime config to $BACKUP_DIR/runtime_pyircx_config.json${NC}"
+fi
+
+ln -sfn "$CONFIG_DIR/pyircx_config.json" "$INSTALL_DIR/pyircx_config.json"
+if [ "$(readlink "$INSTALL_DIR/pyircx_config.json")" = "$CONFIG_DIR/pyircx_config.json" ]; then
+    echo -e "${GREEN}✓ Runtime config symlink refreshed${NC}"
+else
+    echo -e "${RED}✗ Failed to refresh runtime config symlink${NC}"
+    exit 1
+fi
 
 # Update systemd service
 if [ $NEEDS_SYSTEMD_UPDATE -eq 1 ] || [ -f "$SCRIPT_DIR/pyircx.service" ]; then
@@ -375,14 +420,9 @@ if [ -d "$WEB_ADMIN_DIR" ] || [ $NEEDS_WEB_ADMIN -eq 1 ]; then
             cp "$SCRIPT_DIR/webadmin"/.htaccess "$WEB_ADMIN_DIR/" 2>/dev/null || true
             cp "$SCRIPT_DIR/webadmin"/*.md "$WEB_ADMIN_DIR/" 2>/dev/null || true
 
-            # Set permissions
-            # Detect web server user
-            if id apache &>/dev/null; then
-                chown -R apache:apache "$WEB_ADMIN_DIR"
-            elif id www-data &>/dev/null; then
-                chown -R www-data:www-data "$WEB_ADMIN_DIR"
-            elif id http &>/dev/null; then
-                chown -R http:http "$WEB_ADMIN_DIR"
+            WEB_USER="$(detect_web_user)"
+            if [ -n "$WEB_USER" ]; then
+                chown -R "$WEB_USER:$WEB_USER" "$WEB_ADMIN_DIR"
             fi
             chmod 644 "$WEB_ADMIN_DIR"/*.php "$WEB_ADMIN_DIR"/*.js "$WEB_ADMIN_DIR"/*.css 2>/dev/null || true
 
@@ -492,19 +532,20 @@ if [ -d "$WEB_ADMIN_DIR" ] && [ $NEEDS_POLKIT -eq 1 ]; then
     fi
 fi
 
-# Setup Apache User
+# Setup web server user
 if [ -d "$WEB_ADMIN_DIR" ] && [ $NEEDS_APACHE_SETUP -eq 1 ]; then
     echo ""
-    echo -e "${BLUE}Configuring Apache user...${NC}"
+    echo -e "${BLUE}Configuring web server user...${NC}"
 
-    if id apache &>/dev/null; then
-        usermod -a -G systemd-journal apache
-        echo -e "${GREEN}✓ Added apache to systemd-journal group${NC}"
+    WEB_USER="$(detect_web_user)"
+    if [ -n "$WEB_USER" ]; then
+        usermod -a -G systemd-journal "$WEB_USER"
+        echo -e "${GREEN}✓ Added $WEB_USER to systemd-journal group${NC}"
 
-        # Add apache to pyircx group for database write access
+        # Add web user to pyircx group for database write access
         if getent group pyircx &>/dev/null; then
-            usermod -a -G pyircx apache
-            echo -e "${GREEN}✓ Added apache to pyircx group${NC}"
+            usermod -a -G pyircx "$WEB_USER"
+            echo -e "${GREEN}✓ Added $WEB_USER to pyircx group${NC}"
 
             # Ensure /opt/pyircx directory has group write permissions for SQLite
             chmod 775 /opt/pyircx
@@ -563,8 +604,10 @@ if [ $NEEDS_WEBCHAT_UPDATE -eq 1 ] && [ -d "$SCRIPT_DIR/webchat" ]; then
         cp "$SCRIPT_DIR/webchat/index.html" /var/www/html/webchat/
         cp "$SCRIPT_DIR/webchat/config.js" /var/www/html/webchat/
         cp "$SCRIPT_DIR/webchat/favicon.svg" /var/www/html/webchat/ 2>/dev/null || true
+        cp "$SCRIPT_DIR/version.json" /var/www/html/webchat/ 2>/dev/null || true
         chmod 644 /var/www/html/webchat/index.html
         chmod 644 /var/www/html/webchat/config.js
+        chmod 644 /var/www/html/webchat/version.json 2>/dev/null || true
         echo -e "${GREEN}✓ WebChat frontend updated${NC}"
     fi
 
@@ -613,6 +656,7 @@ echo ""
 echo -e "${BLUE}Fixing permissions...${NC}"
 chown -R "$SERVICE_USER:$SERVICE_GROUP" "$INSTALL_DIR"
 chown -R "$SERVICE_USER:$SERVICE_GROUP" "$CONFIG_DIR"
+chown root:"$SERVICE_GROUP" "$CONFIG_DIR/pyircx_config.json" 2>/dev/null || true
 chmod 775 "$INSTALL_DIR"  # Group needs write for SQLite journal files
 chmod 775 "$CONFIG_DIR"  # Group needs write for web admin config edits
 chmod 750 "$INSTALL_DIR/transcripts" 2>/dev/null || true
@@ -626,14 +670,7 @@ chmod 755 "$INSTALL_DIR/linking.py" 2>/dev/null || true
 
 # Add web server user to pyircx group for database access
 # Detect web server user (apache, www-data, or http)
-WEB_USER=""
-if id apache &>/dev/null; then
-    WEB_USER="apache"
-elif id www-data &>/dev/null; then
-    WEB_USER="www-data"
-elif id http &>/dev/null; then
-    WEB_USER="http"
-fi
+WEB_USER="$(detect_web_user)"
 
 if [ -d "$WEB_ADMIN_DIR" ] && [ -n "$WEB_USER" ]; then
     echo -e "${YELLOW}Adding $WEB_USER to $SERVICE_GROUP group for database access...${NC}"
@@ -654,19 +691,14 @@ echo -e "${GREEN}✓ Permissions fixed${NC}"
 echo ""
 if [ $SERVICE_WAS_RUNNING -eq 1 ]; then
     echo -e "${BLUE}Restarting pyircx service...${NC}"
+    systemctl reset-failed pyircx 2>/dev/null || true
     systemctl start pyircx
     sleep 2
-
-    if systemctl is-active --quiet pyircx; then
-        echo -e "${GREEN}✓ Service restarted successfully${NC}"
-        # Fix database permissions after service creates/accesses it
-        sleep 1
-        chmod 660 "$INSTALL_DIR/pyircx.db" 2>/dev/null || true
-        chmod 775 "$INSTALL_DIR" 2>/dev/null || true
-    else
-        echo -e "${RED}✗ Service failed to start${NC}"
-        echo "Check logs: journalctl -u pyircx -n 50"
-    fi
+    require_service_active "pyircx" "pyircx service"
+    # Fix database permissions after service creates/accesses it
+    sleep 1
+    chmod 660 "$INSTALL_DIR/pyircx.db" 2>/dev/null || true
+    chmod 775 "$INSTALL_DIR" 2>/dev/null || true
 else
     echo -e "${YELLOW}Service was not running, not starting${NC}"
     echo "Start with: systemctl start pyircx"
@@ -675,12 +707,9 @@ fi
 # Restart webchat service if it was running
 if [ $WEBCHAT_SERVICE_WAS_RUNNING -eq 1 ]; then
     echo -e "${BLUE}Restarting webchat service...${NC}"
+    systemctl reset-failed pyircx-webchat 2>/dev/null || true
     systemctl start pyircx-webchat
-    if systemctl is-active --quiet pyircx-webchat; then
-        echo -e "${GREEN}✓ WebChat service restarted${NC}"
-    else
-        echo -e "${RED}✗ WebChat service failed to start${NC}"
-    fi
+    require_service_active "pyircx-webchat" "WebChat service"
 fi
 
 # Summary
@@ -716,4 +745,4 @@ echo "  After configuring SSL, enable it in /etc/pyircx/pyircx_config.json:"
 echo "    \"auth_require_ssl\": true"
 echo "  Run: sudo ./setup_ssl.sh to configure SSL/TLS"
 echo ""
-echo -e "${GREEN}pyIRCX v2.0.0 - Upgrade complete!${NC}"
+echo -e "${GREEN}pyIRCX v${CURRENT_PACKAGE_VERSION} - Upgrade complete!${NC}"

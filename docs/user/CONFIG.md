@@ -317,7 +317,7 @@ NICK YourNick
     "server": {
         "name": "chat.example.com",
         "network": "ExampleNet",
-        "version": "2.0.0"
+        "version": "<see version.json>"
     },
     "network": {
         "listen_ports": [6667, 6668, 7000],

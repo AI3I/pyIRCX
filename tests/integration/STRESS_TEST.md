@@ -116,7 +116,7 @@ For best results, configure your test servers:
 
 ```
 ================================================================================
-                        pyIRCX v2.0.0 Stress Test
+                        pyIRCX v2.0.1 Stress Test
 ================================================================================
 
 Generated 20 channels: #test1, #test2, #test3, #test4, #test5...

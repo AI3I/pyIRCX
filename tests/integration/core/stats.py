@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-pyIRCX v2.0.0 STATS Command Test Suite
+pyIRCX v2.0.1 STATS Command Test Suite
 Tests all STATS command functionality
 
 Test Staff Accounts:
@@ -541,7 +541,7 @@ async def test_stats_star_admin_only():
 # ==============================================================================
 
 async def main():
-    """Run all STATS v2.0.0 tests"""
+    """Run all STATS v2.0.1 tests"""
     print("\n⚠️  Make sure pyIRCX server is running on localhost:6667\n")
 
     # Test server connection first

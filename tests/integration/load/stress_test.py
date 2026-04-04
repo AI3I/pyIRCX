@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-pyIRCX v2.0.0 Stress Test & Load Testing
+pyIRCX v2.0.1 Stress Test & Load Testing
 Simulates realistic IRC usage with hundreds of concurrent clients
 
 Scenarios:
@@ -204,7 +204,7 @@ class StaffUser:
                 topics = [
                     "Welcome to the channel!",
                     "Rules: Be respectful",
-                    "pyIRCX v2.0.0 stress test",
+                    "pyIRCX v2.0.1 stress test",
                     "Testing in progress",
                     "General discussion",
                 ]
@@ -366,7 +366,7 @@ class StressTest:
     async def run(self):
         """Run stress test"""
         print("=" * 80)
-        print("pyIRCX v2.0.0 Stress Test".center(80))
+        print("pyIRCX v2.0.1 Stress Test".center(80))
         print("=" * 80)
         print()
         

@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
-"""
-pyIRCX v2.0.0 Master Test Runner
-Runs all test suites with comprehensive reporting
-"""
+"""pyIRCX Master Test Runner."""
 
 import subprocess
 import sys
 import os
 import time
 from datetime import datetime
+from version import VERSION, VERSION_LABEL
 
 class Colors:
     """ANSI color codes for terminal output"""
@@ -78,7 +76,7 @@ def run_test_suite(name, script_path, description=""):
 
 def main():
     """Main test runner"""
-    print_header("pyIRCX v2.0.0 Test Suite")
+    print_header(f"{VERSION_LABEL} v{VERSION} Test Suite")
     print(f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"Python: {sys.version.split()[0]}")
     print(f"Working Directory: {os.getcwd()}\n")

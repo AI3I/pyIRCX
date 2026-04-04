@@ -9,10 +9,15 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 WEBADMIN_DIR = PROJECT_ROOT / "webadmin"
 WEBCHAT_FILE = PROJECT_ROOT / "webchat" / "index.html"
+WEBCHAT_GATEWAY_FILE = PROJECT_ROOT / "webchat" / "gateway.py"
+WEBCHAT_CONFIG_EXAMPLE_FILE = PROJECT_ROOT / "webchat" / "webchat.conf.example"
 MAIN_CONFIG_FILE = PROJECT_ROOT / "pyircx_config.json"
 INSTALL_SCRIPT = PROJECT_ROOT / "install.sh"
 MAIN_SERVER_FILE = PROJECT_ROOT / "pyircx.py"
 WEBADMIN_INDEX_FILE = WEBADMIN_DIR / "index.php"
+WEBADMIN_LOGIN_FILE = WEBADMIN_DIR / "login.php"
+WEBADMIN_API_FILE = WEBADMIN_DIR / "api.php"
+WEBADMIN_SESSION_AUTH_FILE = WEBADMIN_DIR / "session_auth.php"
 API_HELPERS_FILE = PROJECT_ROOT / "api_helpers.py"
 LINKING_FILE = PROJECT_ROOT / "linking.py"
 DEFAULT_CONFIG_GEN_FILE = PROJECT_ROOT / "utils" / "generate_default_config.py"
@@ -77,7 +82,7 @@ def test_linking_tls_round_trip_in_admin_js():
 
 
 def test_login_php_rate_limit_paths_present():
-    login_php = _read(WEBADMIN_DIR / "login.php")
+    login_php = _read(WEBADMIN_LOGIN_FILE)
     required_tokens = [
         "function rate_check(",
         "function rate_record_failure(",
@@ -117,7 +122,8 @@ def test_install_script_generates_secrets_and_wires_them():
     assert "secrets.token_urlsafe(18)" in install_sh
     assert "secrets.token_urlsafe(24)" in install_sh
     assert "--admin-password \"$GENERATED_ADMIN_PASS\"" in install_sh
-    assert "WEBIRC_PASS=$GENERATED_WEBIRC_PASS" in install_sh
+    assert "webchat/webchat.conf.example" in install_sh
+    assert "cfg.set('webirc', 'password', webirc_password)" in install_sh
 
 
 def test_server_runtime_ssl_default_for_pass_auth():
@@ -162,3 +168,85 @@ def test_integration_harness_uses_test_admin_password_env():
     assert "PYIRCX_TEST_ADMIN_PASS" in topology
     assert "PYIRCX_TEST_ADMIN_PASS" in stress
     assert "export PYIRCX_TEST_ADMIN_PASS" in run_tests
+
+
+def test_webadmin_php_fallback_targets_repo_root_api():
+    api_php = _read(WEBADMIN_API_FILE)
+    login_php = _read(WEBADMIN_LOGIN_FILE)
+    assert "dirname(__DIR__) . '/api.py'" in api_php
+    assert "dirname(__DIR__) . '/api.py'" in login_php
+
+
+def test_webadmin_secret_commands_use_stdin_payload():
+    api_php = _read(WEBADMIN_API_FILE)
+    admin_js = _read(WEBADMIN_DIR / "admin.js")
+    assert "stdin_payload" in admin_js
+    assert "proc_open($cmd_parts" in api_php
+    assert "'add-staff' => 'add-staff-stdin'" in api_php
+    assert "'change-staff-password' => 'change-staff-password-stdin'" in api_php
+    assert "'register-nick' => 'register-nick-stdin'" in api_php
+    assert "'edit-nick' => 'edit-nick-stdin'" in api_php
+
+
+def test_webadmin_session_expiry_is_enforced():
+    session_auth = _read(WEBADMIN_SESSION_AUTH_FILE)
+    login_php = _read(WEBADMIN_LOGIN_FILE)
+    index_php = _read(WEBADMIN_INDEX_FILE)
+    api_php = _read(WEBADMIN_API_FILE)
+    assert "PYIRCX_WEBADMIN_ABSOLUTE_TIMEOUT" in session_auth
+    assert "PYIRCX_WEBADMIN_IDLE_TIMEOUT" in session_auth
+    assert "$_SESSION['last_activity'] = $now;" in session_auth
+    assert "pyircx_require_admin_session(false);" in index_php
+    assert "pyircx_require_admin_session(true);" in api_php
+    assert "$_SESSION['last_activity'] = $_SESSION['login_time'];" in login_php
+    assert "?expired=1" in session_auth
+
+
+def test_webchat_only_trusts_forwarded_headers_from_trusted_proxies():
+    gateway_py = _read(WEBCHAT_GATEWAY_FILE)
+    config_example = _read(WEBCHAT_CONFIG_EXAMPLE_FILE)
+    assert "trusted_proxies" in gateway_py
+    assert "self._is_trusted_proxy(remote_ip)" in gateway_py
+    assert "return remote_ip" in gateway_py
+    assert "trusted_proxies = 127.0.0.1/32, ::1/128" in config_example
+
+
+def test_webchat_install_and_docs_use_ini_config_format():
+    install_sh = _read(INSTALL_SCRIPT)
+    upgrade_sh = _read(PROJECT_ROOT / "upgrade.sh")
+    service = _read(PROJECT_ROOT / "pyircx-webchat.service")
+    change_password = _read(PROJECT_ROOT / "change_password.sh")
+    readme = _read(PROJECT_ROOT / "README.md")
+    webchat_readme = _read(PROJECT_ROOT / "webchat" / "README.md")
+    remote_deploy = _read(PROJECT_ROOT / "webchat" / "REMOTE_DEPLOYMENT.md")
+    repair_sh = _read(PROJECT_ROOT / "repair.sh")
+    assert "EnvironmentFile" not in service
+    assert "gateway.py --config /etc/pyircx/webchat.conf" in service
+    assert "cfg.set('webirc', 'password', password)" in change_password
+    assert "change-staff-password-stdin" in change_password
+    assert "webadmin_config.json" not in change_password
+    assert "json.dumps({\"password\": sys.argv[1]})" in change_password
+    assert "[webirc]" in readme
+    assert "[webirc]" in webchat_readme
+    assert "[webirc]" in remote_deploy
+    assert 'cp "$SCRIPT_DIR/version.json" "$WEBCHAT_WEB_DIR/"' in install_sh
+    assert 'cp "$SCRIPT_DIR/version.json" /var/www/html/webchat/' in upgrade_sh
+    assert "[webirc]" in repair_sh
+
+
+def test_web_ui_reads_shared_version_metadata():
+    webadmin = _read(WEBADMIN_DIR / "index.php")
+    webchat = _read(WEBCHAT_FILE)
+    landing = _read(PROJECT_ROOT / "index.html")
+    assert "version.json" in webadmin
+    assert "fetch('./version.json')" in webchat
+    assert "fetch('./version.json')" in landing
+
+
+def test_webchat_client_ctcp_support_matches_clientinfo():
+    webchat = _read(WEBCHAT_FILE)
+    assert 'CLIENTINFO ACTION CLIENTINFO ERRMSG FINGER PING SOURCE TIME USERINFO VERSION' in webchat
+    assert "case 'FINGER':" in webchat
+    assert "case 'USERINFO':" in webchat
+    assert "case 'SOURCE':" in webchat
+    assert 'ERRMSG ${command} :Unsupported CTCP query' in webchat
