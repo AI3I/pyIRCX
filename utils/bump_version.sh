@@ -174,7 +174,7 @@ if [ ! -f "$RELEASE_FILE" ]; then
 ---
 
 For questions, issues, or contributions, please visit:
-https://github.com/0x8007000E/pyIRCX
+https://github.com/AI3I/pyIRCX
 EOF
     echo -e "${GREEN}✓${NC}"
 else

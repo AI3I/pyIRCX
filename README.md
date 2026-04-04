@@ -341,7 +341,7 @@ Older baseline systems below that requirement are outside the supported install 
 
 ```bash
 # Clone the repository
-git clone https://github.com/0x8007000E/pyIRCX.git
+git clone https://github.com/AI3I/pyIRCX.git
 cd pyIRCX
 
 # Automated installation (recommended)
@@ -744,7 +744,7 @@ Please open an issue or pull request on GitHub.
 
 ```bash
 # Clone the repository
-git clone https://github.com/0x8007000E/pyIRCX.git
+git clone https://github.com/AI3I/pyIRCX.git
 cd pyIRCX
 
 # Install dev dependencies
@@ -773,8 +773,8 @@ python3 -m py_compile pyircx.py linking.py
 ## Support
 
 - **Documentation**: See docs in this repository
-- **Issues**: [GitHub Issues](https://github.com/0x8007000E/pyIRCX/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/0x8007000E/pyIRCX/discussions)
+- **Issues**: [GitHub Issues](https://github.com/AI3I/pyIRCX/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/AI3I/pyIRCX/discussions)
 
 ---
 

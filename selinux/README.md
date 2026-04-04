@@ -160,4 +160,4 @@ allow httpd_t var_log_t:file map;
 For SELinux-related issues, check:
 - `/var/log/audit/audit.log` - SELinux denial logs
 - `sudo sealert -a /var/log/audit/audit.log` - Human-readable analysis
-- GitHub Issues: https://github.com/0x8007000E/pyIRCX/issues
+- GitHub Issues: https://github.com/AI3I/pyIRCX/issues

@@ -1,6 +1,6 @@
 [Unit]
 Description=pyIRCX WebChat Gateway
-Documentation=https://github.com/0x8007000E/pyIRCX
+Documentation=https://github.com/AI3I/pyIRCX
 After=network.target pyircx.service
 Wants=pyircx.service
 

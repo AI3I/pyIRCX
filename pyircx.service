@@ -1,6 +1,6 @@
 [Unit]
 Description=pyIRCX Internet Relay Chat Service
-Documentation=https://github.com/0x8007000E/pyIRCX
+Documentation=https://github.com/AI3I/pyIRCX
 After=network.target
 Wants=network-online.target
 StartLimitIntervalSec=60

@@ -1050,5 +1050,5 @@ The server advertises the following IRCv3 capabilities via `CAP LS`:
 ## Support
 
 For configuration help:
-- GitHub Issues: https://github.com/0x8007000E/pyIRCX/issues
+- GitHub Issues: https://github.com/AI3I/pyIRCX/issues
 - IRC: #pyircx on irc.example.com

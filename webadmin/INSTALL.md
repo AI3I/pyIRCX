@@ -254,5 +254,5 @@ sudo tail -f /var/log/nginx/error.log
 
 ## Support
 
-- GitHub: https://github.com/0x8007000E/pyIRCX
+- GitHub: https://github.com/AI3I/pyIRCX
 - Issues: Report bugs via GitHub Issues
