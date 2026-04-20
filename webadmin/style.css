@@ -984,6 +984,36 @@ body {
 }
 
 /* Log Table Styling */
+.log-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid #dde3ea;
+}
+
+.log-tab {
+    border: 0;
+    border-bottom: 3px solid transparent;
+    background: transparent;
+    padding: 10px 14px;
+    color: #5f6f82;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.log-tab.active {
+    border-bottom-color: #2c3e50;
+    color: #2c3e50;
+}
+
+.log-panel {
+    display: none;
+}
+
+.log-panel.active {
+    display: block;
+}
+
 .log-table {
     font-size: 13px;
 }
@@ -1000,7 +1030,8 @@ body {
     background: #f9f9f9;
 }
 
-#server-logs {
+#server-logs,
+#connection-logs {
     max-height: 600px;
     overflow-y: auto;
     background: white;

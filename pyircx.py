@@ -321,7 +321,9 @@ class pyIRCXServer:
         self.whowas = OrderedDict()  # LRU cache for WHOWAS
         self.whowas_max_entries = 1000  # Maximum entries to keep
         self.whowas_max_age = 86400  # 24 hours in seconds
-        self.session_history = deque(maxlen=1000)  # Recent completed client sessions
+        self.session_history = deque(
+            maxlen=CONFIG.get('limits', 'max_connection_sessions', default=1000)
+        )  # Recent completed client sessions
         self.boot_time = int(time.time())
         self.debug_mode = True
         self.max_users_seen = 0
@@ -415,6 +417,8 @@ class pyIRCXServer:
         self.max_users_per_channel = CONFIG.get('limits', 'max_users_per_channel', default=500)
         self.max_nick_length = CONFIG.get('limits', 'max_nick_length', default=30)
         self.max_user_length = CONFIG.get('limits', 'max_user_length', default=30)
+        self.max_connection_sessions = max(1, int(CONFIG.get('limits', 'max_connection_sessions', default=1000) or 1000))
+        self.connection_session_retention_days = max(0, int(CONFIG.get('limits', 'connection_session_retention_days', default=0) or 0))
         self.max_topic_length = CONFIG.get('limits', 'max_topic_length', default=390)
         self.flood_protection = CONFIG.get('security', 'enable_flood_protection', default=True)
         self.flood_messages = CONFIG.get('security', 'flood_messages', default=5)
@@ -3248,8 +3252,8 @@ class pyIRCXServer:
         """Show recent connection sessions to staff as a flat IRC numeric table.
 
         Syntax:
-          LASTLOGONS [filter] [limit]
-          LOGONS [filter] [limit]
+          LASTLOGONS [VERBOSE] [filter] [limit]
+          LOGONS [VERBOSE] [filter] [limit]
 
         The filter is matched case-insensitively across nick, user, real name,
         IP, and host. Limits are capped at 250 rows.
@@ -3262,15 +3266,7 @@ class pyIRCXServer:
             await user.send(self.get_reply("830", user))
             return
 
-        filter_text = "*"
-        limit = 50
-        if params:
-            if len(params) == 1 and params[0].isdigit():
-                limit = int(params[0])
-            else:
-                filter_text = params[0]
-                if len(params) > 1 and params[1].isdigit():
-                    limit = int(params[1])
+        verbose, filter_text, limit = self._parse_lastlogons_params(params)
         limit = max(1, min(limit, 250))
 
         entries = self._current_session_entries() + await self._completed_session_entries()
@@ -3280,14 +3276,31 @@ class pyIRCXServer:
         reply_filter = self._lastlogons_reply_token(filter_text)
 
         await user.send(self.get_reply("976", user, filter=reply_filter, shown=len(shown), total=len(matched), limit=limit))
-        header, separator = self._lastlogons_header_rows()
+        header, separator = self._lastlogons_header_rows(verbose=verbose)
         await user.send(self.get_reply("977", user, row=header))
         await user.send(self.get_reply("977", user, row=separator))
 
         for entry in shown:
-            await user.send(self.get_reply("977", user, row=self._format_session_entry(entry)))
+            await user.send(self.get_reply("977", user, row=self._format_session_entry(entry, verbose=verbose)))
 
         await user.send(self.get_reply("978", user))
+
+    @staticmethod
+    def _parse_lastlogons_params(params):
+        verbose = False
+        limit = 50
+        filter_parts = []
+
+        for param in params or []:
+            if str(param).upper() == "VERBOSE":
+                verbose = True
+            elif str(param).isdigit():
+                limit = int(param)
+            else:
+                filter_parts.append(str(param))
+
+        filter_text = " ".join(filter_parts) if filter_parts else "*"
+        return verbose, filter_text, limit
 
     def _current_session_entries(self):
         now = int(time.time())
@@ -3333,8 +3346,14 @@ class pyIRCXServer:
                            ORDER BY logon_time DESC, id DESC
                            LIMIT ?
                        )""",
-                    (self.whowas_max_entries,)
+                    (self.max_connection_sessions,)
                 )
+                if self.connection_session_retention_days:
+                    cutoff = int(time.time()) - (self.connection_session_retention_days * 86400)
+                    await db.execute(
+                        "DELETE FROM connection_sessions WHERE logout_time < ?",
+                        (cutoff,)
+                    )
                 await db.commit()
         except Exception as e:
             if self.debug_mode:
@@ -3351,7 +3370,7 @@ class pyIRCXServer:
                        FROM connection_sessions
                        ORDER BY logon_time DESC, id DESC
                        LIMIT ?""",
-                    (self.whowas_max_entries,)
+                    (self.max_connection_sessions,)
                 ) as cursor:
                     rows = await cursor.fetchall()
             return [
@@ -3405,13 +3424,13 @@ class pyIRCXServer:
         )
         return any(fnmatch.fnmatch(str(field).lower(), pattern) for field in fields)
 
-    def _format_session_entry(self, entry):
+    def _format_session_entry(self, entry, verbose=False):
         nick_width, user_width = self._lastlogons_name_widths()
         ip = entry.get('ip') or 'unknown'
         logon = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(entry.get('logon_time', 0)))
         duration = self._format_session_duration(entry.get('duration', 0))
         status = "online" if entry.get('active') else "offline"
-        return (
+        row = (
             f"{self._clip(entry.get('nick', ''), nick_width):<{nick_width}} "
             f"{self._clip(entry.get('username', ''), user_width):<{user_width}} "
             f"{self._clip(entry.get('realname', ''), 20):<20} "
@@ -3420,8 +3439,16 @@ class pyIRCXServer:
             f"{duration:>8} "
             f"{status:<7}"
         )
+        if not verbose:
+            return row
 
-    def _lastlogons_header_rows(self):
+        logout = "-"
+        if not entry.get('active'):
+            logout = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(entry.get('logout_time', 0)))
+        reason = self._clip(entry.get('reason', ''), 50)
+        return f"{row} {logout:<19} {reason:<50}"
+
+    def _lastlogons_header_rows(self, verbose=False):
         nick_width, user_width = self._lastlogons_name_widths()
         columns = [
             ("Nickname", nick_width),
@@ -3432,6 +3459,11 @@ class pyIRCXServer:
             ("Duration", 8),
             ("Status", 7),
         ]
+        if verbose:
+            columns.extend([
+                ("Logout Time", 19),
+                ("Reason", 50),
+            ])
         header = " ".join(f"{label:<{width}}" for label, width in columns)
         separator = " ".join("-" * width for _, width in columns)
         return header, separator
@@ -11309,55 +11341,40 @@ class ServerManager:
 
     async def run(self):
         """Run the server until shutdown is requested."""
-        # Create tasks for all servers (plain + SSL)
-        server_tasks = [
-            asyncio.create_task(srv.serve_forever())
-            for srv in self.tcp_servers + self.ssl_servers
-        ]
+        background_tasks = []
 
         # Add SSL certificate monitoring task if SSL is enabled
-        ssl_monitor_task = None
         if self.ssl_manager and self.ssl_manager.ssl_context:
-            ssl_monitor_task = asyncio.create_task(self._ssl_monitor_loop())
-            server_tasks.append(ssl_monitor_task)
+            background_tasks.append(asyncio.create_task(self._ssl_monitor_loop()))
 
         # Add newsflash periodic broadcast task
-        newsflash_task = asyncio.create_task(self.server.newsflash_periodic_broadcast())
-        server_tasks.append(newsflash_task)
+        background_tasks.append(asyncio.create_task(self.server.newsflash_periodic_broadcast()))
 
         # Add status dump task for admin interface
-        status_dump_task = asyncio.create_task(self._status_dump_loop())
-        server_tasks.append(status_dump_task)
+        background_tasks.append(asyncio.create_task(self._status_dump_loop()))
 
         # Add admin command queue check task
-        admin_cmd_task = asyncio.create_task(self._admin_command_loop())
-        server_tasks.append(admin_cmd_task)
-
-        # Wait for shutdown signal or server error
-        shutdown_task = asyncio.create_task(self.shutdown_event.wait())
+        background_tasks.append(asyncio.create_task(self._admin_command_loop()))
 
         try:
-            done, pending = await asyncio.wait(
-                server_tasks + [shutdown_task],
-                return_when=asyncio.FIRST_COMPLETED
-            )
-
-            # Cancel pending tasks with timeout
-            for task in pending:
-                task.cancel()
-
-            # Wait for all tasks to cancel with timeout
-            if pending:
-                try:
-                    await asyncio.wait_for(
-                        asyncio.gather(*pending, return_exceptions=True),
-                        timeout=2.0
-                    )
-                except asyncio.TimeoutError:
-                    logger.warning(get_log_message("shutdown_task_timeout"))
-
+            await self.shutdown_event.wait()
         except asyncio.CancelledError:
             pass
+        finally:
+            for srv in self.tcp_servers + self.ssl_servers:
+                srv.close()
+
+            for task in background_tasks:
+                task.cancel()
+
+            if background_tasks:
+                try:
+                    await asyncio.wait_for(
+                        asyncio.gather(*background_tasks, return_exceptions=True),
+                        timeout=5.0
+                    )
+                except asyncio.TimeoutError:
+                    logger.debug(get_log_message("shutdown_task_timeout"))
 
     async def _ssl_monitor_loop(self):
         """Background task to monitor SSL certificates for changes and expiry."""
@@ -11484,19 +11501,23 @@ class ServerManager:
                     except (Exception, asyncio.TimeoutError) as e:
                         logger.warning(get_log_message("link_manager_shutdown_error", error=e))
 
-                # Close all TCP servers (plain + SSL) immediately
+                # Stop protocol-level background monitors owned by pyIRCXServer.
+                cap_timeout_task = getattr(self.server, 'cap_timeout_task', None) if self.server else None
+                if cap_timeout_task and not cap_timeout_task.done():
+                    cap_timeout_task.cancel()
+                    try:
+                        await asyncio.wait_for(cap_timeout_task, timeout=1.0)
+                    except asyncio.CancelledError:
+                        pass
+                    except asyncio.TimeoutError:
+                        logger.warning(get_log_message("cap_timeout_monitor_shutdown_timeout"))
+
+                # Stop accepting new clients immediately.
                 all_servers = self.tcp_servers + self.ssl_servers
                 for srv in all_servers:
                     srv.close()
 
-                # Wait for servers to close with shorter timeout
-                for srv in all_servers:
-                    try:
-                        await asyncio.wait_for(srv.wait_closed(), timeout=2.0)
-                    except asyncio.TimeoutError:
-                        logger.warning(get_log_message("server_close_timeout"))
-
-                # Disconnect all clients concurrently with timeout
+                # Disconnect clients before waiting on server objects to close.
                 if self.server:
                     disconnect_tasks = []
                     for user in list(self.server.users.values()):
@@ -11512,8 +11533,14 @@ class ServerManager:
                         except asyncio.TimeoutError:
                             logger.warning(get_log_message("client_disconnect_timeout"))
 
+                for srv in all_servers:
+                    try:
+                        await asyncio.wait_for(srv.wait_closed(), timeout=2.0)
+                    except asyncio.TimeoutError:
+                        logger.debug(get_log_message("server_close_timeout"))
+
                 # Close database pool
-                if self.server and hasattr(self.server, 'db_pool'):
+                if self.server and getattr(self.server, 'db_pool', None):
                     try:
                         await asyncio.wait_for(self.server.db_pool.close(), timeout=2.0)
                         logger.info(get_log_message("db_pool_closed"))

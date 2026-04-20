@@ -145,6 +145,19 @@ def setup_api_env(tmp_path):
             message_count INTEGER DEFAULT 0
         );
 
+        CREATE TABLE IF NOT EXISTS connection_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nickname TEXT NOT NULL,
+            username TEXT NOT NULL,
+            realname TEXT,
+            ip_address TEXT,
+            host TEXT,
+            logon_time INTEGER NOT NULL,
+            logout_time INTEGER NOT NULL,
+            duration INTEGER NOT NULL,
+            reason TEXT
+        );
+
         CREATE INDEX IF NOT EXISTS idx_mailbox_recipient ON mailbox(recipient_uuid);
         CREATE INDEX IF NOT EXISTS idx_memos_recipient ON memos(recipient_uuid);
         CREATE INDEX IF NOT EXISTS idx_channel_access_channel ON channel_access(channel_uuid);
@@ -729,6 +742,26 @@ class TestConfiguration:
         result = api_module.get_motd()
 
         assert result['success'] == True
+
+    def test_get_connection_sessions_filters_history(self, api_module):
+        """Test retrieving persisted connection sessions for WebAdmin logs"""
+        conn = sqlite3.connect(api_module.get_db_path())
+        conn.execute(
+            """INSERT INTO connection_sessions
+               (nickname, username, realname, ip_address, host, logon_time, logout_time, duration, reason)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            ("LogNick", "~loguser", "Log User", "198.51.100.9", "host.example", 1000, 1060, 60, "Client exited")
+        )
+        conn.commit()
+        conn.close()
+
+        result = api_module.get_connection_sessions(10, "198.51.100")
+
+        assert result["success"] == True
+        assert result["count"] == 1
+        assert result["sessions"][0]["nickname"] == "LogNick"
+        assert result["sessions"][0]["ip_address"] == "198.51.100.9"
+        assert result["sessions"][0]["duration"] == 60
 
     def test_set_motd_invalidates_cached_get_motd(self, api_module):
         api_module.get_motd()

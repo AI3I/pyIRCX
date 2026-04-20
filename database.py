@@ -36,6 +36,7 @@ class DatabasePool:
         self._pool = asyncio.Queue(maxsize=pool_size)
         self._initialized = False
         self._lock = asyncio.Lock()
+        self._connections = []
         self._sync = os.environ.get("PYIRCX_SYNC_DB") == "1"
         self._connect_timeout = float(os.environ.get("PYIRCX_ASYNC_DB_TIMEOUT", "5"))
 
@@ -54,7 +55,9 @@ class DatabasePool:
                     )
                     conn.row_factory = sqlite3.Row
                     conn.execute("PRAGMA foreign_keys = ON")
-                    await self._pool.put(SyncConnection(conn))
+                    wrapped_conn = SyncConnection(conn)
+                    self._connections.append(wrapped_conn)
+                    await self._pool.put(wrapped_conn)
                     continue
 
                 try:
@@ -83,8 +86,11 @@ class DatabasePool:
                     )
                     conn.row_factory = sqlite3.Row
                     conn.execute("PRAGMA foreign_keys = ON")
-                    await self._pool.put(SyncConnection(conn))
+                    wrapped_conn = SyncConnection(conn)
+                    self._connections.append(wrapped_conn)
+                    await self._pool.put(wrapped_conn)
                 else:
+                    self._connections.append(conn)
                     await self._pool.put(conn)
             self._initialized = True
             logger.info(get_log_message("db_async_pool_ready", size=self.pool_size))
@@ -105,9 +111,15 @@ class DatabasePool:
     async def close(self):
         """Close all connections in the pool"""
         async with self._lock:
+            queued = set()
             while not self._pool.empty():
-                conn = await self._pool.get()
-                await conn.close()
+                queued.add(await self._pool.get())
+            for conn in list(dict.fromkeys(self._connections + list(queued))):
+                try:
+                    await conn.close()
+                except Exception:
+                    pass
+            self._connections.clear()
             self._initialized = False
 
     async def execute(self, query, params=None):

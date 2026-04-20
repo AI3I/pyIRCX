@@ -93,6 +93,8 @@ To disable IPv6, set `network.enable_ipv6` to `false`. To use a specific IPv6 ad
 | `limits.max_nick_length` | `30` | Maximum nickname length |
 | `limits.max_user_length` | `30` | Maximum username length |
 | `limits.max_channel_length` | `50` | Maximum channel name length |
+| `limits.max_connection_sessions` | `1000` | Maximum persisted LASTLOGONS completed sessions |
+| `limits.connection_session_retention_days` | `0` | Delete completed sessions older than this many days; 0 disables age pruning |
 
 ## Services
 

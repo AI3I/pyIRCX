@@ -85,6 +85,8 @@ def make_mock_server():
     server.session_history = []
     server.db_pool = None
     server.whowas_max_entries = 1000
+    server.max_connection_sessions = 1000
+    server.connection_session_retention_days = 0
     server.debug_mode = True
     server.max_nick_length = 30
     server.max_user_length = 30
@@ -221,6 +223,7 @@ class TestLastLogons:
                 'ip': '203.0.113.25',
                 'host': 'old.example.test',
                 'logon_time': 900,
+                'logout_time': 975,
                 'duration': 75,
                 'active': False,
                 'reason': 'Client exited',
@@ -281,6 +284,37 @@ class TestLastLogons:
         assert server._lastlogons_reply_token("John Lewis") == "John_Lewis"
         assert server._lastlogons_reply_token("") == "*"
 
+    def test_lastlogons_parses_verbose_filter_and_limit(self):
+        server = make_mock_server()
+
+        verbose, filter_text, limit = server._parse_lastlogons_params(["VERBOSE", "John", "Lewis", "25"])
+
+        assert verbose is True
+        assert filter_text == "John Lewis"
+        assert limit == 25
+
+    def test_lastlogons_verbose_includes_logout_and_reason(self):
+        server = make_mock_server()
+
+        header, _ = server._lastlogons_header_rows(verbose=True)
+        row = server._format_session_entry({
+            'nick': 'OldNick',
+            'username': '~old',
+            'realname': 'Old User',
+            'ip': '203.0.113.25',
+            'host': 'old.example.test',
+            'logon_time': 1000,
+            'logout_time': 1065,
+            'duration': 65,
+            'active': False,
+            'reason': 'Client exited',
+        }, verbose=True)
+
+        assert "Logout Time" in header
+        assert "Reason" in header
+        assert "Client exited" in row
+        assert "1969-" in row or "1970-" in row
+
     @pytest.mark.asyncio
     async def test_lastlogons_persists_completed_sessions(self, tmp_path, monkeypatch):
         import database
@@ -310,6 +344,7 @@ class TestLastLogons:
 
             server = make_mock_server()
             server.db_pool = pool
+            server.max_connection_sessions = 10
             await server._record_persistent_session_history({
                 'nick': 'PersistedNick',
                 'username': '~persisted',

@@ -1041,26 +1041,46 @@ badword3"></textarea>
 
                 <div class="card">
                     <div class="card-header">
-                        <h3>📄 Log Viewer</h3>
+                        <h3>📄 Logs</h3>
                     </div>
                     <div class="card-body">
-                        <div class="log-controls">
-                            <label>
-                                Level:
-                                <select id="log-level-filter" class="form-control">
-                                    <option value="">All</option>
-                                    <option value="INFO">INFO</option>
-                                    <option value="WARNING">WARNING</option>
-                                    <option value="ERROR">ERROR</option>
-                                </select>
-                            </label>
-                            <label>
-                                Search:
-                                <input type="text" id="log-search-input" class="form-control" placeholder="Search logs...">
-                            </label>
-                            <button class="btn btn-secondary" id="btn-refresh-logs">🔄 Refresh</button>
+                        <div class="log-tabs">
+                            <button class="log-tab active" type="button" data-log-tab="server">Server Logs</button>
+                            <button class="log-tab" type="button" data-log-tab="connections">Connection Sessions</button>
                         </div>
-                        <pre id="server-logs">Loading...</pre>
+                        <div class="log-panel active" id="log-panel-server">
+                            <div class="log-controls">
+                                <label>
+                                    Level:
+                                    <select id="log-level-filter" class="form-control">
+                                        <option value="">All</option>
+                                        <option value="INFO">INFO</option>
+                                        <option value="WARNING">WARNING</option>
+                                        <option value="ERROR">ERROR</option>
+                                    </select>
+                                </label>
+                                <label>
+                                    Search:
+                                    <input type="text" id="log-search-input" class="form-control" placeholder="Search logs...">
+                                </label>
+                                <button class="btn btn-secondary" id="btn-refresh-logs">🔄 Refresh</button>
+                            </div>
+                            <pre id="server-logs">Loading...</pre>
+                        </div>
+                        <div class="log-panel" id="log-panel-connections">
+                            <div class="log-controls">
+                                <label>
+                                    Search:
+                                    <input type="text" id="connection-log-search-input" class="form-control" placeholder="Nick, username, IP, reason...">
+                                </label>
+                                <label>
+                                    Limit:
+                                    <input type="number" id="connection-log-limit" class="form-control" min="1" max="1000" value="250">
+                                </label>
+                                <button class="btn btn-secondary" id="btn-refresh-connection-logs">🔄 Refresh</button>
+                            </div>
+                            <div id="connection-logs">Loading...</div>
+                        </div>
                     </div>
                 </div>
             </div>

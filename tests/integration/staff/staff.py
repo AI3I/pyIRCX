@@ -294,6 +294,50 @@ async def test_guide_auth():
     await client.disconnect()
 
 
+@runner.test("LASTLOGONS Requires Staff", requires_level="ADMIN")
+async def test_lastlogons_requires_staff():
+    """Test LASTLOGONS is not available to regular users"""
+    regular = IRCTestClient("test_lastlogons_regular")
+
+    await regular.connect("LogonsRegular")
+    regular.buffer.clear()
+    await regular.send_raw("LASTLOGONS")
+    assert await regular.expect("481"), "Regular user should receive permission denied for LASTLOGONS"
+
+    await regular.disconnect()
+
+
+@runner.test("LASTLOGONS Staff Verbose", requires_level="ADMIN")
+async def test_lastlogons_staff_verbose():
+    """Test staff can view recent connection sessions with verbose fields"""
+    admin = IRCTestClient("test_lastlogons_admin")
+    victim = IRCTestClient("test_lastlogons_victim")
+    victim_nick = f"LogonVictim{int(time.time()) % 100000}"
+
+    await victim.connect(victim_nick, username="logonvictim")
+    await victim.disconnect()
+
+    await admin.connect(
+        "LogonsAdmin",
+        username=ADMIN_CONFIG['username'],
+        password=ADMIN_CONFIG['password']
+    )
+
+    admin.buffer.clear()
+    await admin.send_raw(f"LASTLOGONS VERBOSE {victim_nick} 10")
+    assert await admin.expect("976"), "No LASTLOGONS start numeric (976)"
+    assert await admin.expect("978"), "No LASTLOGONS end numeric (978)"
+
+    has_header = any("977" in line and "Logout Time" in line and "Reason" in line for line in admin.buffer)
+    has_row = any("977" in line and victim_nick in line and "127.0.0.1" in line for line in admin.buffer)
+    print(f"   LASTLOGONS verbose header: {has_header}")
+    print(f"   LASTLOGONS victim row: {has_row}")
+    assert has_header, "Verbose LASTLOGONS should include Logout Time and Reason columns"
+    assert has_row, "LASTLOGONS should include recently disconnected client session"
+
+    await admin.disconnect()
+
+
 @runner.test("Admin Host Cloaking", requires_level="ADMIN")
 async def test_admin_host():
     """Test that admin gets server hostname"""

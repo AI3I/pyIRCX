@@ -271,6 +271,20 @@ Connection and resource limits.
 
 ---
 
+### limits.max_connection_sessions
+**Type:** Integer
+**Default:** `1000`
+**Description:** Maximum number of completed client sessions retained for staff LASTLOGONS and the WebAdmin connection-session log.
+
+---
+
+### limits.connection_session_retention_days
+**Type:** Integer
+**Default:** `0`
+**Description:** Age-based pruning for completed client sessions. Set to `0` to retain by count only.
+
+---
+
 ### limits.client_timeout
 **Type:** Integer (seconds)
 **Default:** `300`

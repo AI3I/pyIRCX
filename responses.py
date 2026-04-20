@@ -1655,7 +1655,8 @@ LOG_MESSAGES = {
     "shutdown_error": "Shutdown error: {error}",
     "link_manager_shutdown": "Link manager shutdown complete",
     "link_manager_shutdown_error": "Link manager shutdown: {error}",
-    "server_close_timeout": "Timeout waiting for server to close, forcing",
+    "server_close_timeout": "Timeout waiting for server close confirmation",
+    "cap_timeout_monitor_shutdown_timeout": "Timeout waiting for CAP timeout monitor to stop",
     "client_disconnect_timeout": "Timeout disconnecting clients, forcing",
     "no_ports_available": "No ports available, exiting",
 
@@ -2154,8 +2155,8 @@ LOG_MESSAGES = {
     "channel_props_error": "Error loading channel properties: {error}",
 
     # SHUTDOWN / SIGNAL MESSAGES
-    "shutdown_task_timeout": "Timeout cancelling background tasks, forcing",
     "signal_sighup_reload": "Received SIGHUP, reloading configuration...",
+    "shutdown_task_timeout": "Timeout waiting for background task cancellation",
     "ssl_context_updated": "SSL context updated for new connections",
 
     # LINKING OPERATIONAL MESSAGES

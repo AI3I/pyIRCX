@@ -79,6 +79,18 @@ console.log("=== admin.js LOADING ===");
         return `${Math.floor(sec / 86400)}d ago`;
     }
 
+    function formatDuration(seconds) {
+        seconds = Math.max(0, parseInt(seconds || 0, 10));
+        const days = Math.floor(seconds / 86400);
+        seconds %= 86400;
+        const hours = Math.floor(seconds / 3600);
+        seconds %= 3600;
+        const minutes = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        if (days) return `${days}d ${hours}h`;
+        return [hours, minutes, secs].map(v => String(v).padStart(2, '0')).join(':');
+    }
+
     function formatUptime(sec) {
         const d = Math.floor(sec / 86400);
         const h = Math.floor((sec % 86400) / 3600);
@@ -1619,6 +1631,43 @@ console.log("=== admin.js LOADING ===");
         });
     }
 
+    function loadConnectionLogs() {
+        const search = $('#connection-log-search-input').value || '';
+        const limit = $('#connection-log-limit').value || '250';
+        const args = [limit];
+        if (search) args.push(search);
+
+        callAPI('connection-sessions', args).then(data => {
+            if (data.error) {
+                $('#connection-logs').innerHTML = `<div class="alert alert-danger">Error: ${escapeHtml(data.error)}</div>`;
+                return;
+            }
+
+            if (!data.sessions || data.sessions.length === 0) {
+                $('#connection-logs').innerHTML = '<div class="empty-state"><div class="empty-state-icon">📄</div><div class="empty-state-text">No Connection Sessions Found</div></div>';
+                return;
+            }
+
+            let html = '<table class="table table-striped table-bordered log-table">';
+            html += '<thead><tr><th>Nickname</th><th>Username</th><th>Real Name</th><th>IP Address</th><th>Logon Time</th><th>Logout Time</th><th>Duration</th><th>Reason</th></tr></thead><tbody>';
+            data.sessions.forEach(session => {
+                html += '<tr>';
+                html += `<td><strong>${escapeHtml(session.nickname)}</strong></td>`;
+                html += `<td>${escapeHtml(session.username)}</td>`;
+                html += `<td>${escapeHtml(session.realname)}</td>`;
+                html += `<td><code>${escapeHtml(session.ip_address)}</code></td>`;
+                html += `<td>${escapeHtml(formatTimestamp(session.logon_time))}</td>`;
+                html += `<td>${escapeHtml(formatTimestamp(session.logout_time))}</td>`;
+                html += `<td>${escapeHtml(formatDuration(session.duration))}</td>`;
+                html += `<td>${escapeHtml(session.reason)}</td>`;
+                html += '</tr>';
+            });
+            html += '</tbody></table>';
+            html += `<div style="margin-top: 10px; color: #666; font-size: 13px;">Showing ${data.sessions.length} connection sessions</div>`;
+            $('#connection-logs').innerHTML = html;
+        });
+    }
+
     function searchNicks() {
         const query = $('#search-nicks-input').value;
         if (!query) {
@@ -1961,6 +2010,16 @@ console.log("=== admin.js LOADING ===");
 
         // Logs
         if ($('#btn-refresh-logs')) $('#btn-refresh-logs').addEventListener('click', loadLogs);
+        if ($('#btn-refresh-connection-logs')) $('#btn-refresh-connection-logs').addEventListener('click', loadConnectionLogs);
+        $$('.log-tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                const tabName = tab.dataset.logTab;
+                $$('.log-tab').forEach(el => el.classList.toggle('active', el === tab));
+                $$('.log-panel').forEach(panel => panel.classList.toggle('active', panel.id === `log-panel-${tabName}`));
+                if (tabName === 'connections') loadConnectionLogs();
+                else loadLogs();
+            });
+        });
         
         // Mailbox
         if ($('#btn-send-mailbox')) {
@@ -1977,6 +2036,7 @@ console.log("=== admin.js LOADING ===");
             });
         }
         if ($('#log-level-filter')) $('#log-level-filter').addEventListener('change', loadLogs);
+        if ($('#connection-log-limit')) $('#connection-log-limit').addEventListener('change', loadConnectionLogs);
     });
 
     // User management functions

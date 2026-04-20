@@ -243,6 +243,16 @@ def test_web_ui_reads_shared_version_metadata():
     assert "fetch('./version.json')" in landing
 
 
+def test_webadmin_logs_page_has_connection_sessions_tab():
+    index = _read(WEBADMIN_DIR / "index.php")
+    api_php = _read(WEBADMIN_DIR / "api.php")
+    admin_js = _read(WEBADMIN_DIR / "admin.js")
+
+    assert "Connection Sessions" in index
+    assert "connection-sessions" in api_php
+    assert "loadConnectionLogs" in admin_js
+
+
 def test_webchat_client_ctcp_support_matches_clientinfo():
     webchat = _read(WEBCHAT_FILE)
     assert 'CLIENTINFO ACTION CLIENTINFO ERRMSG FINGER PING SOURCE TIME USERINFO VERSION' in webchat

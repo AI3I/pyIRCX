@@ -1304,6 +1304,57 @@ def get_logs(lines=100, level_filter=None, search=None):
     }
 
 
+@api_error_handler
+def get_connection_sessions(limit=250, search=None):
+    """Get persisted client connection sessions for the WebAdmin log view."""
+    limit = max(1, min(int(limit or 250), 1000))
+    search = (search or '').strip()
+
+    query = """
+        SELECT nickname, username, realname, ip_address, host,
+               logon_time, logout_time, duration, reason
+        FROM connection_sessions
+    """
+    params = []
+    if search:
+        pattern = f"%{search.lower()}%"
+        query += """
+            WHERE lower(nickname) LIKE ?
+               OR lower(username) LIKE ?
+               OR lower(COALESCE(realname, '')) LIKE ?
+               OR lower(COALESCE(ip_address, '')) LIKE ?
+               OR lower(COALESCE(host, '')) LIKE ?
+               OR lower(COALESCE(reason, '')) LIKE ?
+        """
+        params.extend([pattern] * 6)
+    query += " ORDER BY logon_time DESC, id DESC LIMIT ?"
+    params.append(limit)
+
+    with sqlite3.connect(get_db_path()) as conn:
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(query, params).fetchall()
+
+    sessions = []
+    for row in rows:
+        sessions.append({
+            "nickname": row["nickname"],
+            "username": row["username"],
+            "realname": row["realname"] or "",
+            "ip_address": row["ip_address"] or "",
+            "host": row["host"] or "",
+            "logon_time": row["logon_time"],
+            "logout_time": row["logout_time"],
+            "duration": row["duration"],
+            "reason": row["reason"] or "",
+        })
+
+    return {
+        "sessions": sessions,
+        "count": len(sessions),
+        "limit": limit,
+    }
+
+
 def _run_systemctl(*args):
     """Run systemctl safely and return completed process."""
     return subprocess.run(
@@ -2183,6 +2234,10 @@ def main():
         level = sys.argv[3] if len(sys.argv) > 3 else None
         search_term = sys.argv[4] if len(sys.argv) > 4 else None
         result = get_logs(lines, level, search_term)
+    elif command == "connection-sessions":
+        limit = int(sys.argv[2]) if len(sys.argv) > 2 else 250
+        search_term = sys.argv[3] if len(sys.argv) > 3 else None
+        result = get_connection_sessions(limit, search_term)
     elif command == "service-status":
         result = get_service_status()
     elif command == "service-control":

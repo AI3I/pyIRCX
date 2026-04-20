@@ -38,6 +38,8 @@
     "max_user_length": 30,
     "max_channel_length": 50,
     "msg_length": 512,
+    "max_connection_sessions": 1000,
+    "connection_session_retention_days": 0,
     "nick_change_cooldown": 60
   },
   "security": {

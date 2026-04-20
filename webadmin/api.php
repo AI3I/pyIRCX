@@ -36,7 +36,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // Security: Only allow POST requests for most operations
 $method = $_SERVER['REQUEST_METHOD'];
 $allowed_get_commands = ['stats', 'realtime-status', 'staff', 'channels', 'recent-registrations',
-                          'config', 'full-config', 'full-config', 'logs', 'server-access-list', 'newsflash-list', 'mailbox-list',
+                          'config', 'full-config', 'full-config', 'logs', 'connection-sessions', 'server-access-list', 'newsflash-list', 'mailbox-list',
                           'newsflash-settings', 'list-nicknames-paginated', 'list-channels-paginated',
                           'get-channel-access', 'search-nicknames', 'search-channels', 'service-status', 'get-motd', 'services', 'list-services'];
 
