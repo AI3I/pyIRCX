@@ -413,6 +413,8 @@ class pyIRCXServer:
         self.servicebot_enabled = CONFIG.get('servicebot', 'enabled', default=True)
         self.max_users = CONFIG.get('limits', 'max_users', default=1000)
         self.max_users_per_channel = CONFIG.get('limits', 'max_users_per_channel', default=500)
+        self.max_nick_length = CONFIG.get('limits', 'max_nick_length', default=30)
+        self.max_user_length = CONFIG.get('limits', 'max_user_length', default=30)
         self.max_topic_length = CONFIG.get('limits', 'max_topic_length', default=390)
         self.flood_protection = CONFIG.get('security', 'enable_flood_protection', default=True)
         self.flood_messages = CONFIG.get('security', 'flood_messages', default=5)
@@ -3260,16 +3262,9 @@ class pyIRCXServer:
         shown = matched[:limit]
 
         await user.send(self.get_reply("976", user, filter=filter_text, shown=len(shown), total=len(matched), limit=limit))
-        await user.send(self.get_reply(
-            "977",
-            user,
-            row="Nickname          Username          Real Name            IP Address                              Logon Time          Duration Status"
-        ))
-        await user.send(self.get_reply(
-            "977",
-            user,
-            row="----------------- ----------------- -------------------- --------------------------------------- ------------------- -------- -------"
-        ))
+        header, separator = self._lastlogons_header_rows()
+        await user.send(self.get_reply("977", user, row=header))
+        await user.send(self.get_reply("977", user, row=separator))
 
         for entry in shown:
             await user.send(self.get_reply("977", user, row=self._format_session_entry(entry)))
@@ -3321,19 +3316,41 @@ class pyIRCXServer:
         return any(fnmatch.fnmatch(str(field).lower(), pattern) for field in fields)
 
     def _format_session_entry(self, entry):
+        nick_width, user_width = self._lastlogons_name_widths()
         ip = entry.get('ip') or 'unknown'
         logon = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(entry.get('logon_time', 0)))
         duration = self._format_session_duration(entry.get('duration', 0))
         status = "online" if entry.get('active') else "offline"
         return (
-            f"{self._clip(entry.get('nick', ''), 17):<17} "
-            f"{self._clip(entry.get('username', ''), 17):<17} "
+            f"{self._clip(entry.get('nick', ''), nick_width):<{nick_width}} "
+            f"{self._clip(entry.get('username', ''), user_width):<{user_width}} "
             f"{self._clip(entry.get('realname', ''), 20):<20} "
             f"{self._clip(ip, 39):<39} "
             f"{logon:<19} "
             f"{duration:>8} "
             f"{status:<7}"
         )
+
+    def _lastlogons_header_rows(self):
+        nick_width, user_width = self._lastlogons_name_widths()
+        columns = [
+            ("Nickname", nick_width),
+            ("Username", user_width),
+            ("Real Name", 20),
+            ("IP Address", 39),
+            ("Logon Time", 19),
+            ("Duration", 8),
+            ("Status", 7),
+        ]
+        header = " ".join(f"{label:<{width}}" for label, width in columns)
+        separator = " ".join("-" * width for _, width in columns)
+        return header, separator
+
+    def _lastlogons_name_widths(self):
+        nick_width = max(len("Nickname"), int(getattr(self, 'max_nick_length', 30) or 30))
+        # Anonymous users get a server-added '~' prefix after USER validation.
+        user_width = max(len("Username"), int(getattr(self, 'max_user_length', 30) or 30) + 1)
+        return nick_width, user_width
 
     @staticmethod
     def _clip(value, width):

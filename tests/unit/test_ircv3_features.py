@@ -83,6 +83,8 @@ def make_mock_server():
     server.link_manager = None
     server._pending_remote_whois = {}
     server.session_history = []
+    server.max_nick_length = 30
+    server.max_user_length = 30
     server.stats = {'messages_sent': 0}
     # Reset msgid counter for predictable tests
     pyircx.pyIRCXServer._msgid_counter = 0
@@ -245,6 +247,30 @@ class TestLastLogons:
         await server.handle_lastlogons(user, [])
 
         user.send.assert_awaited_once_with("481:LASTLOGONS requires staff privileges.")
+
+    def test_lastlogons_name_columns_use_configured_lengths(self):
+        server = make_mock_server()
+        server.max_nick_length = 30
+        server.max_user_length = 30
+        nick = "N" * 30
+        username = "~" + ("u" * 30)
+
+        row = server._format_session_entry({
+            'nick': nick,
+            'username': username,
+            'realname': 'Configured Widths',
+            'ip': '2001:db8::1',
+            'host': 'ignored.example.test',
+            'logon_time': 1000,
+            'duration': 1,
+            'active': True,
+        })
+        header, separator = server._lastlogons_header_rows()
+
+        assert nick in row
+        assert username in row
+        assert len(header.split()[0]) == len("Nickname")
+        assert separator.startswith("-" * 30)
 
 
 
