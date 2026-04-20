@@ -38,7 +38,7 @@ If you remember the days of **Microsoft Comic Chat**, chat rooms with real nicks
 
 > **Active Development:** pyIRCX is under active development with frequent updates, enhancements, and bug fixes. New features, security improvements, and performance optimizations are released regularly. See [CHANGELOG.md](CHANGELOG.md) for detailed release notes and version history.
 
-**Current Version:** See [version.json](version.json) for the canonical release metadata.
+**Current Version:** v2.0.2. See [version.json](version.json) for canonical release metadata.
 
 **Highlights in the current major release:**
 - 🎨 **Personalized Messaging** - ~185+ friendly, conversational messages throughout the system

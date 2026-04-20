@@ -8,5 +8,4 @@ See [CHANGELOG.md](../../CHANGELOG.md) in the project root for the latest change
 
 ## Version History
 
-Release-specific notes can be added here when a standalone release document is needed.
-
+- [v2.0.2](../../RELEASE_v2.0.2.md) - Staff LASTLOGONS persistence, WebAdmin connection-session logs, and shutdown fixes.

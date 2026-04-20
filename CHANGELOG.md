@@ -5,6 +5,25 @@ All notable changes to pyIRCX will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.2] - 2026-04-20
+
+### Added
+- Staff-only `/LASTLOGONS` connection-history numerics with persistent completed-session storage.
+- `/LASTLOGONS VERBOSE` for logout time and disconnect reason without widening the default table.
+- WebAdmin Logs tab for persisted connection sessions with search and configurable result limit.
+- Configurable connection-session retention via `limits.max_connection_sessions` and `limits.connection_session_retention_days`.
+- Unit and integration coverage for LASTLOGONS authorization, verbose output, persistence, and WebAdmin API wiring.
+
+### Changed
+- LASTLOGONS table headers now use `Nickname` and `Username`, respect configured nick/user length limits, and display IP addresses instead of hostname/PTR output.
+- Shutdown handling now exits cleanly under systemd by closing async DB workers and cancelling background tasks deterministically.
+- Version metadata refreshed for the 2.0.2 release.
+
+### Fixed
+- Prevented staff connection-history output from being delivered as NOTICEs by using pyIRCX numerics 976, 977, and 978.
+- Fixed standalone DB schema initialization so persisted connection sessions are created outside trunk-only mode.
+- Avoided systemd stop timeouts and SIGKILL during restarts after graceful shutdown completes.
+
 ## [2.0.0] - 2026-01-17
 
 ### The Friendly, Modern IRCX Server
