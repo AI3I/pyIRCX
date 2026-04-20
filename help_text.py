@@ -610,7 +610,7 @@ HELP_TOPICS = {
             "  /LASTLOGONS - Show the 50 most recent sessions",
             "  /LASTLOGONS alice 25 - Show up to 25 sessions matching alice",
             "  /LOGONS 192.0.2.* 100 - Show up to 100 sessions from an IP range",
-            "Note: Active sessions are included with an asterisk after the duration.",
+            "Note: Active sessions are shown as online; completed sessions persist across restarts within recent-history retention.",
         ],
     },
 

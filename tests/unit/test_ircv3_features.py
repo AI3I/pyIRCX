@@ -83,6 +83,9 @@ def make_mock_server():
     server.link_manager = None
     server._pending_remote_whois = {}
     server.session_history = []
+    server.db_pool = None
+    server.whowas_max_entries = 1000
+    server.debug_mode = True
     server.max_nick_length = 30
     server.max_user_length = 30
     server.stats = {'messages_sent': 0}
@@ -277,6 +280,58 @@ class TestLastLogons:
 
         assert server._lastlogons_reply_token("John Lewis") == "John_Lewis"
         assert server._lastlogons_reply_token("") == "*"
+
+    @pytest.mark.asyncio
+    async def test_lastlogons_persists_completed_sessions(self, tmp_path, monkeypatch):
+        import database
+
+        monkeypatch.setenv("PYIRCX_SYNC_DB", "1")
+        monkeypatch.setattr(database, "USE_THREADS", False)
+        DatabasePool = database.DatabasePool
+
+        db_path = tmp_path / "sessions.db"
+        pool = DatabasePool(str(db_path), pool_size=1)
+        await pool.initialize()
+        try:
+            async with pool.connection() as db:
+                await db.execute("""CREATE TABLE connection_sessions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    nickname TEXT NOT NULL,
+                    username TEXT NOT NULL,
+                    realname TEXT,
+                    ip_address TEXT,
+                    host TEXT,
+                    logon_time INTEGER NOT NULL,
+                    logout_time INTEGER NOT NULL,
+                    duration INTEGER NOT NULL,
+                    reason TEXT
+                )""")
+                await db.commit()
+
+            server = make_mock_server()
+            server.db_pool = pool
+            await server._record_persistent_session_history({
+                'nick': 'PersistedNick',
+                'username': '~persisted',
+                'realname': 'Persisted User',
+                'ip': '2001:db8::5',
+                'host': 'ignored.example.test',
+                'logon_time': 100,
+                'logout_time': 140,
+                'duration': 40,
+                'reason': 'Client exited',
+            })
+
+            server.session_history = []
+            entries = await server._completed_session_entries()
+
+            assert entries[0]['nick'] == 'PersistedNick'
+            assert entries[0]['username'] == '~persisted'
+            assert entries[0]['ip'] == '2001:db8::5'
+            assert entries[0]['duration'] == 40
+            assert entries[0]['active'] is False
+        finally:
+            await pool.close()
 
 
 

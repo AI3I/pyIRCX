@@ -1153,11 +1153,9 @@ class pyIRCXServer:
         except Exception as e:
             logger.warning(get_log_message("config_permissions_error", error=e))
 
-        # Check server role - only trunk servers need database initialization
-        server_role = CONFIG.get('linking', 'server_role', default='trunk')
-        is_trunk = (server_role == 'trunk')
-
-        if is_trunk:
+        # Trunk and standalone servers both keep a local database. Branch
+        # servers leave self.db_pool unset because services are centralized.
+        if self.db_pool:
             async with self.db_pool.connection() as db:
                 # Staff users table with all required columns
                 await db.execute("""CREATE TABLE IF NOT EXISTS users (
@@ -1289,6 +1287,20 @@ class pyIRCXServer:
                     read INTEGER DEFAULT 0
                 )""")
 
+                # Recent completed client sessions for staff LASTLOGONS.
+                await db.execute("""CREATE TABLE IF NOT EXISTS connection_sessions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    nickname TEXT NOT NULL,
+                    username TEXT NOT NULL,
+                    realname TEXT,
+                    ip_address TEXT,
+                    host TEXT,
+                    logon_time INTEGER NOT NULL,
+                    logout_time INTEGER NOT NULL,
+                    duration INTEGER NOT NULL,
+                    reason TEXT
+                )""")
+
                 # Create indexes for performance optimization
                 # Nickname lookups (IDENTIFY, registration checks)
                 await db.execute("CREATE INDEX IF NOT EXISTS idx_reg_nicks_nickname ON registered_nicks(nickname)")
@@ -1302,6 +1314,11 @@ class pyIRCXServer:
                 await db.execute("CREATE INDEX IF NOT EXISTS idx_staff_username ON users(username)")
                 # Access list pattern lookups
                 await db.execute("CREATE INDEX IF NOT EXISTS idx_access_pattern ON server_access(pattern)")
+                # LASTLOGONS query/filter support
+                await db.execute("CREATE INDEX IF NOT EXISTS idx_connection_sessions_logon ON connection_sessions(logon_time)")
+                await db.execute("CREATE INDEX IF NOT EXISTS idx_connection_sessions_nick ON connection_sessions(nickname)")
+                await db.execute("CREATE INDEX IF NOT EXISTS idx_connection_sessions_user ON connection_sessions(username)")
+                await db.execute("CREATE INDEX IF NOT EXISTS idx_connection_sessions_ip ON connection_sessions(ip_address)")
 
                 await db.commit()
                 logger.info(get_log_message("db_initialized"))
@@ -3256,7 +3273,7 @@ class pyIRCXServer:
                     limit = int(params[1])
         limit = max(1, min(limit, 250))
 
-        entries = self._current_session_entries() + list(self.session_history)
+        entries = self._current_session_entries() + await self._completed_session_entries()
         entries.sort(key=lambda entry: entry.get('logon_time', 0), reverse=True)
         matched = [entry for entry in entries if self._session_matches(entry, filter_text)]
         shown = matched[:limit]
@@ -3283,8 +3300,79 @@ class pyIRCXServer:
 
     def _record_session_history(self, user, logout_time, reason=None):
         if user.is_virtual or user.is_remote or user.nickname == "*" or not user.registered:
+            return None
+        entry = self._build_session_entry(user, logout_time, active=False, reason=reason)
+        self.session_history.appendleft(entry)
+        return entry
+
+    async def _record_persistent_session_history(self, entry):
+        if not self.db_pool:
             return
-        self.session_history.appendleft(self._build_session_entry(user, logout_time, active=False, reason=reason))
+        try:
+            async with self.db_pool.connection() as db:
+                await db.execute(
+                    """INSERT INTO connection_sessions
+                       (nickname, username, realname, ip_address, host, logon_time, logout_time, duration, reason)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        entry.get('nick', ''),
+                        entry.get('username', ''),
+                        entry.get('realname', ''),
+                        entry.get('ip', ''),
+                        entry.get('host', ''),
+                        entry.get('logon_time', 0),
+                        entry.get('logout_time', 0),
+                        entry.get('duration', 0),
+                        entry.get('reason', ''),
+                    )
+                )
+                await db.execute(
+                    """DELETE FROM connection_sessions
+                       WHERE id NOT IN (
+                           SELECT id FROM connection_sessions
+                           ORDER BY logon_time DESC, id DESC
+                           LIMIT ?
+                       )""",
+                    (self.whowas_max_entries,)
+                )
+                await db.commit()
+        except Exception as e:
+            if self.debug_mode:
+                logger.error("Connection session write failed: %s", e)
+
+    async def _completed_session_entries(self):
+        if not self.db_pool:
+            return list(self.session_history)
+        try:
+            async with self.db_pool.connection() as db:
+                async with db.execute(
+                    """SELECT nickname, username, realname, ip_address, host,
+                              logon_time, logout_time, duration, reason
+                       FROM connection_sessions
+                       ORDER BY logon_time DESC, id DESC
+                       LIMIT ?""",
+                    (self.whowas_max_entries,)
+                ) as cursor:
+                    rows = await cursor.fetchall()
+            return [
+                {
+                    'nick': row[0],
+                    'username': row[1],
+                    'realname': row[2] or '',
+                    'ip': row[3] or '',
+                    'host': row[4] or '',
+                    'logon_time': row[5],
+                    'logout_time': row[6],
+                    'duration': row[7],
+                    'active': False,
+                    'reason': row[8] or '',
+                }
+                for row in rows
+            ]
+        except Exception as e:
+            if self.debug_mode:
+                logger.error("Connection session lookup failed: %s", e)
+            return list(self.session_history)
 
     def _build_session_entry(self, user, logout_time, active=False, reason=None):
         logon_time = int(getattr(user, 'signon_time', logout_time) or logout_time)
@@ -3296,6 +3384,7 @@ class pyIRCXServer:
             'ip': user.ip,
             'host': user.host,
             'logon_time': logon_time,
+            'logout_time': logout_time,
             'duration': max(0, logout_time - logon_time),
             'active': active,
             'reason': reason or "",
@@ -11008,7 +11097,9 @@ class pyIRCXServer:
 
         quit_reason = reason or SERVER_MESSAGES['quit_client_exited']
         logout_time = int(time.time())
-        self._record_session_history(user, logout_time, quit_reason)
+        session_entry = self._record_session_history(user, logout_time, quit_reason)
+        if session_entry:
+            await self._record_persistent_session_history(session_entry)
 
         if nick != "*" and user.registered:
             # Clean up expired WHOWAS entries

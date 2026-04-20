@@ -177,12 +177,31 @@ def create_database(db_path, admin_username=None, admin_password=None):
     )""")
     print("✓ servicebot_tracking table")
 
+    # Recent completed client sessions for staff LASTLOGONS.
+    cursor.execute("""CREATE TABLE IF NOT EXISTS connection_sessions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nickname TEXT NOT NULL,
+        username TEXT NOT NULL,
+        realname TEXT,
+        ip_address TEXT,
+        host TEXT,
+        logon_time INTEGER NOT NULL,
+        logout_time INTEGER NOT NULL,
+        duration INTEGER NOT NULL,
+        reason TEXT
+    )""")
+    print("✓ connection_sessions table")
+
     # Create indexes for performance
     print("Creating indexes...")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_mailbox_recipient ON mailbox(recipient_uuid)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_memos_recipient ON memos(recipient_uuid)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_channel_access_channel ON channel_access(channel_uuid)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_user_audit_nickname ON user_audit_log(nickname)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_connection_sessions_logon ON connection_sessions(logon_time)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_connection_sessions_nick ON connection_sessions(nickname)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_connection_sessions_user ON connection_sessions(username)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_connection_sessions_ip ON connection_sessions(ip_address)")
     print("✓ Indexes created")
 
     # Create default staff accounts (ADMIN, SYSOP, GUIDE)

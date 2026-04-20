@@ -784,6 +784,7 @@ LOGONS [filter] [limit]
 
 The filter matches nick, username, real name, IP, and hostname. Results default to 50 rows and are capped at 250 rows.
 Replies use pyIRCX numerics 976 (start), 977 (row), and 978 (end).
+Completed sessions are stored in SQLite and survive server restarts within recent-history retention; active sessions are shown from memory as `online`.
 
 #### ISON
 Check if users are online.
