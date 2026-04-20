@@ -604,8 +604,8 @@ HELP_TOPICS = {
         "lines": [
             "=== LASTLOGONS Command (staff only) ===",
             "Usage: /LASTLOGONS [filter] [limit]",
-            "Show recent connection sessions as a flat table: nick, user, real name, IP/host, logon time, and duration.",
-            "The filter matches nick, user, real name, IP, and host. Results are capped at 250 rows.",
+            "Show recent connection sessions as a flat table: nickname, username, real name, IP address, logon time, duration, and status.",
+            "The filter matches nick, username, real name, IP, and host. Results are capped at 250 rows.",
             "Examples:",
             "  /LASTLOGONS - Show the 50 most recent sessions",
             "  /LASTLOGONS alice 25 - Show up to 25 sessions matching alice",

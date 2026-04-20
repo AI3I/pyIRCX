@@ -776,13 +776,13 @@ WHOWAS <nick>
 ```
 
 #### LASTLOGONS
-Show recent connection sessions as a flat staff-only table with nick, user, real name, IP/host, logon time, and session duration. Active sessions are included and marked with an asterisk after the duration.
+Show recent connection sessions as a flat staff-only table with nickname, username, real name, IP address, logon time, session duration, and status.
 ```
 LASTLOGONS [filter] [limit]
 LOGONS [filter] [limit]
 ```
 
-The filter matches nick, user, real name, IP, and hostname. Results default to 50 rows and are capped at 250 rows.
+The filter matches nick, username, real name, IP, and hostname. Results default to 50 rows and are capped at 250 rows.
 Replies use pyIRCX numerics 976 (start), 977 (row), and 978 (end).
 
 #### ISON

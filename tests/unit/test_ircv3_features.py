@@ -231,7 +231,9 @@ class TestLastLogons:
         assert replies[-1].startswith("978:")
         assert any(line.startswith("977:") and "ActiveNick" in line for line in replies)
         assert any(line.startswith("977:") and "OldNick" in line for line in replies)
-        assert any(line.startswith("977:") and "00:01:00*" in line for line in replies)
+        assert any(line.startswith("977:") and "Nickname" in line and "Username" in line for line in replies)
+        assert any(line.startswith("977:") and "198.51.100.10" in line and "active.example.test" not in line for line in replies)
+        assert any(line.startswith("977:") and "00:01:00" in line and "online" in line for line in replies)
         assert any(line.startswith("977:") and "00:01:15" in line for line in replies)
 
     @pytest.mark.asyncio

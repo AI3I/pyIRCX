@@ -3263,12 +3263,12 @@ class pyIRCXServer:
         await user.send(self.get_reply(
             "977",
             user,
-            row="Nick              User              Real Name            IP/Host                   Logon Time          Duration"
+            row="Nickname          Username          Real Name            IP Address                              Logon Time          Duration Status"
         ))
         await user.send(self.get_reply(
             "977",
             user,
-            row="----------------- ----------------- -------------------- ------------------------- ------------------- --------"
+            row="----------------- ----------------- -------------------- --------------------------------------- ------------------- -------- -------"
         ))
 
         for entry in shown:
@@ -3321,20 +3321,18 @@ class pyIRCXServer:
         return any(fnmatch.fnmatch(str(field).lower(), pattern) for field in fields)
 
     def _format_session_entry(self, entry):
-        host = entry.get('ip') or entry.get('host') or 'unknown'
-        if entry.get('host') and entry.get('host') != entry.get('ip'):
-            host = f"{entry.get('ip')}({entry.get('host')})"
+        ip = entry.get('ip') or 'unknown'
         logon = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(entry.get('logon_time', 0)))
         duration = self._format_session_duration(entry.get('duration', 0))
-        if entry.get('active'):
-            duration = f"{duration}*"
+        status = "online" if entry.get('active') else "offline"
         return (
             f"{self._clip(entry.get('nick', ''), 17):<17} "
             f"{self._clip(entry.get('username', ''), 17):<17} "
             f"{self._clip(entry.get('realname', ''), 20):<20} "
-            f"{self._clip(host, 25):<25} "
+            f"{self._clip(ip, 39):<39} "
             f"{logon:<19} "
-            f"{duration:>8}"
+            f"{duration:>8} "
+            f"{status:<7}"
         )
 
     @staticmethod
