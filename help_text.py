@@ -26,6 +26,8 @@ TOPIC_ALIASES = {
     "AUTHENTICATE": "AUTH",
     "DEAUTH": "DROP",
     "NICKNAME": "NICK",
+    "LOGONS": "LASTLOGONS",
+    "LASTLOGON": "LASTLOGONS",
     "EXIT": "QUIT",
     "BYE": "QUIT",
     "ALIAS": "ALIASES",
@@ -65,7 +67,7 @@ HELP_TOPICS = {
             "Messages: PRIVMSG MSG NOTICE",
             "Channels: JOIN PART KICK INVITE TOPIC NAMES LIST MODE",
             "Registration: REGISTER IDENTIFY UNREGISTER CHGPASS MFA (see /HELP REGISTER)",
-            "User Info: WHO WHOIS WHOWAS ISON USERHOST AWAY",
+            "User Info: WHO WHOIS WHOWAS LASTLOGONS ISON USERHOST AWAY",
             "Server Info: LUSERS MOTD INFO TIME VERSION STATS LINKS MAP ADMIN",
             "IRCX: IRCX ACCESS PROP EVENT WHISPER KNOCK TRANSCRIPT DATA",
             "Utility: SILENCE WATCH HELP",
@@ -597,6 +599,21 @@ HELP_TOPICS = {
         ],
     },
 
+    "LASTLOGONS": {
+        "staff_only": True,
+        "lines": [
+            "=== LASTLOGONS Command (staff only) ===",
+            "Usage: /LASTLOGONS [filter] [limit]",
+            "Show recent connection sessions as a flat table: nick, user, real name, IP/host, logon time, and duration.",
+            "The filter matches nick, user, real name, IP, and host. Results are capped at 250 rows.",
+            "Examples:",
+            "  /LASTLOGONS - Show the 50 most recent sessions",
+            "  /LASTLOGONS alice 25 - Show up to 25 sessions matching alice",
+            "  /LOGONS 192.0.2.* 100 - Show up to 100 sessions from an IP range",
+            "Note: Active sessions are included with an asterisk after the duration.",
+        ],
+    },
+
     "NAMES": {
         "lines": [
             "=== NAMES Command ===",
@@ -922,6 +939,7 @@ HELP_TOPICS = {
             "  /L  [filter]         - LIST channels",
             "  /WW <nick>           - WHOWAS (past user info)",
             "  /WH <channel> <msg>  - WHISPER (private channel message)",
+            "  /LOGONS [filter]     - LASTLOGONS (staff connection history)",
             "",
             "Examples:",
             "  /J #lobby           - Same as /JOIN #lobby",
@@ -1060,7 +1078,7 @@ VALID_TOPICS = [
     # Basic commands
     "JOIN", "PART", "MODE", "TOPIC", "KICK", "INVITE", "QUIT", "EXIT", "BYE", "NICK", "NICKNAME", "CREATE",
     # User information
-    "WHOIS", "WHO", "WHOWAS", "NAMES", "ISON", "USERHOST", "AWAY",
+    "WHOIS", "WHO", "WHOWAS", "LASTLOGONS", "LOGONS", "NAMES", "ISON", "USERHOST", "AWAY",
     # Channel and IRCX
     "ACCESS", "PROP", "PROPERTY", "WHISPER", "KNOCK", "EVENT", "TRANSCRIPT",
     # Messaging

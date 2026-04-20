@@ -241,6 +241,7 @@ class pyIRCXServer:
         'WHOIS': 'handle_whois',
         'WHO': 'handle_who',
         'WHOWAS': 'handle_whowas',
+        'LASTLOGONS': 'handle_lastlogons',
         'AWAY': 'handle_away',
         'TOPIC': 'handle_topic',
         'TRANSCRIPT': 'handle_transcript',
@@ -292,6 +293,7 @@ class pyIRCXServer:
         'J': 'JOIN', 'P': 'PART', 'W': 'WHOIS', 'M': 'PRIVMSG', 'N': 'NICK',
         'Q': 'QUIT', 'T': 'TOPIC', 'K': 'KICK', 'I': 'INVITE', 'L': 'LIST',
         'WW': 'WHOWAS', 'WH': 'WHISPER', 'H': 'HELP',
+        'LOGONS': 'LASTLOGONS', 'LASTLOGON': 'LASTLOGONS',
         'WATCH': 'MONITOR',   # IRCX WATCH -> IRCv3 MONITOR (both syntaxes supported)
         'CONNECT': 'LINK',    # RFC CONNECT -> LINK
         'SQUIT': 'UNLINK',    # RFC SQUIT -> UNLINK
@@ -319,6 +321,7 @@ class pyIRCXServer:
         self.whowas = OrderedDict()  # LRU cache for WHOWAS
         self.whowas_max_entries = 1000  # Maximum entries to keep
         self.whowas_max_age = 86400  # 24 hours in seconds
+        self.session_history = deque(maxlen=1000)  # Recent completed client sessions
         self.boot_time = int(time.time())
         self.debug_mode = True
         self.max_users_seen = 0
@@ -1517,7 +1520,7 @@ class pyIRCXServer:
                 "877", "878", "879", "880", "881", "882", "884", "885", "886", "887", "888", "889", "890", "891", "892", "893", "894", "895",
                 "896", "897", "898", "899", "900", "908", "910", "911", "912", "913", "914", "915",
                 "916", "917", "918", "919", "920", "921", "922", "923", "924", "925", "926", "927", "928", "929", "930", "931", "932", "933", "940", "941", "942", "943", "960", "961", "962", "963", "964", "965", "970", "971",
-                "972", "973", "974", "975"
+                "972", "973", "974", "975", "976", "977", "978"
             ]
             if code == "433":
                 return f":{self.servername} 433 {recipient.nickname if recipient.nickname != '*' else '*'} {txt}"
@@ -3221,6 +3224,137 @@ class pyIRCXServer:
                                      host=info.get('host', 'unknown'),
                                      real=info.get('realname', 'unknown')))
         await user.send(self.get_reply("369", user, target=target_nick))
+
+    async def handle_lastlogons(self, user, params):
+        """Show recent connection sessions to staff as a flat IRC numeric table.
+
+        Syntax:
+          LASTLOGONS [filter] [limit]
+          LOGONS [filter] [limit]
+
+        The filter is matched case-insensitively across nick, user, real name,
+        IP, and host. Limits are capped at 250 rows.
+        """
+        if not user.is_staff():
+            await user.send(self.get_reply("481", user, message=SERVER_MESSAGES['requires_staff'].format(command="LASTLOGONS")))
+            return
+
+        if not user.rate_limiter.check('LASTLOGONS'):
+            await user.send(self.get_reply("830", user))
+            return
+
+        filter_text = "*"
+        limit = 50
+        if params:
+            if len(params) == 1 and params[0].isdigit():
+                limit = int(params[0])
+            else:
+                filter_text = params[0]
+                if len(params) > 1 and params[1].isdigit():
+                    limit = int(params[1])
+        limit = max(1, min(limit, 250))
+
+        entries = self._current_session_entries() + list(self.session_history)
+        entries.sort(key=lambda entry: entry.get('logon_time', 0), reverse=True)
+        matched = [entry for entry in entries if self._session_matches(entry, filter_text)]
+        shown = matched[:limit]
+
+        await user.send(self.get_reply("976", user, filter=filter_text, shown=len(shown), total=len(matched), limit=limit))
+        await user.send(self.get_reply(
+            "977",
+            user,
+            row="Nick              User              Real Name            IP/Host                   Logon Time          Duration"
+        ))
+        await user.send(self.get_reply(
+            "977",
+            user,
+            row="----------------- ----------------- -------------------- ------------------------- ------------------- --------"
+        ))
+
+        for entry in shown:
+            await user.send(self.get_reply("977", user, row=self._format_session_entry(entry)))
+
+        await user.send(self.get_reply("978", user))
+
+    def _current_session_entries(self):
+        now = int(time.time())
+        entries = []
+        for active_user in self.users.values():
+            if active_user.is_virtual or active_user.is_remote or not active_user.registered:
+                continue
+            entries.append(self._build_session_entry(active_user, now, active=True))
+        return entries
+
+    def _record_session_history(self, user, logout_time, reason=None):
+        if user.is_virtual or user.is_remote or user.nickname == "*" or not user.registered:
+            return
+        self.session_history.appendleft(self._build_session_entry(user, logout_time, active=False, reason=reason))
+
+    def _build_session_entry(self, user, logout_time, active=False, reason=None):
+        logon_time = int(getattr(user, 'signon_time', logout_time) or logout_time)
+        logout_time = int(logout_time)
+        return {
+            'nick': user.nickname,
+            'username': user.username,
+            'realname': user.realname,
+            'ip': user.ip,
+            'host': user.host,
+            'logon_time': logon_time,
+            'duration': max(0, logout_time - logon_time),
+            'active': active,
+            'reason': reason or "",
+        }
+
+    def _session_matches(self, entry, filter_text):
+        if not filter_text or filter_text == "*":
+            return True
+        pattern = filter_text.replace('%', '*').lower()
+        if '*' not in pattern and '?' not in pattern:
+            pattern = f"*{pattern}*"
+        fields = (
+            entry.get('nick', ''),
+            entry.get('username', ''),
+            entry.get('realname', ''),
+            entry.get('ip', ''),
+            entry.get('host', ''),
+        )
+        return any(fnmatch.fnmatch(str(field).lower(), pattern) for field in fields)
+
+    def _format_session_entry(self, entry):
+        host = entry.get('ip') or entry.get('host') or 'unknown'
+        if entry.get('host') and entry.get('host') != entry.get('ip'):
+            host = f"{entry.get('ip')}({entry.get('host')})"
+        logon = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(entry.get('logon_time', 0)))
+        duration = self._format_session_duration(entry.get('duration', 0))
+        if entry.get('active'):
+            duration = f"{duration}*"
+        return (
+            f"{self._clip(entry.get('nick', ''), 17):<17} "
+            f"{self._clip(entry.get('username', ''), 17):<17} "
+            f"{self._clip(entry.get('realname', ''), 20):<20} "
+            f"{self._clip(host, 25):<25} "
+            f"{logon:<19} "
+            f"{duration:>8}"
+        )
+
+    @staticmethod
+    def _clip(value, width):
+        value = str(value or "")
+        if len(value) <= width:
+            return value
+        if width <= 1:
+            return value[:width]
+        return value[:width - 1] + "~"
+
+    @staticmethod
+    def _format_session_duration(seconds):
+        seconds = max(0, int(seconds or 0))
+        days, rem = divmod(seconds, 86400)
+        hours, rem = divmod(rem, 3600)
+        minutes, secs = divmod(rem, 60)
+        if days:
+            return f"{days}d{hours:02d}h"
+        return f"{hours:02d}:{minutes:02d}:{secs:02d}"
 
     async def handle_list(self, user, is_listx=False, pattern=None):
         # Rate limit LIST/LISTX commands
@@ -10852,10 +10986,12 @@ class pyIRCXServer:
         user.watch_list.clear()
 
         quit_reason = reason or SERVER_MESSAGES['quit_client_exited']
+        logout_time = int(time.time())
+        self._record_session_history(user, logout_time, quit_reason)
 
         if nick != "*" and user.registered:
             # Clean up expired WHOWAS entries
-            now = int(time.time())
+            now = logout_time
             expired = []
             for wn, info in self.whowas.items():
                 if now - info.get('timestamp', 0) > self.whowas_max_age:

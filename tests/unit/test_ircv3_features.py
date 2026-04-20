@@ -82,6 +82,7 @@ def make_mock_server():
     server.users_lower = {}
     server.link_manager = None
     server._pending_remote_whois = {}
+    server.session_history = []
     server.stats = {'messages_sent': 0}
     # Reset msgid counter for predictable tests
     pyircx.pyIRCXServer._msgid_counter = 0
@@ -189,6 +190,59 @@ class TestWebircHostPresentation:
         assert user.ip == "40.129.129.76"
         assert user.host == "40.129.129.76"
         assert user.hostname == "40.129.129.76"
+
+
+@pytest.mark.unit
+class TestLastLogons:
+    @pytest.mark.asyncio
+    async def test_lastlogons_lists_active_and_completed_sessions(self):
+        server = make_mock_server()
+        staff = make_mock_user("StaffUser", modes={'g': True})
+        staff.rate_limiter = MagicMock()
+        staff.rate_limiter.check = MagicMock(return_value=True)
+
+        active = make_mock_user("ActiveNick")
+        active.username = "~active"
+        active.realname = "Active User"
+        active.ip = "198.51.100.10"
+        active.host = "active.example.test"
+        active.signon_time = 1000
+        server.users = {"ActiveNick": active}
+        server.session_history = [
+            {
+                'nick': 'OldNick',
+                'username': '~old',
+                'realname': 'Old User',
+                'ip': '203.0.113.25',
+                'host': 'old.example.test',
+                'logon_time': 900,
+                'duration': 75,
+                'active': False,
+                'reason': 'Client exited',
+            }
+        ]
+        server.get_reply = MagicMock(side_effect=lambda code, _user, **kwargs: f"{code}:{kwargs.get('row', '')}")
+
+        with patch("pyircx.time.time", return_value=1060):
+            await server.handle_lastlogons(staff, ["example", "10"])
+
+        replies = [call.args[0] for call in staff.send.await_args_list]
+        assert replies[0].startswith("976:")
+        assert replies[-1].startswith("978:")
+        assert any(line.startswith("977:") and "ActiveNick" in line for line in replies)
+        assert any(line.startswith("977:") and "OldNick" in line for line in replies)
+        assert any(line.startswith("977:") and "00:01:00*" in line for line in replies)
+        assert any(line.startswith("977:") and "00:01:15" in line for line in replies)
+
+    @pytest.mark.asyncio
+    async def test_lastlogons_requires_staff(self):
+        server = make_mock_server()
+        user = make_mock_user("RegularUser")
+        server.get_reply = MagicMock(return_value="481:LASTLOGONS requires staff privileges.")
+
+        await server.handle_lastlogons(user, [])
+
+        user.send.assert_awaited_once_with("481:LASTLOGONS requires staff privileges.")
 
 
 

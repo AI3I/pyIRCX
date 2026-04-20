@@ -66,6 +66,7 @@ class RateLimiter:
         'EVENT': 1.0,         # Staff monitoring
         'TRANSCRIPT': 2.0,    # Log access
         'STATS': 2.0,         # Server statistics
+        'LASTLOGONS': 2.0,    # Recent connection history
         'MONITOR': 1.0,       # Monitor/Watch list
         'SILENCE': 1.0,       # Silence list
         'KILL': 2.0,          # Administrative kill
@@ -95,6 +96,7 @@ class RateLimiter:
         'EVENT': 0.1,        # 10x faster (monitoring tool)
         'TRANSCRIPT': 0.1,   # 20x faster (log access)
         'STATS': 0.1,        # 20x faster (investigations)
+        'LASTLOGONS': 0.1,   # 20x faster (investigations)
         'MONITOR': 0.05,     # 20x faster
         'SILENCE': 0.05,     # 20x faster
         'KILL': 0.1,         # 20x faster (rapid response)

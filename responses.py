@@ -341,13 +341,17 @@ RESPONSES = {
     "963": ":--- Message #{id} from {sender} at {time} ---",  # Message read header
     "964": ":{text}",  # Message body line
     "965": ":--- End of Message ---",  # Message read footer
-    # IRCX Stats Output (970-979)
+    # IRCX Stats Output (970-975)
     "970": ":=== {title} ===",  # Stats section header
     "971": ":--- {title} ---",  # Stats subsection header
     "972": ":{label}: {value}",  # Stats key-value entry
     "973": ":  {label}: {value}",  # Stats indented key-value entry
     "974": ":=== End of {title} ===",  # Stats section footer
     "975": ":--- End ---",  # Stats subsection footer
+    # LASTLOGONS numerics (staff-only connection history)
+    "976": "{filter} {shown} {total} {limit} :Start of LASTLOGONS",
+    "977": ":{row}",
+    "978": ":End of LASTLOGONS",
     "STAFF_LOG": "[{action}] {staff} -> {target}: {details}",
 }
 

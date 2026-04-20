@@ -618,6 +618,7 @@ pyIRCX supports shortcut aliases for commonly-used commands:
 | `/L` | `/LIST` | List channels |
 | `/WW` | `/WHOWAS` | View past user information |
 | `/WH` | `/WHISPER` | Send private channel message |
+| `/LOGONS` | `/LASTLOGONS` | View recent connection history (staff only) |
 
 **Examples:**
 ```
@@ -773,6 +774,16 @@ Query recently disconnected user.
 ```
 WHOWAS <nick>
 ```
+
+#### LASTLOGONS
+Show recent connection sessions as a flat staff-only table with nick, user, real name, IP/host, logon time, and session duration. Active sessions are included and marked with an asterisk after the duration.
+```
+LASTLOGONS [filter] [limit]
+LOGONS [filter] [limit]
+```
+
+The filter matches nick, user, real name, IP, and hostname. Results default to 50 rows and are capped at 250 rows.
+Replies use pyIRCX numerics 976 (start), 977 (row), and 978 (end).
 
 #### ISON
 Check if users are online.
@@ -1782,6 +1793,9 @@ Server checks in order: OWNERKEY → HOSTKEY → MEMBERKEY
 | 375 | MOTD start |
 | 372 | MOTD line |
 | 376 | End of MOTD |
+| 976 | LASTLOGONS start |
+| 977 | LASTLOGONS row |
+| 978 | LASTLOGONS end |
 | 381 | You are now an IRC {role} |
 | 386 | Staff login message |
 | 391 | Server time |
