@@ -3260,8 +3260,9 @@ class pyIRCXServer:
         entries.sort(key=lambda entry: entry.get('logon_time', 0), reverse=True)
         matched = [entry for entry in entries if self._session_matches(entry, filter_text)]
         shown = matched[:limit]
+        reply_filter = self._lastlogons_reply_token(filter_text)
 
-        await user.send(self.get_reply("976", user, filter=filter_text, shown=len(shown), total=len(matched), limit=limit))
+        await user.send(self.get_reply("976", user, filter=reply_filter, shown=len(shown), total=len(matched), limit=limit))
         header, separator = self._lastlogons_header_rows()
         await user.send(self.get_reply("977", user, row=header))
         await user.send(self.get_reply("977", user, row=separator))
@@ -3351,6 +3352,11 @@ class pyIRCXServer:
         # Anonymous users get a server-added '~' prefix after USER validation.
         user_width = max(len("Username"), int(getattr(self, 'max_user_length', 30) or 30) + 1)
         return nick_width, user_width
+
+    @staticmethod
+    def _lastlogons_reply_token(filter_text):
+        token = str(filter_text or "*").strip()
+        return token.replace(" ", "_") or "*"
 
     @staticmethod
     def _clip(value, width):

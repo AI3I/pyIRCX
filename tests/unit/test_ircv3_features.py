@@ -272,6 +272,12 @@ class TestLastLogons:
         assert len(header.split()[0]) == len("Nickname")
         assert separator.startswith("-" * 30)
 
+    def test_lastlogons_reply_filter_is_single_token(self):
+        server = make_mock_server()
+
+        assert server._lastlogons_reply_token("John Lewis") == "John_Lewis"
+        assert server._lastlogons_reply_token("") == "*"
+
 
 
 
