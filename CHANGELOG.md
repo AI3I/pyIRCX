@@ -5,6 +5,13 @@ All notable changes to pyIRCX will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.3] - 2026-05-05
+
+### Fixed
+- DNSBL checks no longer treat Spamhaus `127.255.255.x` policy responses (e.g. "public resolver not authorized") as real blacklist hits, preventing false-positive connection rejections for clean IPs.
+- Replaced deprecated `asyncio.get_event_loop()` with `asyncio.get_running_loop()` inside async DNSBL check; the old call could raise `RuntimeError` in Python 3.12+ and silently disable all DNSBL lookups.
+- Fixed installer systemd-resolved configuration: `DNS=` was set to the stub address `127.0.0.53` instead of unbound's address `127.0.0.1`, and the uplink `resolv.conf` symlink left public DHCP nameservers ahead of unbound, bypassing the local recursive resolver for all DNSBL queries.
+
 ## [2.0.2] - 2026-04-20
 
 ### Added
