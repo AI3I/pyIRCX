@@ -1,7 +1,7 @@
 {
-  "version": "2.0.2",
+  "version": "2.0.3",
   "label": "pyIRCX",
-  "created": "Mon Apr 20 07:58:30 PM EDT 2026",
+  "created": "Mon May 05 03:24:15 PM EDT 2026",
   "linking_protocol_version": "2",
   "min_compatible_version": "1.2.0"
 }

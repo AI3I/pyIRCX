@@ -293,17 +293,18 @@ class DNSBLChecker:
             query = f"{reversed_ip}.{dnsbl}"
 
             try:
-                # Use asyncio DNS resolution
-                # Use AF_UNSPEC to allow both IPv4 and IPv6 responses
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
                 result = await asyncio.wait_for(
                     loop.getaddrinfo(query, None, family=socket.AF_INET),
                     timeout=timeout
                 )
                 if result:
-                    # IP is listed in this DNSBL
-                    listed_on.append(dnsbl)
-                    logger.info(get_log_message("dnsbl_listed", ip=ip, dnsbl=dnsbl))
+                    rcode = result[0][4][0]
+                    # 127.255.255.x = DNSBL operator error/policy response, not a real hit
+                    # (Spamhaus returns 127.255.255.254 for public-resolver queries)
+                    if rcode.startswith('127.') and not rcode.startswith('127.255.255.'):
+                        listed_on.append(dnsbl)
+                        logger.info(get_log_message("dnsbl_listed", ip=ip, dnsbl=dnsbl))
             except (socket.gaierror, asyncio.TimeoutError, OSError):
                 # Not listed or timeout - this is normal
                 pass

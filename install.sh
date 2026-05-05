@@ -934,15 +934,18 @@ EOF
         mkdir -p /etc/systemd/resolved.conf.d
         cat > /etc/systemd/resolved.conf.d/unbound.conf << 'EOF'
 [Resolve]
-DNS=127.0.0.53
+DNS=127.0.0.1
 DNSStubListener=no
 EOF
         systemctl restart systemd-resolved
 
-        # Update /etc/resolv.conf symlink if needed
-        if [ -L /etc/resolv.conf ]; then
-            ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.conf 2>/dev/null || true
-        fi
+        # Write a static resolv.conf pointing only to unbound.
+        # Interface-level DHCP DNS servers would otherwise take precedence in the
+        # uplink resolv.conf and bypass unbound entirely (including Spamhaus XBL,
+        # which returns 127.255.255.254 "policy" responses for public resolvers).
+        rm -f /etc/resolv.conf
+        printf 'nameserver 127.0.0.1\n' > /etc/resolv.conf
+        chattr +i /etc/resolv.conf 2>/dev/null || true
 
         echo -e "${GREEN}✓ systemd-resolved configured to use unbound${NC}"
 
