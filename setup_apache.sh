@@ -479,6 +479,14 @@ configure_selinux() {
         fi
 
         # Configure SELinux file contexts
+        if ! command -v semanage &> /dev/null; then
+            if command -v dnf &> /dev/null; then
+                dnf install -y policycoreutils-python-utils
+            elif command -v yum &> /dev/null; then
+                yum install -y policycoreutils-python-utils policycoreutils-python
+            fi
+        fi
+
         if command -v semanage &> /dev/null && command -v restorecon &> /dev/null; then
             echo -e "${YELLOW}Configuring SELinux file contexts...${NC}"
 

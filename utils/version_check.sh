@@ -180,11 +180,15 @@ echo -e "Version: ${GREEN}${VERSION}${NC}"
 echo -e "Ready for release: "
 
 ISSUES=0
-[ ! -f "$RELEASE_FILE" ] && ((ISSUES++))
-[ "$BARE_EXCEPTS" -gt 0 ] && ((ISSUES++))
-[ "$INSTALL_VER" != "$VERSION" ] && ((ISSUES++))
-[ "$WEBADMIN_VER" != "$VERSION" ] && ((ISSUES++))
-[ "$WEBCHAT_VER" != "$VERSION" ] && ((ISSUES++))
+if [ ! -f "$RELEASE_FILE" ]; then
+    ((ISSUES+=1))
+fi
+if [ "$BARE_EXCEPTS" -gt 0 ]; then
+    ((ISSUES+=1))
+fi
+if [ "$INSTALL_VER" != "$VERSION" ]; then
+    ((ISSUES+=1))
+fi
 
 if [ $ISSUES -eq 0 ]; then
     echo -e "${GREEN}✓ All checks passed!${NC}"

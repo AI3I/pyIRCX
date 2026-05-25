@@ -2524,9 +2524,10 @@ console.log("=== admin.js LOADING ===");
                         "timeout": 3.0,
                         "cache_ttl": 3600,
                         "lists": [
+                            "xbl.spamhaus.org",
                             "dnsbl.dronebl.org",
-                            "rbl.efnetrbl.org",
-                            "bl.spamcop.net"
+                            "torexit.dan.me.uk",
+                            "all.s5h.net"
                         ],
                         "whitelist": [],
                         "reject_message": "Your IP is listed in a DNS blacklist. Please contact network staff."

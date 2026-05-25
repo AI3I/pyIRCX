@@ -103,7 +103,7 @@ sudo restorecon -Rv /var/www/html/webchat
 
 | Path | Context | Reason |
 |------|---------|--------|
-| `/opt/pyircx/` | `httpd_sys_rw_content_t` | API access, status files |
+| `/opt/pyircx/` | `httpd_sys_rw_content_t` | API access, status files, admin command queue files |
 | `/opt/pyircx/webchat/` | `httpd_sys_rw_content_t` | Symlink target |
 | `/opt/pyircx/transcripts/` | `httpd_sys_rw_content_t` | Web admin read access |
 | `/etc/pyircx/` | `httpd_sys_rw_content_t` | Config editor |

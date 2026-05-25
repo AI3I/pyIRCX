@@ -1601,6 +1601,7 @@ LOG_MESSAGES = {
     "auth_lockout_ip": "Auth lockout triggered for IP {ip} ({duration}s)",
     "auth_lockout_user": "Auth lockout triggered for username {username} ({duration}s)",
     "dnsbl_listed": "DNSBL: {ip} listed in {dnsbl}",
+    "dnsbl_policy_response": "DNSBL: {ip} received policy response {response} from {dnsbl}; resolver may be blocked or misconfigured",
     "dnsbl_check_error": "DNSBL check error for {dnsbl}: {error}",
     "dnsbl_action": "DNSBL: {ip} listed in {dnsbls} - action: {action}",
     "proxy_detected": "Proxy detection: {ip}:{port} is open",

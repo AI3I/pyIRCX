@@ -75,7 +75,7 @@ class StressClient:
             await asyncio.sleep(0.5)
             try:
                 await asyncio.wait_for(self.reader.read(4096), timeout=1.0)
-            except:
+            except asyncio.TimeoutError:
                 pass
             
             self.connected = True
@@ -102,7 +102,7 @@ class StressClient:
                 await self.send("QUIT :Stress test complete")
                 self.writer.close()
                 await self.writer.wait_closed()
-            except:
+            except Exception:
                 pass
             self.connected = False
 

@@ -16,6 +16,10 @@ import subprocess
 from pathlib import Path
 from datetime import datetime
 import logging
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - non-POSIX fallback
+    fcntl = None
 
 # Import connection pool and helpers
 import db_pool
@@ -178,12 +182,13 @@ def get_db_path():
 
 def get_admin_queue_path():
     """Get admin command queue path based on installation type"""
-    if os.path.exists(SYSTEM_CONFIG):
+    env_queue = os.environ.get("PYIRCX_ADMIN_QUEUE")
+    if env_queue:
+        return env_queue
+    if os.path.abspath(DEFAULT_CONFIG) == os.path.abspath(SYSTEM_CONFIG):
         return os.path.join(SYSTEM_INSTALL, "admin_commands.queue")
-    elif PROJECT_CONFIG.exists():
-        return str(PROJECT_ROOT / "admin_commands.queue")
-    else:
-        return os.path.join(USER_INSTALL, "admin_commands.queue")
+    config_dir = os.path.dirname(os.path.abspath(DEFAULT_CONFIG))
+    return os.path.join(config_dir, "admin_commands.queue")
 
 def write_admin_command(command_string, success_message):
     """Write a command to the admin command queue file
@@ -197,8 +202,19 @@ def write_admin_command(command_string, success_message):
     """
     try:
         cmd_file = get_admin_queue_path()
-        with open(cmd_file, 'a') as f:
-            f.write(f"{command_string}\n")
+        queue_dir = os.path.dirname(os.path.abspath(cmd_file))
+        if queue_dir:
+            os.makedirs(queue_dir, exist_ok=True)
+        lock_file = f"{cmd_file}.lock"
+        with open(lock_file, 'a', encoding='utf-8') as lock:
+            if fcntl:
+                fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+            with open(cmd_file, 'a', encoding='utf-8') as f:
+                f.write(f"{command_string}\n")
+                f.flush()
+                os.fsync(f.fileno())
+            if fcntl:
+                fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
         return {"success": True, "message": success_message}
     except Exception as e:
         return {"error": SERVER_MESSAGES['api_admin_command_write_failed'].format(error=e)}

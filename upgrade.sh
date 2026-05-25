@@ -123,7 +123,11 @@ fi
 echo ""
 echo -e "${BLUE}Checking version consistency...${NC}"
 if [ -f "$INSTALL_DIR/pyircx.py" ]; then
-    INSTALLED_VERSION=$(grep "__version__" "$INSTALL_DIR/pyircx.py" | head -1 | cut -d'"' -f2)
+    if [ -f "$INSTALL_DIR/version.json" ]; then
+        INSTALLED_VERSION=$(python3 -c 'import json, pathlib; print(json.load(open(pathlib.Path("'"$INSTALL_DIR"'") / "version.json"))["version"])')
+    else
+        INSTALLED_VERSION=$(grep "__version__" "$INSTALL_DIR/pyircx.py" | head -1 | cut -d'"' -f2)
+    fi
     echo -e "${GREEN}Currently installed version: $INSTALLED_VERSION${NC}"
 
     if [ -f "$SCRIPT_DIR/pyircx.py" ]; then
@@ -473,6 +477,14 @@ if [ -d "$WEB_ADMIN_DIR" ] && [ $NEEDS_SELINUX -eq 1 ] && command -v semodule &>
 fi
 
 # Configure SELinux file contexts (comprehensive configuration)
+if [ -d "$WEB_ADMIN_DIR" ] && command -v getenforce &> /dev/null && [ "$(getenforce)" != "Disabled" ] && ! command -v semanage &> /dev/null; then
+    if command -v dnf &> /dev/null; then
+        dnf install -y policycoreutils-python-utils
+    elif command -v yum &> /dev/null; then
+        yum install -y policycoreutils-python-utils policycoreutils-python
+    fi
+fi
+
 if [ -d "$WEB_ADMIN_DIR" ] && command -v semanage &> /dev/null && command -v restorecon &> /dev/null; then
     echo ""
     echo -e "${BLUE}Configuring SELinux file contexts...${NC}"
@@ -547,9 +559,9 @@ if [ -d "$WEB_ADMIN_DIR" ] && [ $NEEDS_APACHE_SETUP -eq 1 ]; then
             usermod -a -G pyircx "$WEB_USER"
             echo -e "${GREEN}✓ Added $WEB_USER to pyircx group${NC}"
 
-            # Ensure /opt/pyircx directory has group write permissions for SQLite
-            chmod 775 /opt/pyircx
-            echo -e "${GREEN}✓ Set group write permissions on /opt/pyircx${NC}"
+            # Ensure /opt/pyircx directory has group write and setgid permissions for runtime files
+            chmod 2775 /opt/pyircx
+            echo -e "${GREEN}✓ Set group write/setgid permissions on /opt/pyircx${NC}"
 
             # Ensure /etc/pyircx directory has group write permissions for web admin
             chmod 775 /etc/pyircx
@@ -559,10 +571,10 @@ if [ -d "$WEB_ADMIN_DIR" ] && [ $NEEDS_APACHE_SETUP -eq 1 ]; then
             chmod 660 /etc/pyircx/pyircx_config.json 2>/dev/null || true
             echo -e "${GREEN}✓ Set group write permissions on config file${NC}"
 
-            # Ensure admin commands queue exists and is group writable
-            touch /opt/pyircx/admin_commands.queue 2>/dev/null || true
-            chmod 660 /opt/pyircx/admin_commands.queue 2>/dev/null || true
-            echo -e "${GREEN}✓ Created admin commands queue${NC}"
+            # Ensure admin command queue files exist and are group writable
+            touch /opt/pyircx/admin_commands.queue /opt/pyircx/admin_commands.queue.lock 2>/dev/null || true
+            chmod 660 /opt/pyircx/admin_commands.queue /opt/pyircx/admin_commands.queue.lock 2>/dev/null || true
+            echo -e "${GREEN}✓ Created admin command queue files${NC}"
         fi
 
         # Restart PHP-FPM and Apache
@@ -641,8 +653,9 @@ if [ $NEEDS_UNBOUND -eq 1 ]; then
     fi
 fi
 
-# Update certbot renewal service if present
-if [ -f "$SCRIPT_DIR/pyircx-certbot-renew.service" ]; then
+# Update certbot renewal service only when it is already installed/configured.
+if [ -f "$SCRIPT_DIR/pyircx-certbot-renew.service" ] && \
+   { [ -f /etc/systemd/system/pyircx-certbot-renew.service ] || [ -f /etc/systemd/system/pyircx-certbot-renew.timer ]; }; then
     echo ""
     echo -e "${BLUE}Updating certbot renewal service...${NC}"
     cp "$SCRIPT_DIR/pyircx-certbot-renew.service" /etc/systemd/system/
@@ -657,13 +670,13 @@ echo -e "${BLUE}Fixing permissions...${NC}"
 chown -R "$SERVICE_USER:$SERVICE_GROUP" "$INSTALL_DIR"
 chown -R "$SERVICE_USER:$SERVICE_GROUP" "$CONFIG_DIR"
 chown root:"$SERVICE_GROUP" "$CONFIG_DIR/pyircx_config.json" 2>/dev/null || true
-chmod 775 "$INSTALL_DIR"  # Group needs write for SQLite journal files
+chmod 2775 "$INSTALL_DIR"  # Group needs write and setgid for runtime files
 chmod 775 "$CONFIG_DIR"  # Group needs write for web admin config edits
 chmod 750 "$INSTALL_DIR/transcripts" 2>/dev/null || true
 chmod 660 "$INSTALL_DIR/pyircx.db" 2>/dev/null || true
 chmod 660 "$CONFIG_DIR/pyircx_config.json" 2>/dev/null || true  # Config group writable (for web admin)
-touch "$INSTALL_DIR/admin_commands.queue" 2>/dev/null || true  # Create admin command queue
-chmod 660 "$INSTALL_DIR/admin_commands.queue" 2>/dev/null || true  # Queue group-writable (needed for webadmin)
+touch "$INSTALL_DIR/admin_commands.queue" "$INSTALL_DIR/admin_commands.queue.lock" 2>/dev/null || true  # Create admin command queue files
+chmod 660 "$INSTALL_DIR/admin_commands.queue" "$INSTALL_DIR/admin_commands.queue.lock" 2>/dev/null || true  # Queue files group-writable (needed for webadmin)
 chmod 755 "$INSTALL_DIR/pyircx.py"
 chmod 755 "$INSTALL_DIR/api.py" 2>/dev/null || true
 chmod 755 "$INSTALL_DIR/linking.py" 2>/dev/null || true
@@ -698,7 +711,7 @@ if [ $SERVICE_WAS_RUNNING -eq 1 ]; then
     # Fix database permissions after service creates/accesses it
     sleep 1
     chmod 660 "$INSTALL_DIR/pyircx.db" 2>/dev/null || true
-    chmod 775 "$INSTALL_DIR" 2>/dev/null || true
+    chmod 2775 "$INSTALL_DIR" 2>/dev/null || true
 else
     echo -e "${YELLOW}Service was not running, not starting${NC}"
     echo "Start with: systemctl start pyircx"

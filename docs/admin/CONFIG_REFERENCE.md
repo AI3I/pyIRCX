@@ -363,9 +363,10 @@ Authentication, flood protection, and access control.
 **Description:** Check connecting IPs against DNS blacklists
 
 **DNSBLs checked:**
-- zen.spamhaus.org
+- xbl.spamhaus.org
 - dnsbl.dronebl.org
-- bl.spamcop.net
+- torexit.dan.me.uk
+- all.s5h.net
 
 **Notes:**
 - Adds connection latency (~1-2 seconds)

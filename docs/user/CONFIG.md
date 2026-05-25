@@ -142,9 +142,10 @@ DNSBL checking queries DNS-based blacklists to identify known abusive IPs.
 | `security.dnsbl.reject_message` | `"..."` | Message shown on rejection |
 
 Default DNSBL lists:
+- `xbl.spamhaus.org` - Spamhaus XBL (exploited hosts)
 - `dnsbl.dronebl.org` - DroneBL (botnets, proxies)
-- `rbl.efnetrbl.org` - EFnet RBL (IRC abuse)
-- `bl.spamcop.net` - SpamCop (spam sources)
+- `torexit.dan.me.uk` - Tor exit nodes
+- `all.s5h.net` - S5H abuse sources
 
 Private IP ranges (127.*, 10.*, 192.168.*, 172.16-31.*) are always whitelisted.
 

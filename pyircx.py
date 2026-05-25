@@ -38,6 +38,10 @@ import os
 import ssl
 from pathlib import Path
 from collections import defaultdict, deque, OrderedDict
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - non-POSIX fallback
+    fcntl = None
 import validation
 import user as user_module
 import channel as channel_module
@@ -117,6 +121,17 @@ channel_module.CONFIG = CONFIG  # Share CONFIG with channel module
 security_module.CONFIG = CONFIG  # Share CONFIG with security module
 ssl_manager_module.CONFIG = CONFIG  # Share CONFIG with ssl_manager module
 service_bot_module.CONFIG = CONFIG  # Share CONFIG with service_bot module
+
+
+def get_admin_queue_path():
+    """Return the WebAdmin command queue path for this server instance."""
+    env_queue = os.environ.get("PYIRCX_ADMIN_QUEUE")
+    if env_queue:
+        return env_queue
+    config_path = Path(CONFIG.config_file).resolve()
+    if str(config_path) == "/etc/pyircx/pyircx_config.json":
+        return "/opt/pyircx/admin_commands.queue"
+    return str(config_path.parent / "admin_commands.queue")
 
 # ==============================================================================
 # VALIDATION FUNCTIONS - imported from validation module
@@ -3292,7 +3307,8 @@ class pyIRCXServer:
         filter_parts = []
 
         for param in params or []:
-            if str(param).upper() == "VERBOSE":
+            normalized = str(param).upper()
+            if normalized == "VERBOSE":
                 verbose = True
             elif str(param).isdigit():
                 limit = int(param)
@@ -11588,173 +11604,223 @@ class ServerManager:
 
     async def check_admin_commands(self):
         """Check for admin commands from Web Admin interface via command queue file."""
-        cmd_file = '/opt/pyircx/admin_commands.queue'
+        cmd_file = get_admin_queue_path()
+        processing_file = f"{cmd_file}.processing"
+        lock_file = f"{cmd_file}.lock"
         try:
-            if os.path.exists(cmd_file):
-                with open(cmd_file, 'r') as f:
-                    commands = f.readlines()
-                
-                # Clear the file immediately
-                with open(cmd_file, 'w') as f:
-                    f.write('')
-                
-                # Process each command
-                for line in commands:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    
-                    parts = line.split(':', 1)
-                    if len(parts) != 2:
-                        continue
-                    
-                    cmd, arg = parts
-                    
-                    if cmd == 'KILL_CHANNEL':
-                        channel_name = arg.strip()
-                        # Use built-in case-insensitive channel lookup
-                        channel, actual_channel_name = self.server.get_channel(channel_name)
+            if os.path.exists(processing_file):
+                await self._process_admin_command_file(processing_file)
 
-                        if channel:
-                            # Kick all users and destroy channel
-                            members_to_kick = list(channel.members.values())
-                            for member in members_to_kick:
-                                if not member.is_virtual:
-                                    # Send PART to user and remove from channel
-                                    await member.send(f":{member.prefix()} PART {actual_channel_name} :{SERVER_MESSAGES['part_channel_reconfig']}")
-                                    # Remove channel from user's channel list
-                                    if actual_channel_name in member.channels:
-                                        member.channels.remove(actual_channel_name)
-                            # Remove channel from server memory
-                            del self.server.channels[actual_channel_name]
-                            logger.info(get_log_message("admin_killed_channel", channel=actual_channel_name))
+            if os.path.exists(cmd_file) and os.path.getsize(cmd_file) > 0:
+                queue_dir = os.path.dirname(os.path.abspath(cmd_file))
+                if queue_dir:
+                    os.makedirs(queue_dir, exist_ok=True)
+                with open(lock_file, 'a', encoding='utf-8') as lock:
+                    if fcntl:
+                        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+                    if os.path.exists(cmd_file) and os.path.getsize(cmd_file) > 0:
+                        os.replace(cmd_file, processing_file)
+                    if fcntl:
+                        fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
 
-                    elif cmd == 'KILL_USER':
-                        # Format: KILL_USER:nickname:reason
-                        parts = arg.split(':', 1)
-                        if len(parts) >= 1:
-                            nickname = parts[0].strip()
-                            reason = parts[1] if len(parts) > 1 else SERVER_MESSAGES['kill_default_reason']
-
-                            user = self.server.users.get(nickname)
-                            if user and not user.is_virtual:
-                                # Send KILL message to user
-                                await user.send(f":{self.server.system_nick} KILL {nickname} :{reason}")
-                                logger.info(get_log_message("admin_killed_user", nickname=nickname, reason=reason))
-                                # Disconnect the user
-                                await self.server.quit_user(user, reason=SERVER_MESSAGES['quit_reason_killed'].format(reason=reason))
-
-                    elif cmd == 'BAN_USER':
-                        # Format: BAN_USER:nickname:duration:reason
-                        parts = arg.split(':', 2)
-                        if len(parts) >= 1:
-                            nickname = parts[0].strip()
-                            duration = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 3600
-                            reason = parts[2] if len(parts) > 2 else SERVER_MESSAGES['ban_default_reason']
-
-                            user = self.server.users.get(nickname)
-                            if user and not user.is_virtual:
-                                ip = user.ip
-                                # Add server-level IP ban
-                                expires_at = time.time() + duration if duration > 0 else 0
-                                self.server.server_bans[ip] = (expires_at, reason, "WebAdmin")
-
-                                # Send KILL message to user
-                                await user.send(f":{self.server.system_nick} KILL {nickname} :{SERVER_MESSAGES['kill_banned'].format(reason=reason)}")
-                                logger.info(get_log_message("admin_banned_user", nickname=nickname, ip=ip, duration=duration, reason=reason))
-                                # Disconnect the user
-                                await self.server.quit_user(user, reason=SERVER_MESSAGES['quit_reason_banned'].format(reason=reason))
-
-                    elif cmd == 'LOCK_CHANNEL':
-                        # Format: LOCK_CHANNEL:channel:owner
-                        parts = arg.split(':', 1)
-                        if len(parts) >= 1:
-                            channel_name = parts[0].strip()
-                            owner = parts[1].strip() if len(parts) > 1 else "System"
-
-                            # First, register the channel in the database
-                            try:
-                                db = self.server.db_pool.get_connection()
-                                cursor = db.cursor()
-
-                                # Check if channel already registered
-                                cursor.execute("SELECT channel_name FROM registered_channels WHERE channel_name = ?", (channel_name,))
-                                existing = cursor.fetchone()
-
-                                if not existing:
-                                    # Register the channel
-                                    import uuid
-                                    account_uuid = str(uuid.uuid4())
-                                    cursor.execute("""
-                                        INSERT INTO registered_channels
-                                        (channel_name, owner, account_uuid, registered_at, modes)
-                                        VALUES (?, ?, ?, ?, ?)
-                                    """, (channel_name, owner, account_uuid, int(time.time()), "ra"))
-                                    db.commit()
-                                    logger.info(get_log_message("admin_registered_channel", channel=channel_name, owner=owner))
-                                else:
-                                    # Update existing channel to set +ra modes
-                                    cursor.execute("""
-                                        UPDATE registered_channels
-                                        SET modes = 'ra', owner = ?
-                                        WHERE channel_name = ?
-                                    """, (owner, channel_name))
-                                    db.commit()
-                                    logger.info(get_log_message("admin_updated_channel", channel=channel_name, owner=owner))
-
-                                self.server.db_pool.return_connection(db)
-
-                                # Kill the channel to force reload with new settings
-                                channel, actual_channel_name = self.server.get_channel(channel_name)
-                                if channel:
-                                    members_to_kick = list(channel.members.values())
-                                    for member in members_to_kick:
-                                        if not member.is_virtual:
-                                            await member.send(f":{member.prefix()} PART {actual_channel_name} :{SERVER_MESSAGES['part_channel_locked']}")
-                                            if actual_channel_name in member.channels:
-                                                member.channels.remove(actual_channel_name)
-                                    del self.server.channels[actual_channel_name]
-                                    logger.info(get_log_message("admin_locked_channel", channel=actual_channel_name, owner=owner))
-
-                            except Exception as e:
-                                logger.error(get_log_message("admin_lock_channel_error", channel=channel_name, error=e))
-
-                    elif cmd == 'SET_CHANNEL_MODE':
-                        # Format: SET_CHANNEL_MODE:channel:mode_string
-                        parts = arg.split(':', 1)
-                        if len(parts) >= 2:
-                            channel_name = parts[0].strip()
-                            mode_string = parts[1].strip()
-
-                            # Get the System user to send the MODE command
-                            system_user = self.server.users.get(self.server.system_nick)
-
-                            if system_user:
-                                # Apply the mode using the MODE handler
-                                await self.server.handle_mode(system_user, [channel_name, mode_string])
-                                logger.info(get_log_message("admin_set_mode", mode=mode_string, channel=channel_name))
-                            else:
-                                logger.error(get_log_message("admin_system_user_missing", command="SET_CHANNEL_MODE"))
-
-
-                    elif cmd == 'SET_CHANNEL_TOPIC':
-                        # Format: SET_CHANNEL_TOPIC:channel:topic
-                        parts = arg.split(':', 1)
-                        if len(parts) >= 2:
-                            channel_name = parts[0].strip()
-                            topic = parts[1] if len(parts) > 1 else ''
-
-                            # Get the System user to send the TOPIC command
-                            system_user = self.server.users.get(self.server.system_nick)
-
-                            if system_user:
-                                # Apply the topic using the TOPIC handler
-                                await self.server.handle_topic(system_user, [channel_name, topic])
-                                logger.info(get_log_message("admin_set_topic", channel=channel_name))
-                            else:
-                                logger.error(get_log_message("admin_system_user_missing", command="SET_CHANNEL_TOPIC"))
+            if os.path.exists(processing_file):
+                await self._process_admin_command_file(processing_file)
         except Exception as e:
             logger.error(get_log_message("admin_command_error", error=e))
+
+    async def _process_admin_command_file(self, path):
+        """Process a claimed WebAdmin command file and remove it when complete."""
+        with open(path, 'r', encoding='utf-8') as f:
+            commands = f.readlines()
+
+        for line in commands:
+            try:
+                await self._process_admin_command(line)
+            except Exception as e:
+                logger.error(get_log_message("admin_command_error", error=e))
+
+        os.remove(path)
+
+    async def _process_admin_command(self, line):
+        """Process a single claimed WebAdmin command queue line."""
+        line = line.strip()
+        if not line:
+            return
+
+        parts = line.split(':', 1)
+        if len(parts) != 2:
+            return
+
+        cmd, arg = parts
+
+        if cmd == 'KILL_CHANNEL':
+            await self._admin_kill_channel(arg.strip(), SERVER_MESSAGES['part_channel_reconfig'])
+
+        elif cmd == 'KILL_USER':
+            # Format: KILL_USER:nickname:reason
+            parts = arg.split(':', 1)
+            nickname = parts[0].strip()
+            reason = parts[1] if len(parts) > 1 else SERVER_MESSAGES['kill_default_reason']
+
+            user = self.server.users.get(nickname)
+            if user and not user.is_virtual:
+                await user.send(f":{self.server.system_nick} KILL {nickname} :{reason}")
+                logger.info(get_log_message("admin_killed_user", nickname=nickname, reason=reason))
+                await self.server.quit_user(user, reason=SERVER_MESSAGES['quit_reason_killed'].format(reason=reason))
+
+        elif cmd == 'BAN_USER':
+            # Format: BAN_USER:nickname:duration:reason
+            parts = arg.split(':', 2)
+            nickname = parts[0].strip()
+            duration = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 3600
+            reason = parts[2] if len(parts) > 2 else SERVER_MESSAGES['ban_default_reason']
+
+            user = self.server.users.get(nickname)
+            if user and not user.is_virtual:
+                ip = user.ip
+                expires_at = time.time() + duration if duration > 0 else 0
+                self.server.server_bans[ip] = (expires_at, reason, "WebAdmin")
+
+                await user.send(f":{self.server.system_nick} KILL {nickname} :{SERVER_MESSAGES['kill_banned'].format(reason=reason)}")
+                logger.info(get_log_message("admin_banned_user", nickname=nickname, ip=ip, duration=duration, reason=reason))
+                await self.server.quit_user(user, reason=SERVER_MESSAGES['quit_reason_banned'].format(reason=reason))
+
+        elif cmd == 'LOCK_CHANNEL':
+            # Format: LOCK_CHANNEL:channel:owner
+            parts = arg.split(':', 1)
+            channel_name = parts[0].strip()
+            owner = parts[1].strip() if len(parts) > 1 and parts[1].strip() else "System"
+            await self._admin_lock_channel(channel_name, owner)
+
+        elif cmd == 'SET_CHANNEL_MODE':
+            # Format: SET_CHANNEL_MODE:channel:mode_string
+            parts = arg.split(':', 1)
+            if len(parts) >= 2:
+                channel_name = parts[0].strip()
+                mode_string = parts[1].strip()
+                system_user = self.server.users.get(self.server.system_nick)
+
+                if system_user:
+                    await self.server.handle_mode(system_user, [channel_name, mode_string])
+                    logger.info(get_log_message("admin_set_mode", mode=mode_string, channel=channel_name))
+                else:
+                    logger.error(get_log_message("admin_system_user_missing", command="SET_CHANNEL_MODE"))
+
+        elif cmd == 'SET_CHANNEL_TOPIC':
+            # Format: SET_CHANNEL_TOPIC:channel:topic
+            parts = arg.split(':', 1)
+            if len(parts) >= 2:
+                channel_name = parts[0].strip()
+                topic = parts[1]
+                system_user = self.server.users.get(self.server.system_nick)
+
+                if system_user:
+                    await self.server.handle_topic(system_user, [channel_name, topic])
+                    logger.info(get_log_message("admin_set_topic", channel=channel_name))
+                else:
+                    logger.error(get_log_message("admin_system_user_missing", command="SET_CHANNEL_TOPIC"))
+
+    async def _admin_kill_channel(self, channel_name, part_message):
+        """Reset an in-memory channel by parting members and removing it."""
+        channel, actual_channel_name = self.server.get_channel(channel_name)
+        if not channel:
+            return
+
+        members_to_kick = list(channel.members.values())
+        for member in members_to_kick:
+            if not member.is_virtual:
+                await member.send(f":{member.prefix()} PART {actual_channel_name} :{part_message}")
+                if actual_channel_name in member.channels:
+                    member.channels.remove(actual_channel_name)
+        del self.server.channels[actual_channel_name]
+        if hasattr(self.server, 'channels_lower'):
+            self.server.channels_lower.pop(actual_channel_name.lower(), None)
+        logger.info(get_log_message("admin_killed_channel", channel=actual_channel_name))
+
+    async def _admin_lock_channel(self, channel_name, owner):
+        """Register and lock a channel using the async database schema."""
+        if not self.server.db_pool:
+            logger.error(get_log_message("admin_lock_channel_error", channel=channel_name, error="database unavailable"))
+            return
+
+        channel, actual_channel_name = self.server.get_channel(channel_name)
+        stored_channel_name = actual_channel_name or channel_name
+        owner_uuid = None
+        channel_uuid = None
+        properties = {}
+        now = int(time.time())
+
+        try:
+            async with self.server.db_pool.connection() as db:
+                async with db.execute(
+                    "SELECT uuid FROM registered_nicks WHERE LOWER(nickname) = LOWER(?)",
+                    (owner,)
+                ) as cursor:
+                    owner_row = await cursor.fetchone()
+
+                if owner_row:
+                    owner_uuid = owner_row[0]
+                else:
+                    owner_uuid = str(uuid.uuid4())
+                    await db.execute("""
+                        INSERT INTO registered_nicks
+                        (uuid, nickname, password_hash, registered_at, last_seen, registered_by)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """, (owner_uuid, owner, "", now, now, "SYSTEM (WebAdmin lock)"))
+
+                async with db.execute(
+                    "SELECT uuid, properties FROM registered_channels WHERE LOWER(channel_name) = LOWER(?)",
+                    (stored_channel_name,)
+                ) as cursor:
+                    existing = await cursor.fetchone()
+
+                if channel:
+                    try:
+                        properties = json.loads(channel.get_properties_json())
+                    except json.JSONDecodeError:
+                        properties = {}
+                elif existing and existing[1]:
+                    try:
+                        properties = json.loads(existing[1])
+                    except json.JSONDecodeError:
+                        properties = {}
+
+                properties['owners'] = [owner]
+                modes = properties.get('modes', {})
+                modes.update({'r': True, 'a': True, 'z': True})
+                properties['modes'] = modes
+
+                if existing:
+                    channel_uuid = existing[0]
+                    await db.execute("""
+                        UPDATE registered_channels
+                           SET owner_uuid = ?, properties = ?, last_used = ?
+                         WHERE uuid = ?
+                    """, (owner_uuid, json.dumps(properties), now, channel_uuid))
+                    logger.info(get_log_message("admin_updated_channel", channel=stored_channel_name, owner=owner))
+                else:
+                    channel_uuid = str(uuid.uuid4())
+                    await db.execute("""
+                        INSERT INTO registered_channels
+                        (uuid, channel_name, owner_uuid, registered_at, last_used, properties)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """, (channel_uuid, stored_channel_name, owner_uuid, now, now, json.dumps(properties)))
+                    logger.info(get_log_message("admin_registered_channel", channel=stored_channel_name, owner=owner))
+
+                await db.commit()
+
+            if channel:
+                channel.registered = True
+                channel.account_uuid = channel_uuid
+                channel.owners.add(owner)
+                for mode in ('r', 'a', 'z'):
+                    if mode in channel.modes:
+                        channel.modes[mode] = True
+                await self._admin_kill_channel(stored_channel_name, SERVER_MESSAGES['part_channel_locked'])
+                logger.info(get_log_message("admin_locked_channel", channel=stored_channel_name, owner=owner))
+
+        except Exception as e:
+            logger.error(get_log_message("admin_lock_channel_error", channel=channel_name, error=e))
 
     def reload_config(self):
         """Reload configuration file and SSL certificates."""

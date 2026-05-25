@@ -302,7 +302,9 @@ class DNSBLChecker:
                     rcode = result[0][4][0]
                     # 127.255.255.x = DNSBL operator error/policy response, not a real hit
                     # (Spamhaus returns 127.255.255.254 for public-resolver queries)
-                    if rcode.startswith('127.') and not rcode.startswith('127.255.255.'):
+                    if rcode.startswith('127.255.255.'):
+                        logger.warning(get_log_message("dnsbl_policy_response", ip=ip, dnsbl=dnsbl, response=rcode))
+                    elif rcode.startswith('127.'):
                         listed_on.append(dnsbl)
                         logger.info(get_log_message("dnsbl_listed", ip=ip, dnsbl=dnsbl))
             except (socket.gaierror, asyncio.TimeoutError, OSError):

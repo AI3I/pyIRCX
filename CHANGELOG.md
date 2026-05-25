@@ -5,6 +5,25 @@ All notable changes to pyIRCX will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.4] - 2026-05-25
+
+### Changed
+- Updated the default DNSBL set to maintained lists: `xbl.spamhaus.org`, `dnsbl.dronebl.org`, `torexit.dan.me.uk`, and `all.s5h.net`.
+- Removed stale or questionable default DNSBL providers, including `rbl.efnetrbl.org`, `proxy.bl.gweep.ca`, `dnsbl.tornevall.org`, and `bl.spamcop.net`.
+- Aligned installer, repair, and upgrade scripts so queue permissions, version metadata, Unbound setup, WebAdmin SELinux tooling, and certbot renewal units are handled consistently.
+
+### Fixed
+- WebAdmin command dispatch now uses a locked queue with an atomic processing handoff, preventing dropped or partially-read admin commands.
+- DNSBL policy responses such as `127.255.255.x` are now logged as DNSBL policy failures instead of being silently ignored as non-hits.
+- Fedora/RHEL installs now include the version metadata required by the service startup path, fixing a `ModuleNotFoundError` during fresh installs.
+- Unbound and systemd-resolved setup now points clients at the local recursive resolver (`127.0.0.1`) and installs the DNS test tools needed on Fedora/RHEL and Debian.
+- Fedora/RHEL WebAdmin installs now install SELinux management tooling before applying contexts and policy modules.
+
+### Validated
+- Full local test suite passes with 410 tests.
+- Fresh install, repair, upgrade, WebAdmin, Unbound, and SELinux enforcing behavior validated on Fedora 44.
+- DNSBL behavior validated on the Debian 13 production host path.
+
 ## [2.0.3] - 2026-05-05
 
 ### Fixed

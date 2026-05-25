@@ -121,6 +121,8 @@ REQUIRED_FILES=(
     "$INSTALL_DIR/ssl_manager.py"
     "$INSTALL_DIR/user.py"
     "$INSTALL_DIR/validation.py"
+    "$INSTALL_DIR/version.py"
+    "$INSTALL_DIR/version.json"
     "$INSTALL_DIR/api.py"
     "$INSTALL_DIR/api_helpers.py"
     "$INSTALL_DIR/db_pool.py"
@@ -479,7 +481,7 @@ if command -v unbound &>/dev/null; then
     fi
 
     # Check resolv.conf points to unbound
-    if grep -q "nameserver 127.0.0.53" /etc/resolv.conf 2>/dev/null; then
+    if grep -q "nameserver 127.0.0.1" /etc/resolv.conf 2>/dev/null || resolvectl status 2>/dev/null | grep -q "DNS Servers: 127.0.0.1"; then
         echo -e "${GREEN}✓${NC} System DNS points to unbound"
     else
         echo -e "${YELLOW}⚠${NC} System DNS not using unbound ${YELLOW}(INFO)${NC}"
@@ -563,13 +565,13 @@ if [[ ! $REPLY =~ ^[Nn]$ ]]; then
         chown -R "$SERVICE_USER:$SERVICE_GROUP" "$INSTALL_DIR" 2>/dev/null || true
         chown -R "$SERVICE_USER:$SERVICE_GROUP" "$CONFIG_DIR" 2>/dev/null || true
         chown root:"$SERVICE_GROUP" "$CONFIG_DIR/pyircx_config.json" 2>/dev/null || true
-        chmod 775 "$INSTALL_DIR" 2>/dev/null || true  # Group needs write for SQLite journal files
+        chmod 2775 "$INSTALL_DIR" 2>/dev/null || true  # Group needs write and setgid for runtime files
         chmod 775 "$CONFIG_DIR" 2>/dev/null || true  # Group needs write for web admin config edits
         chmod 750 "$INSTALL_DIR/transcripts" 2>/dev/null || true  # Keep transcripts private
         chmod 660 "$INSTALL_DIR/pyircx.db" 2>/dev/null || true  # Database group writable
         chmod 660 "$CONFIG_DIR/pyircx_config.json" 2>/dev/null || true  # Config group-writable (needed for webadmin)
-        touch "$INSTALL_DIR/admin_commands.queue" 2>/dev/null || true  # Create admin command queue
-        chmod 660 "$INSTALL_DIR/admin_commands.queue" 2>/dev/null || true  # Queue group-writable (needed for webadmin)
+        touch "$INSTALL_DIR/admin_commands.queue" "$INSTALL_DIR/admin_commands.queue.lock" 2>/dev/null || true  # Create admin command queue files
+        chmod 660 "$INSTALL_DIR/admin_commands.queue" "$INSTALL_DIR/admin_commands.queue.lock" 2>/dev/null || true  # Queue files group-writable (needed for webadmin)
         chmod 755 "$INSTALL_DIR/pyircx.py" 2>/dev/null || true
         chmod 755 "$INSTALL_DIR/api.py" 2>/dev/null || true
         chmod 755 "$INSTALL_DIR/linking.py" 2>/dev/null || true
@@ -593,6 +595,13 @@ if [[ ! $REPLY =~ ^[Nn]$ ]]; then
 
         # Fix SELinux contexts if enabled (comprehensive configuration)
         if command -v getenforce &>/dev/null && [ "$(getenforce)" != "Disabled" ]; then
+            if ! command -v semanage &> /dev/null; then
+                if command -v dnf &> /dev/null; then
+                    dnf install -y policycoreutils-python-utils
+                elif command -v yum &> /dev/null; then
+                    yum install -y policycoreutils-python-utils policycoreutils-python
+                fi
+            fi
             if command -v semanage &> /dev/null && command -v restorecon &> /dev/null; then
                 echo -e "${YELLOW}Fixing SELinux contexts...${NC}"
 
@@ -786,7 +795,7 @@ EOF
             cat > /etc/unbound/unbound.conf.d/pyircx.conf << 'UNBOUND_EOF'
 # pyIRCX Unbound Configuration
 server:
-    interface: 127.0.0.53
+    interface: 127.0.0.1
     port: 53
     access-control: 127.0.0.0/8 allow
     access-control: ::1/128 allow

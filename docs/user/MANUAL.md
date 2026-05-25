@@ -254,7 +254,7 @@ Configuration is stored in `pyircx_config.json`. Below is a complete reference:
       "action": "reject",
       "timeout": 3.0,
       "cache_ttl": 3600,
-      "lists": ["dnsbl.dronebl.org", "rbl.efnetrbl.org"],
+      "lists": ["xbl.spamhaus.org", "dnsbl.dronebl.org", "torexit.dan.me.uk", "all.s5h.net"],
       "whitelist": [],
       "reject_message": "Your IP is blacklisted."
     },
@@ -1522,9 +1522,10 @@ Checks connecting IPs against DNS blacklists.
       "timeout": 3.0,
       "cache_ttl": 3600,
       "lists": [
+        "xbl.spamhaus.org",
         "dnsbl.dronebl.org",
-        "rbl.efnetrbl.org",
-        "bl.spamcop.net"
+        "torexit.dan.me.uk",
+        "all.s5h.net"
       ],
       "whitelist": ["192.168.0.0/16"],
       "reject_message": "Your IP is blacklisted."
