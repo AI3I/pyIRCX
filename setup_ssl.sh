@@ -30,9 +30,9 @@ install_certbot_deploy_hook() {
 #!/bin/sh
 set -eu
 
-if systemctl list-unit-files apache2.service >/dev/null 2>&1; then
+if systemctl list-unit-files apache2.service 2>/dev/null | grep -q '^apache2\.service'; then
     systemctl reload apache2 2>/dev/null || systemctl restart apache2 2>/dev/null || true
-elif systemctl list-unit-files httpd.service >/dev/null 2>&1; then
+elif systemctl list-unit-files httpd.service 2>/dev/null | grep -q '^httpd\.service'; then
     systemctl reload httpd 2>/dev/null || systemctl restart httpd 2>/dev/null || true
 fi
 
@@ -41,6 +41,20 @@ systemctl restart pyircx-webchat 2>/dev/null || true
 EOF
     chmod 755 "$hook_path"
     echo -e "${GREEN}✓ Certbot deploy hook installed: $hook_path${NC}"
+}
+
+configure_certbot_timer() {
+    if systemctl list-unit-files certbot.timer 2>/dev/null | grep -q '^certbot\.timer'; then
+        systemctl enable --now certbot.timer
+        echo -e "${GREEN}✓ Distro certbot.timer enabled${NC}"
+
+        if systemctl list-unit-files pyircx-certbot-renew.timer 2>/dev/null | grep -q '^pyircx-certbot-renew\.timer'; then
+            systemctl disable --now pyircx-certbot-renew.timer 2>/dev/null || true
+            echo -e "${GREEN}✓ Disabled duplicate pyircx-certbot-renew.timer${NC}"
+        fi
+    else
+        echo -e "${YELLOW}⚠ certbot.timer not found; ensure certbot renewal is scheduled by your distribution${NC}"
+    fi
 }
 
 # Function to configure HTTPS for webchat
@@ -352,40 +366,7 @@ case $REPLY in
 
             # Set up auto-renewal
             install_certbot_deploy_hook
-
-            if [ ! -f /etc/systemd/system/pyircx-certbot-renew.service ]; then
-                cat > /etc/systemd/system/pyircx-certbot-renew.service <<EOF
-[Unit]
-Description=Renew Let's Encrypt certificates
-After=network.target
-
-[Service]
-Type=oneshot
-ExecStart=/usr/bin/certbot renew --quiet
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-                cat > /etc/systemd/system/pyircx-certbot-renew.timer <<EOF
-[Unit]
-Description=Daily renewal of Let's Encrypt certificates
-
-[Timer]
-OnCalendar=daily
-RandomizedDelaySec=1h
-Persistent=true
-
-[Install]
-WantedBy=timers.target
-EOF
-
-                systemctl daemon-reload
-                systemctl enable pyircx-certbot-renew.timer
-                systemctl start pyircx-certbot-renew.timer
-
-                echo -e "${GREEN}✓ Auto-renewal configured${NC}"
-            fi
+            configure_certbot_timer
 
         else
             echo -e "${RED}Failed to obtain certificate${NC}"
@@ -587,7 +568,8 @@ echo ""
 
 if [ "$REPLY" == "1" ]; then
     echo "Certificate auto-renewal: ENABLED"
-    echo "  Status: systemctl status pyircx-certbot-renew.timer"
+    echo "  Status: systemctl status certbot.timer"
+    echo "  Deploy hook: /etc/letsencrypt/renewal-hooks/deploy/10-reload-pyircx-services"
     echo ""
 fi
 

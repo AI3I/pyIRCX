@@ -36,6 +36,7 @@ import signal
 import argparse
 import os
 import ssl
+import errno
 from pathlib import Path
 from collections import defaultdict, deque, OrderedDict
 try:
@@ -1862,6 +1863,16 @@ class pyIRCXServer:
                     await writer.drain()
                 except (ConnectionResetError, BrokenPipeError, OSError):
                     break
+        except (ConnectionResetError, BrokenPipeError) as e:
+            if self.debug_mode:
+                logger.debug(get_log_message("client_error", nickname=user.nickname, error=e))
+        except OSError as e:
+            if e.errno in (errno.ECONNRESET, errno.EPIPE, errno.ETIMEDOUT):
+                if self.debug_mode:
+                    logger.debug(get_log_message("client_error", nickname=user.nickname, error=e))
+            elif self.debug_mode:
+                logger.error(get_log_message("client_error", nickname=user.nickname, error=e))
+                logger.error(get_log_message("client_traceback", traceback=traceback.format_exc()))
         except Exception as e:
             if self.debug_mode:
                 logger.error(get_log_message("client_error", nickname=user.nickname, error=e))
@@ -3330,9 +3341,35 @@ class pyIRCXServer:
     def _record_session_history(self, user, logout_time, reason=None):
         if user.is_virtual or user.is_remote or user.nickname == "*" or not user.registered:
             return None
+        if getattr(user, '_session_history_recorded', False):
+            return None
         entry = self._build_session_entry(user, logout_time, active=False, reason=reason)
         self.session_history.appendleft(entry)
+        user._session_history_recorded = True
         return entry
+
+    async def persist_active_connection_sessions(self, reason=None):
+        """Persist currently active sessions before shutdown closes the DB pool."""
+        entries = []
+        logout_time = int(time.time())
+        for active_user in list(self.users.values()):
+            if active_user.is_virtual or active_user.is_remote or active_user.disconnected:
+                continue
+            entry = self._record_session_history(active_user, logout_time, reason or SERVER_MESSAGES['notice_server_shutdown'])
+            if entry:
+                entries.append(entry)
+
+        if not entries:
+            return 0
+
+        results = await asyncio.gather(
+            *(self._record_persistent_session_history(entry) for entry in entries),
+            return_exceptions=True
+        )
+        for result in results:
+            if isinstance(result, Exception) and self.debug_mode:
+                logger.error("Connection session shutdown write failed: %s", result)
+        return len(entries)
 
     async def _record_persistent_session_history(self, entry):
         if not self.db_pool:
@@ -11532,6 +11569,19 @@ class ServerManager:
                 all_servers = self.tcp_servers + self.ssl_servers
                 for srv in all_servers:
                     srv.close()
+
+                # Persist active connection sessions before socket teardown can
+                # race with database pool shutdown.
+                if self.server:
+                    try:
+                        flushed = await asyncio.wait_for(
+                            self.server.persist_active_connection_sessions(SERVER_MESSAGES['notice_server_shutdown']),
+                            timeout=2.0
+                        )
+                        if flushed and self.server.debug_mode:
+                            logger.debug("Persisted %s active connection session(s) during shutdown", flushed)
+                    except (Exception, asyncio.TimeoutError) as e:
+                        logger.warning("Active connection session shutdown flush failed: %s", e)
 
                 # Disconnect clients before waiting on server objects to close.
                 if self.server:

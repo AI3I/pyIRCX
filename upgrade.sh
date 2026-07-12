@@ -51,6 +51,54 @@ detect_web_user() {
     fi
 }
 
+install_certbot_deploy_hook() {
+    local hook_dir="/etc/letsencrypt/renewal-hooks/deploy"
+    local hook_path="$hook_dir/10-reload-pyircx-services"
+
+    mkdir -p "$hook_dir"
+    cat > "$hook_path" <<'EOF'
+#!/bin/sh
+set -eu
+
+if systemctl list-unit-files apache2.service 2>/dev/null | grep -q '^apache2\.service'; then
+    systemctl reload apache2 2>/dev/null || systemctl restart apache2 2>/dev/null || true
+elif systemctl list-unit-files httpd.service 2>/dev/null | grep -q '^httpd\.service'; then
+    systemctl reload httpd 2>/dev/null || systemctl restart httpd 2>/dev/null || true
+fi
+
+systemctl reload pyircx 2>/dev/null || true
+systemctl restart pyircx-webchat 2>/dev/null || true
+EOF
+    chmod 755 "$hook_path"
+}
+
+configure_certbot_renewal() {
+    if ! command -v certbot &>/dev/null && [ ! -d /etc/letsencrypt ]; then
+        return
+    fi
+
+    echo ""
+    echo -e "${BLUE}Configuring certbot renewal hooks...${NC}"
+    install_certbot_deploy_hook
+    echo -e "${GREEN}✓ Certbot deploy hook installed${NC}"
+
+    if systemctl list-unit-files certbot.timer 2>/dev/null | grep -q '^certbot\.timer'; then
+        systemctl enable --now certbot.timer
+        echo -e "${GREEN}✓ Distro certbot.timer enabled${NC}"
+
+        if systemctl list-unit-files pyircx-certbot-renew.timer 2>/dev/null | grep -q '^pyircx-certbot-renew\.timer'; then
+            systemctl disable --now pyircx-certbot-renew.timer 2>/dev/null || true
+            echo -e "${GREEN}✓ Disabled duplicate pyircx-certbot-renew.timer${NC}"
+        fi
+    elif [ -f "$SCRIPT_DIR/pyircx-certbot-renew.service" ] && [ -f /etc/systemd/system/pyircx-certbot-renew.timer ]; then
+        cp "$SCRIPT_DIR/pyircx-certbot-renew.service" /etc/systemd/system/
+        systemctl daemon-reload
+        echo -e "${YELLOW}⚠ Distro certbot.timer not found; preserving existing pyircx-certbot-renew.timer fallback${NC}"
+    else
+        echo -e "${YELLOW}⚠ No certbot timer found; ensure certificate renewal is scheduled${NC}"
+    fi
+}
+
 print_service_diagnostics() {
     local service_name="$1"
     echo -e "${RED}Recent status for ${service_name}:${NC}"
@@ -653,16 +701,7 @@ if [ $NEEDS_UNBOUND -eq 1 ]; then
     fi
 fi
 
-# Update certbot renewal service only when it is already installed/configured.
-if [ -f "$SCRIPT_DIR/pyircx-certbot-renew.service" ] && \
-   { [ -f /etc/systemd/system/pyircx-certbot-renew.service ] || [ -f /etc/systemd/system/pyircx-certbot-renew.timer ]; }; then
-    echo ""
-    echo -e "${BLUE}Updating certbot renewal service...${NC}"
-    cp "$SCRIPT_DIR/pyircx-certbot-renew.service" /etc/systemd/system/
-    cp "$SCRIPT_DIR/pyircx-certbot-renew.timer" /etc/systemd/system/
-    systemctl daemon-reload
-    echo -e "${GREEN}✓ Certbot renewal service updated${NC}"
-fi
+configure_certbot_renewal
 
 # Fix permissions
 echo ""

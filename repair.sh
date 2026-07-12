@@ -44,6 +44,41 @@ detect_web_user() {
     fi
 }
 
+install_certbot_deploy_hook() {
+    local hook_dir="/etc/letsencrypt/renewal-hooks/deploy"
+    local hook_path="$hook_dir/10-reload-pyircx-services"
+
+    mkdir -p "$hook_dir"
+    cat > "$hook_path" <<'EOF'
+#!/bin/sh
+set -eu
+
+if systemctl list-unit-files apache2.service 2>/dev/null | grep -q '^apache2\.service'; then
+    systemctl reload apache2 2>/dev/null || systemctl restart apache2 2>/dev/null || true
+elif systemctl list-unit-files httpd.service 2>/dev/null | grep -q '^httpd\.service'; then
+    systemctl reload httpd 2>/dev/null || systemctl restart httpd 2>/dev/null || true
+fi
+
+systemctl reload pyircx 2>/dev/null || true
+systemctl restart pyircx-webchat 2>/dev/null || true
+EOF
+    chmod 755 "$hook_path"
+}
+
+configure_certbot_renewal() {
+    install_certbot_deploy_hook
+
+    if systemctl list-unit-files certbot.timer 2>/dev/null | grep -q '^certbot\.timer'; then
+        systemctl enable --now certbot.timer
+        if systemctl list-unit-files pyircx-certbot-renew.timer 2>/dev/null | grep -q '^pyircx-certbot-renew\.timer'; then
+            systemctl disable --now pyircx-certbot-renew.timer 2>/dev/null || true
+        fi
+    elif [ -f /etc/systemd/system/pyircx-certbot-renew.timer ]; then
+        systemctl daemon-reload
+        systemctl enable --now pyircx-certbot-renew.timer
+    fi
+}
+
 echo ""
 echo "========================================"
 echo "  pyIRCX Repair & Validation Script v${CURRENT_PACKAGE_VERSION}"
@@ -505,16 +540,38 @@ else
     SSL_ENABLED=0
 fi
 
-# Check certbot timer
-if [ -f /etc/systemd/system/pyircx-certbot-renew.timer ]; then
-    echo -e "${GREEN}✓${NC} Certbot renewal timer installed"
-    if systemctl is-enabled --quiet pyircx-certbot-renew.timer 2>/dev/null; then
-        echo -e "${GREEN}✓${NC} Certbot timer enabled"
+# Check certbot renewal wiring
+CERTBOT_ISSUES=0
+if command -v certbot &>/dev/null || [ -d /etc/letsencrypt ]; then
+    if [ -x /etc/letsencrypt/renewal-hooks/deploy/10-reload-pyircx-services ]; then
+        echo -e "${GREEN}✓${NC} Certbot deploy hook installed"
     else
-        echo -e "${YELLOW}⚠${NC} Certbot timer not enabled ${YELLOW}(FIXABLE)${NC}"
-        ISSUES=$((ISSUES + 1))
-        FIXABLE=$((FIXABLE + 1))
+        echo -e "${YELLOW}⚠${NC} Certbot deploy hook missing ${YELLOW}(FIXABLE)${NC}"
+        ((CERTBOT_ISSUES+=1))
     fi
+
+    if systemctl list-unit-files certbot.timer 2>/dev/null | grep -q '^certbot\.timer'; then
+        if systemctl is-enabled --quiet certbot.timer 2>/dev/null; then
+            echo -e "${GREEN}✓${NC} Distro certbot.timer enabled"
+        else
+            echo -e "${YELLOW}⚠${NC} Distro certbot.timer not enabled ${YELLOW}(FIXABLE)${NC}"
+            ((CERTBOT_ISSUES+=1))
+        fi
+
+        if systemctl is-enabled --quiet pyircx-certbot-renew.timer 2>/dev/null; then
+            echo -e "${YELLOW}⚠${NC} Duplicate pyircx-certbot-renew.timer enabled ${YELLOW}(FIXABLE)${NC}"
+            ((CERTBOT_ISSUES+=1))
+        fi
+    elif [ -f /etc/systemd/system/pyircx-certbot-renew.timer ]; then
+        echo -e "${YELLOW}⚠${NC} Distro certbot.timer not found; using pyircx-certbot-renew.timer fallback"
+    else
+        echo -e "${YELLOW}⚠${NC} No certbot timer found ${YELLOW}(FIXABLE)${NC}"
+        ((CERTBOT_ISSUES+=1))
+    fi
+fi
+
+if [ $CERTBOT_ISSUES -gt 0 ]; then
+    ((ISSUES_FOUND+=1))
 fi
 
 # Check ssl-cert group
@@ -523,8 +580,7 @@ if getent group ssl-cert &>/dev/null; then
         echo -e "${GREEN}✓${NC} User in ssl-cert group"
     else
         echo -e "${YELLOW}⚠${NC} User not in ssl-cert group ${YELLOW}(FIXABLE)${NC}"
-        ISSUES=$((ISSUES + 1))
-        FIXABLE=$((FIXABLE + 1))
+        ((ISSUES_FOUND+=1))
     fi
 fi
 
@@ -693,6 +749,14 @@ if [[ ! $REPLY =~ ^[Nn]$ ]]; then
             echo -e "${GREEN}✓ $WEB_USER added to systemd-journal group${NC}"
             ((FIXES_APPLIED+=1))
         fi
+    fi
+
+    # Fix certbot renewal hook/timer wiring
+    if [ "${CERTBOT_ISSUES:-0}" -gt 0 ]; then
+        echo -e "${YELLOW}Fixing certbot renewal wiring...${NC}"
+        configure_certbot_renewal
+        echo -e "${GREEN}✓ Certbot renewal wiring fixed${NC}"
+        ((FIXES_APPLIED+=1))
     fi
 
     # Enable service if not enabled

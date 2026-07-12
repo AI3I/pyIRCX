@@ -5,6 +5,21 @@ All notable changes to pyIRCX will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.5] - 2026-07-12
+
+### Changed
+- Certbot renewal setup now prefers the distribution-provided `certbot.timer` and disables the duplicate pyIRCX timer when both are present.
+- Setup, repair, and upgrade flows now install a certbot deploy hook that reloads Apache/httpd, reloads pyIRCX, and restarts the WebChat gateway after certificate renewal.
+
+### Fixed
+- Active local connection sessions are now persisted during graceful shutdown before sockets and the database pool close, preventing missed LASTLOGONS/WebAdmin session history entries on restart.
+- Common client socket resets, broken pipes, and timeouts during client handling are now treated as expected disconnect noise instead of debug tracebacks.
+- `repair.sh` now reports and fixes certbot renewal wiring consistently, including missing deploy hooks, disabled distro timers, and duplicate pyIRCX renewal timers.
+- `repair.sh` now uses the active issue counter when reporting missing `ssl-cert` group membership.
+
+### Validated
+- Added unit coverage for persisting active connection sessions exactly once during shutdown.
+
 ## [2.0.4] - 2026-05-25
 
 ### Changed
