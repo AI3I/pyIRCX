@@ -1641,7 +1641,7 @@ pyIRCX supports secure connections via SSL/TLS with automatic certificate manage
 
 **Features:**
 - Dual-stack support (IPv4 and IPv6 on SSL ports)
-- Automatic certificate reload when files change
+- In-flight certificate reload for new TLS handshakes when files change
 - Expiry warnings in server logs
 - Force reload via SIGHUP (`systemctl reload pyircx`)
 - `STATS t` command to view certificate status

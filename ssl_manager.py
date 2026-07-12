@@ -70,23 +70,9 @@ class SSLManager:
             return None
 
         try:
-            # Determine minimum TLS version
-            min_version_str = CONFIG.get('ssl', 'min_version', default='TLSv1.2')
-            min_version_map = {
-                'TLSv1': ssl.TLSVersion.TLSv1,
-                'TLSv1.0': ssl.TLSVersion.TLSv1,
-                'TLSv1.1': ssl.TLSVersion.TLSv1_1,
-                'TLSv1.2': ssl.TLSVersion.TLSv1_2,
-                'TLSv1.3': ssl.TLSVersion.TLSv1_3,
-            }
-            min_version = min_version_map.get(min_version_str, ssl.TLSVersion.TLSv1_2)
-
-            # Create SSL context
+            min_version_str, min_version = self._get_min_tls_version()
             context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-            context.minimum_version = min_version
-
-            # Load certificate chain and private key
-            context.load_cert_chain(self.cert_file, self.key_file)
+            self._load_chain_into_context(context, min_version)
 
             # Store file modification times for change detection
             self.cert_mtime = os.path.getmtime(self.cert_file)
@@ -114,6 +100,57 @@ class SSLManager:
         except Exception as e:
             logger.error(get_log_message("ssl_load_generic_error", error=e))
             return None
+
+    def _get_min_tls_version(self):
+        """Return configured minimum TLS version label and enum value."""
+        min_version_str = CONFIG.get('ssl', 'min_version', default='TLSv1.2')
+        min_version_map = {
+            'TLSv1': ssl.TLSVersion.TLSv1,
+            'TLSv1.0': ssl.TLSVersion.TLSv1,
+            'TLSv1.1': ssl.TLSVersion.TLSv1_1,
+            'TLSv1.2': ssl.TLSVersion.TLSv1_2,
+            'TLSv1.3': ssl.TLSVersion.TLSv1_3,
+        }
+        return min_version_str, min_version_map.get(min_version_str, ssl.TLSVersion.TLSv1_2)
+
+    def _load_chain_into_context(self, context, min_version):
+        """Load the configured certificate chain into an SSLContext object."""
+        context.minimum_version = min_version
+        context.load_cert_chain(self.cert_file, self.key_file)
+
+    def _reload_existing_context(self):
+        """
+        Reload certificates into the active SSLContext object.
+
+        asyncio SSL listeners keep a reference to the SSLContext passed to
+        start_server(). Mutating that object lets future TLS handshakes use the
+        renewed certificate without closing listeners or disconnecting users.
+        """
+        if not self.ssl_context:
+            return self.load_certificates()
+
+        min_version_str, min_version = self._get_min_tls_version()
+
+        # Validate the new certificate/key pair before mutating the live context.
+        validation_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        self._load_chain_into_context(validation_context, min_version)
+
+        self._load_chain_into_context(self.ssl_context, min_version)
+        self.cert_mtime = os.path.getmtime(self.cert_file)
+        self.key_mtime = os.path.getmtime(self.key_file)
+        self._parse_certificate()
+
+        logger.info(get_log_message("ssl_loaded"))
+        logger.info(get_log_message("ssl_cert_file", file=self.cert_file))
+        logger.info(get_log_message("ssl_key_file", file=self.key_file))
+        logger.info(get_log_message("ssl_min_tls", version=min_version_str))
+        if self.cert_expiry:
+            days_left = (self.cert_expiry - time.time()) / 86400
+            logger.info(get_log_message("ssl_expiry", expiry=time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(self.cert_expiry)), days=f"{days_left:.0f}"))
+        if self.cert_subject:
+            logger.info(get_log_message("ssl_subject", subject=self.cert_subject))
+
+        return self.ssl_context
 
     def _parse_certificate(self):
         """Parse certificate to extract expiry date and subject."""
@@ -176,15 +213,21 @@ class SSLManager:
 
             if cert_mtime != self.cert_mtime or key_mtime != self.key_mtime:
                 logger.info(get_log_message("ssl_files_changed"))
-                old_context = self.ssl_context
-                new_context = self.load_certificates()
-                if new_context:
+                try:
+                    reloaded_context = self._reload_existing_context()
+                except ssl.SSLError as e:
+                    logger.error(get_log_message("ssl_load_error", error=e))
+                    reloaded_context = None
+                except Exception as e:
+                    logger.error(get_log_message("ssl_load_generic_error", error=e))
+                    reloaded_context = None
+
+                if reloaded_context:
                     logger.info(get_log_message("ssl_reloaded"))
                     self.warned_days.clear()  # Reset expiry warnings
                     return True
                 else:
                     logger.error(get_log_message("ssl_reload_failed"))
-                    self.ssl_context = old_context
                     return False
         except Exception as e:
             logger.debug(get_log_message("ssl_check_error", error=e))

@@ -210,16 +210,16 @@ pyIRCX works with Let's Encrypt certificates using a hybrid approach:
    }
    ```
 
-3. **pyIRCX handles the rest:**
-   - Monitors certificate files for changes
-   - Automatically reloads when certbot renews
+3. **Reload services after renewal:**
+   - Install a Certbot deploy hook that reloads Apache/httpd and pyIRCX after successful renewals
+   - `setup_ssl.sh` installs this hook automatically for managed installs
    - Logs warnings as expiry approaches
    - Reload certificates immediately with `systemctl reload pyircx` (SIGHUP)
 
 ### Certificate Monitoring
 
 - Certificates are checked every `reload_interval` seconds (default: 1 hour)
-- If file modification time changes, certificates are reloaded
+- If certificate files change, pyIRCX reloads the active TLS context for new handshakes
 - New connections use the new certificate; existing connections keep the old one
 - Expiry warnings are logged at 14, 7, 3, and 1 day(s) before expiration
 

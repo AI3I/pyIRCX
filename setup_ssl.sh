@@ -21,6 +21,28 @@ PYIRCX_WAS_RUNNING=0
 CERT_FILE=""
 KEY_FILE=""
 
+install_certbot_deploy_hook() {
+    local hook_dir="/etc/letsencrypt/renewal-hooks/deploy"
+    local hook_path="$hook_dir/10-reload-pyircx-services"
+
+    mkdir -p "$hook_dir"
+    cat > "$hook_path" <<'EOF'
+#!/bin/sh
+set -eu
+
+if systemctl list-unit-files apache2.service >/dev/null 2>&1; then
+    systemctl reload apache2 2>/dev/null || systemctl restart apache2 2>/dev/null || true
+elif systemctl list-unit-files httpd.service >/dev/null 2>&1; then
+    systemctl reload httpd 2>/dev/null || systemctl restart httpd 2>/dev/null || true
+fi
+
+systemctl reload pyircx 2>/dev/null || true
+systemctl restart pyircx-webchat 2>/dev/null || true
+EOF
+    chmod 755 "$hook_path"
+    echo -e "${GREEN}✓ Certbot deploy hook installed: $hook_path${NC}"
+}
+
 # Function to configure HTTPS for webchat
 configure_webchat_https() {
     local cert_file="$1"
@@ -329,16 +351,17 @@ case $REPLY in
             fi
 
             # Set up auto-renewal
+            install_certbot_deploy_hook
+
             if [ ! -f /etc/systemd/system/pyircx-certbot-renew.service ]; then
                 cat > /etc/systemd/system/pyircx-certbot-renew.service <<EOF
 [Unit]
-Description=Renew Let's Encrypt certificates and reload pyIRCX
+Description=Renew Let's Encrypt certificates
 After=network.target
 
 [Service]
 Type=oneshot
 ExecStart=/usr/bin/certbot renew --quiet
-ExecStartPost=/usr/bin/systemctl reload pyircx.service
 
 [Install]
 WantedBy=multi-user.target
