@@ -100,7 +100,7 @@ dnf install -y python3 python3-pip apache httpd mod_ssl
 apt install -y python3 python3-pip apache2
 
 # Install Python WebSocket library
-pip3 install websockets
+pip3 install 'websockets>=10,<17'
 ```
 
 **Create directories:**

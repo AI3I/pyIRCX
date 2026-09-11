@@ -321,14 +321,14 @@ check_python() {
         PYTHON_MAJOR=$(echo $PYTHON_VERSION | cut -d. -f1)
         PYTHON_MINOR=$(echo $PYTHON_VERSION | cut -d. -f2)
 
-        if [ "$PYTHON_MAJOR" -ge 3 ] && [ "$PYTHON_MINOR" -ge 8 ]; then
+        if [ "$PYTHON_MAJOR" -gt 3 ] || { [ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR" -ge 9 ]; }; then
             echo -e "${GREEN}Python $PYTHON_VERSION found${NC}"
             return 0
         fi
     fi
 
-    echo -e "${RED}Error: Python 3.8+ is required${NC}"
-    echo "Please install Python 3.8 or later"
+    echo -e "${RED}Error: Python 3.9+ is required${NC}"
+    echo "Please install Python 3.9 or later"
     exit 1
 }
 
@@ -420,23 +420,28 @@ install_dependencies() {
                 emerge --ask=n dev-lang/python dev-python/pip
             else
                 echo -e "${YELLOW}No supported package manager found.${NC}"
-                echo -e "${YELLOW}Please ensure Python 3.8+ and pip are installed manually.${NC}"
+                echo -e "${YELLOW}Please ensure Python 3.9+ and pip are installed manually.${NC}"
             fi
             ;;
     esac
 }
 
-# Install Python packages
-install_python_packages() {
-    echo -e "${YELLOW}Installing Python packages...${NC}"
-
+# pip3 install, adding --break-system-packages where pip supports it (PEP 668 distros)
+pip_install() {
     local pip_args=()
 
     if pip3 install --help 2>/dev/null | grep -q -- '--break-system-packages'; then
         pip_args+=(--break-system-packages)
     fi
 
-    pip3 install "${pip_args[@]}" aiosqlite bcrypt pyotp cryptography
+    pip3 install "${pip_args[@]}" "$@"
+}
+
+# Install Python packages
+install_python_packages() {
+    echo -e "${YELLOW}Installing Python packages...${NC}"
+
+    pip_install -r "$SCRIPT_DIR/requirements.txt"
 
     echo -e "${GREEN}Python packages installed${NC}"
 }
@@ -490,6 +495,7 @@ copy_files() {
     cp "$SCRIPT_DIR/security.py" "$INSTALL_DIR/"
     cp "$SCRIPT_DIR/service_bot.py" "$INSTALL_DIR/"
     cp "$SCRIPT_DIR/ssl_manager.py" "$INSTALL_DIR/"
+    cp "$SCRIPT_DIR/staff_commands.py" "$INSTALL_DIR/"
     cp "$SCRIPT_DIR/user.py" "$INSTALL_DIR/"
     cp "$SCRIPT_DIR/validation.py" "$INSTALL_DIR/"
     cp "$SCRIPT_DIR/version.py" "$INSTALL_DIR/"
@@ -1128,7 +1134,7 @@ install_webchat() {
     # Check for websockets Python module
     if ! python3 -c "import websockets" 2>/dev/null; then
         echo -e "${YELLOW}Installing Python websockets module...${NC}"
-        pip3 install websockets
+        pip_install -r "$SCRIPT_DIR/requirements.txt"
     fi
 
     # Create webchat backend directory

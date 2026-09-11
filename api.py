@@ -10,11 +10,8 @@ import sys
 import os
 import time
 import re
-import hashlib
-import socket
 import subprocess
 from pathlib import Path
-from datetime import datetime
 import logging
 try:
     import fcntl
@@ -200,6 +197,10 @@ def write_admin_command(command_string, success_message):
     Returns:
         dict with success/error status
     """
+    # The queue is line-oriented and values end up in raw IRC lines, so a
+    # CR/LF would inject extra queue commands or protocol lines.
+    if any(ch in command_string for ch in '\r\n\0'):
+        return {"error": SERVER_MESSAGES['api_admin_command_invalid_chars']}
     try:
         cmd_file = get_admin_queue_path()
         queue_dir = os.path.dirname(os.path.abspath(cmd_file))
@@ -658,7 +659,7 @@ def get_server_stats():
                 stats['peak_users'] = runtime_status['peak_users']
 
             stats['server_running'] = True
-        except (json.JSONDecodeError, IOError) as e:
+        except (json.JSONDecodeError, IOError):
             # Status file exists but couldn't be read
             stats['server_running'] = False
             stats['connected_users'] = 0
@@ -1844,7 +1845,6 @@ def edit_channel(channel_name, new_owner=None, new_description=None, new_topic=N
         current_owner_uuid = row[1]
         current_description = row[2]
         changes = []
-        owner_uuid_changed = False
         new_owner_uuid = current_owner_uuid
         new_description_val = current_description
 
@@ -1854,7 +1854,6 @@ def edit_channel(channel_name, new_owner=None, new_description=None, new_topic=N
             owner_row = cursor.fetchone()
             if owner_row:
                 new_owner_uuid = owner_row[0]
-                owner_uuid_changed = True
                 # Also update owners list in properties
                 channel_data['owners'] = [new_owner]
                 changes.append("owner")

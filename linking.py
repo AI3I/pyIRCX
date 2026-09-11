@@ -17,13 +17,16 @@ DO NOT attempt to link to non-pyIRCX servers.
 
 import asyncio
 import base64
+import hmac
 import time
 import logging
 import ssl
 from typing import Dict, Set, Optional, Tuple
 
+import bcrypt
+
 from responses import SERVER_MESSAGES, get_log_message
-from version import VERSION as PYIRCX_VERSION, LINKING_PROTOCOL_VERSION, MIN_COMPATIBLE_VERSION
+from version import VERSION as PYIRCX_VERSION, LINKING_PROTOCOL_VERSION
 
 logger = logging.getLogger(__name__)
 
@@ -2686,7 +2689,6 @@ class ServerLinkManager:
             if len(parts) >= 4:
                 chan_name = parts[2]
                 prop_name = parts[3]
-                prop_value = ' '.join(parts[4:]).lstrip(':') if len(parts) > 4 else ""
 
                 # Only process channel PROP
                 if chan_name.startswith('#') or chan_name.startswith('&'):
@@ -2867,7 +2869,7 @@ class ServerLinkManager:
                 else:
                     # Fall back to plaintext comparison (deprecated - log warning)
                     logger.warning(get_log_message("link_plaintext_password_warning", server=servername))
-                    return password_hash == password
+                    return hmac.compare_digest(password_hash.encode(), password.encode())
 
         return False
 

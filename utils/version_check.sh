@@ -38,7 +38,7 @@ fi
 
 # Check for release notes file
 echo -e "\n${BLUE}=== Checking Release Notes ===${NC}"
-RELEASE_FILE="RELEASE_v${VERSION}.md"
+RELEASE_FILE="docs/releases/RELEASE_v${VERSION}.md"
 if [ -f "$RELEASE_FILE" ]; then
     echo -e "${GREEN}✓ $RELEASE_FILE exists${NC}"
     # Check if release date is today

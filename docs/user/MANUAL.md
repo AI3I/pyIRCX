@@ -60,17 +60,16 @@ pyIRCX is an asynchronous IRC/IRCX server implementation written in Python. It p
 ### Dependencies
 
 ```
-python >= 3.8
-aiosqlite
-bcrypt
-pyotp
+python >= 3.9
 ```
+
+Python packages are listed in `requirements.txt`.
 
 ### Quick Start
 
 ```bash
 # Install dependencies
-pip install aiosqlite bcrypt pyotp
+pip install -r requirements.txt
 
 # Run the server
 python3 pyircx.py

@@ -207,7 +207,7 @@ echo ""
 
 # Check for core modules
 NEEDS_CORE_MODULES=0
-CORE_MODULES=(channel.py config.py database.py help_text.py modes.py responses.py security.py service_bot.py ssl_manager.py user.py validation.py version.py)
+CORE_MODULES=(channel.py config.py database.py help_text.py modes.py responses.py security.py service_bot.py ssl_manager.py staff_commands.py user.py validation.py version.py)
 MISSING_MODULES=()
 for module in "${CORE_MODULES[@]}"; do
     if [ ! -f "$INSTALL_DIR/$module" ]; then

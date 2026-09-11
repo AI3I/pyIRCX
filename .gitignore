@@ -17,7 +17,7 @@ __pycache__/
 
 # Claude Code session data
 .claude/
-.codex/
+.codex
 
 # Transcripts (runtime generated)
 transcripts/

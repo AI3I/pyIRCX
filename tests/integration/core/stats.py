@@ -10,9 +10,7 @@ Test Staff Accounts:
 """
 
 import asyncio
-import time
 import sys
-from typing import List
 
 # Import test client from users.py
 import os

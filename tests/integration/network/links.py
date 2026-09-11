@@ -7,9 +7,7 @@ Tests server-to-server linking functionality
 import asyncio
 import sys
 import json
-import tempfile
 import os
-import signal
 from pathlib import Path
 
 # Ensure repo root is on sys.path so `import linking` works

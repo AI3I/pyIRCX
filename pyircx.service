@@ -21,10 +21,12 @@ StandardError=journal
 SyslogIdentifier=pyircx
 
 # Security hardening
+# ProtectSystem=full makes /usr, /boot and /etc read-only; ReadWritePaths below
+# re-opens /etc/pyircx for CONFIG SET. /opt stays writable.
 NoNewPrivileges=true
-ProtectSystem=false
+ProtectSystem=full
 ProtectHome=true
-PrivateTmp=false
+PrivateTmp=true
 PrivateDevices=false
 ProtectKernelTunables=true
 ProtectKernelModules=true

@@ -9,6 +9,7 @@ connection management, error handling, and statistics.
 import pytest
 import sys
 import os
+import sqlite3
 import tempfile
 import threading
 import time
@@ -83,12 +84,11 @@ class TestPoolInitialization:
         pool.close_all()
 
     def test_pool_invalid_db_path(self):
-        """Test pool handles invalid database path"""
-        # Should still work - SQLite creates the file
+        """Test pool fails loudly when the database directory doesn't exist"""
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = os.path.join(tmpdir, 'subdir', 'test.db')
-            # This may fail if parent dir doesn't exist
-            # depending on SQLite behavior
+            with pytest.raises(sqlite3.OperationalError):
+                ConnectionPool(db_path, pool_size=1)
 
 
 # =============================================================================
@@ -114,7 +114,7 @@ class TestConnectionAcquisition:
         assert initial_stats['available'] == 3
         assert initial_stats['in_use'] == 0
 
-        with pool.get_connection() as conn:
+        with pool.get_connection():
             during_stats = pool.get_stats()
             assert during_stats['available'] == 2
             assert during_stats['in_use'] == 1
@@ -139,7 +139,7 @@ class TestConnectionAcquisition:
         initial_available = pool.get_stats()['available']
 
         try:
-            with pool.get_connection() as conn:
+            with pool.get_connection():
                 raise ValueError("Test exception")
         except ValueError:
             pass
@@ -152,10 +152,10 @@ class TestConnectionAcquisition:
         # Create pool with 1 connection
         pool = ConnectionPool(temp_db_path, pool_size=1)
 
-        with pool.get_connection() as conn1:
+        with pool.get_connection():
             # Pool now exhausted - should timeout
             with pytest.raises(RuntimeError) as exc_info:
-                with pool.get_connection(timeout=0.5) as conn2:
+                with pool.get_connection(timeout=0.5):
                     pass
 
             assert 'No database connection available' in str(exc_info.value)
@@ -227,7 +227,7 @@ class TestPoolClose:
         pool.close_all()
 
         with pytest.raises(RuntimeError):
-            with pool.get_connection() as conn:
+            with pool.get_connection():
                 pass
 
 
@@ -302,7 +302,7 @@ class TestGlobalPoolFunctions:
         db_pool.close_pool()
 
         with pytest.raises(RuntimeError) as exc_info:
-            with db_pool.get_connection() as conn:
+            with db_pool.get_connection():
                 pass
 
         assert 'not initialized' in str(exc_info.value)

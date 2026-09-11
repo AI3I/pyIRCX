@@ -1487,6 +1487,7 @@ async def test_rfc_who():
             flag_found = True
             print(f"   WHO flags: {part}")
             break
+    assert flag_found, "352 should contain H or G away flag"
 
     # 315 should have channel name
     assert "#whorfctest" in end_reply, "315 should contain channel name"
@@ -3690,7 +3691,7 @@ async def test_knock_full_flow():
 
 
 @runner.test("KNOCK: Rate Limiting")
-async def test_knock_rate_limit():
+async def test_knock_rate_limit_rapid():
     """Test KNOCK has rate limiting to prevent spam"""
     client1 = IRCTestClient("knock_rate1")
     client2 = IRCTestClient("knock_rate2")

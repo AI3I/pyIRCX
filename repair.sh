@@ -7,6 +7,18 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# pip3 install, adding --break-system-packages where pip supports it (PEP 668 distros)
+pip_install() {
+    local pip_args=()
+
+    if pip3 install --help 2>/dev/null | grep -q -- '--break-system-packages'; then
+        pip_args+=(--break-system-packages)
+    fi
+
+    pip3 install "${pip_args[@]}" "$@"
+}
+
 CURRENT_PACKAGE_VERSION="$(python3 -c 'import json, pathlib; print(json.load(open(pathlib.Path("'"$SCRIPT_DIR"'") / "version.json"))["version"])')"
 
 # Colors for output
@@ -154,6 +166,7 @@ REQUIRED_FILES=(
     "$INSTALL_DIR/security.py"
     "$INSTALL_DIR/service_bot.py"
     "$INSTALL_DIR/ssl_manager.py"
+    "$INSTALL_DIR/staff_commands.py"
     "$INSTALL_DIR/user.py"
     "$INSTALL_DIR/validation.py"
     "$INSTALL_DIR/version.py"
@@ -791,7 +804,7 @@ if [[ ! $REPLY =~ ^[Nn]$ ]]; then
         # Install websockets if missing
         if ! python3 -c "import websockets" 2>/dev/null; then
             echo -e "${YELLOW}Installing websockets module...${NC}"
-            pip3 install websockets
+            pip_install -r "$SCRIPT_DIR/requirements.txt"
             echo -e "${GREEN}✓ websockets module installed${NC}"
             ((FIXES_APPLIED+=1))
         fi
@@ -891,7 +904,7 @@ UNBOUND_EOF
     # Install missing Python dependencies
     if [ $MISSING_DEPS -gt 0 ]; then
         echo -e "${YELLOW}Installing missing Python dependencies...${NC}"
-        pip3 install --upgrade aiosqlite bcrypt pyotp cryptography
+        pip_install --upgrade -r "$SCRIPT_DIR/requirements.txt"
         echo -e "${GREEN}✓ Python dependencies installed${NC}"
         ((FIXES_APPLIED+=1))
     fi

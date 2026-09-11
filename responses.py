@@ -1151,6 +1151,7 @@ SERVER_MESSAGES = {
     "api_channel_reset": "Channel {channel} will be reset",
     "api_status_not_found": "Status file not found - server may not be running",
     "api_admin_command_write_failed": "Failed to write admin command: {error}",
+    "api_admin_command_invalid_chars": "Admin command values must not contain line breaks or NUL characters",
     "api_owner_name_required": "Owner name must be provided (1-30 characters)",
     "api_mode_string_required": "Please provide a mode string (1-50 characters)",
     "api_mode_string_invalid_format": "Mode string must start with + or - followed by mode letters (e.g., '+nt' or '-s')",

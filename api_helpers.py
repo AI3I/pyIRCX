@@ -8,7 +8,6 @@ import functools
 import logging
 import sqlite3
 import socket
-import re
 import time
 import os
 import json
@@ -341,7 +340,7 @@ def validate_timeout(timeout):
 
 # Import validation functions from centralized validation module
 from validation import (
-    validate_nickname_strict as validate_nickname,
+    validate_nickname_strict as validate_nickname,  # noqa: F401 - re-exported for api.py
     validate_channel_strict,
     validate_staff_level_strict
 )

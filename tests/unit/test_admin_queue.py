@@ -158,6 +158,18 @@ def test_api_writes_admin_queue_to_env_path(tmp_path, monkeypatch):
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize("reason", ["bye\nKILL_CHANNEL:#other", "bye\r\nQUIT", "bye\0"])
+def test_api_rejects_line_breaks_in_admin_queue_values(tmp_path, monkeypatch, reason):
+    queue_path = tmp_path / "admin_commands.queue"
+    monkeypatch.setenv("PYIRCX_ADMIN_QUEUE", str(queue_path))
+
+    result = api.send_irc_kill_user("Alice", reason)
+
+    assert "error" in result
+    assert not queue_path.exists()
+
+
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_server_claims_admin_queue_and_processes_remaining_after_error(tmp_path, monkeypatch):
     queue_path = tmp_path / "admin_commands.queue"

@@ -1,0 +1,5 @@
+# Test and lint tooling (the suite runs async tests itself; no pytest-asyncio needed)
+-r requirements.txt
+pytest>=7.4
+pytest-timeout>=2.1
+ruff>=0.6

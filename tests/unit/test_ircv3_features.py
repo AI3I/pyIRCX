@@ -12,7 +12,6 @@ Unit tests for IRCv3 features batch:
 """
 
 import pytest
-import asyncio
 import sys
 import os
 from unittest.mock import MagicMock, AsyncMock, patch
