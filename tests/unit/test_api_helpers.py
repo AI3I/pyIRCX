@@ -11,7 +11,6 @@ import sys
 import os
 import time
 from datetime import datetime, timedelta
-from unittest.mock import patch
 
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))

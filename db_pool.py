@@ -119,7 +119,7 @@ class ConnectionPool:
             # Commit any pending transactions on success
             conn.commit()
 
-        except Exception as e:
+        except Exception:
             # Rollback on error
             if conn is not None:
                 try:

@@ -426,12 +426,12 @@ sudo systemctl start pyircx
 
 1. Install dependencies:
    ```bash
-   pip3 install aiosqlite bcrypt pyotp
+   pip3 install -r requirements.txt
    ```
 
 2. Copy files to desired location:
    ```bash
-   cp pyircx.py /opt/pyircx/
+   cp *.py version.json /opt/pyircx/
    cp pyircx_config.json /etc/pyircx/
    ```
 

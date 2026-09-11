@@ -14,11 +14,12 @@ Restart=on-failure
 RestartSec=5
 
 # Security
+# ProtectSystem=full makes /usr, /boot and /etc read-only; /opt stays writable,
+# so no ReadWritePaths= is needed (a missing one fails the unit with NAMESPACE).
 NoNewPrivileges=true
-PrivateTmp=false
-ProtectSystem=false
+PrivateTmp=true
+ProtectSystem=full
 ProtectHome=true
-ReadWritePaths=/opt/pyircx/webchat
 
 [Install]
 WantedBy=multi-user.target

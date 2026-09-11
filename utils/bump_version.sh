@@ -75,7 +75,7 @@ if [ -f "README.md" ] && grep -q "$CURRENT_VERSION" README.md; then
 fi
 
 # 3. Check if release notes template should be created
-RELEASE_FILE="RELEASE_v${NEW_VERSION}.md"
+RELEASE_FILE="docs/releases/RELEASE_v${NEW_VERSION}.md"
 if [ ! -f "$RELEASE_FILE" ]; then
     echo -n "  - Creating $RELEASE_FILE ... "
     cat > "$RELEASE_FILE" << EOF

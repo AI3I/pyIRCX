@@ -4,7 +4,6 @@ Unit tests for API config persistence behavior.
 """
 
 import json
-from pathlib import Path
 
 
 def test_load_config_returns_raw_dict_without_api_metadata(api_module):

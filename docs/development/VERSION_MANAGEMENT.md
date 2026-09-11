@@ -11,7 +11,7 @@ This document explains how version management works in pyIRCX and the tools avai
 2. **`utils/bump_version.sh`** - Automated version bumping script
 3. **`utils/touch_version_timestamp.sh`** - Refresh the daemon's displayed created/build timestamp
 4. **`utils/version_check.sh`** - Pre-release verification script
-5. **`RELEASE_v{VERSION}.md`** - Release notes for each version
+5. **`docs/releases/RELEASE_v{VERSION}.md`** - Release notes for each version
 
 ### Version Location in Code
 - `pyircx.py` lines 25-27:
@@ -43,7 +43,7 @@ This document explains how version management works in pyIRCX and the tools avai
    - Shows next steps
 
 3. **Fill in release notes:**
-   - Edit `RELEASE_v{VERSION}.md` with actual changes
+   - Edit `docs/releases/RELEASE_v{VERSION}.md` with actual changes
    - Include all sections from template
    - Review upgrade instructions
 
@@ -116,7 +116,7 @@ Proceed with version bump? (y/n) y
 Updating files...
   - version.json ... ✓
   - README.md ... ✓
-  - Creating RELEASE_v2.1.0.md ... ✓
+  - Creating docs/releases/RELEASE_v2.1.0.md ... ✓
 
 Version bump complete!
 ```
@@ -153,7 +153,7 @@ Current version in version.json: 2.0.1
 ✓ Version matches expected: 2.0.1
 
 === Checking Release Notes ===
-✓ RELEASE_v2.0.1.md exists
+✓ docs/releases/RELEASE_v2.0.1.md exists
 ✓ Release date is current
 
 ...
@@ -287,7 +287,7 @@ pyIRCX follows **Semantic Versioning (SemVer)**: `MAJOR.MINOR.PATCH`
 
 1. ✅ Read `RELEASE_CHECKLIST.md`
 2. ✅ Run `./utils/bump_version.sh`
-3. ✅ Fill in `RELEASE_v{VERSION}.md` with actual changes
+3. ✅ Fill in `docs/releases/RELEASE_v{VERSION}.md` with actual changes
 4. ✅ Run `./utils/version_check.sh`
 5. ✅ Test server restart
 6. ✅ Follow checklist for git operations
@@ -307,7 +307,7 @@ pyIRCX follows **Semantic Versioning (SemVer)**: `MAJOR.MINOR.PATCH`
 ./utils/bump_version.sh 1.2.0
 
 # 3. Edit release notes
-nano RELEASE_v1.2.0.md
+nano docs/releases/RELEASE_v1.2.0.md
 
 # 4. Test server
 sudo systemctl restart pyircx && systemctl status pyircx
@@ -328,7 +328,7 @@ git push origin main
 git push origin --tags
 
 # 8. Create release
-gh release create v1.2.0 --title "pyIRCX v1.2.0 - Title" --notes-file RELEASE_v1.2.0.md
+gh release create v1.2.0 --title "pyIRCX v1.2.0 - Title" --notes-file docs/releases/RELEASE_v1.2.0.md
 ```
 
 ---

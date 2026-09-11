@@ -18,7 +18,6 @@ import asyncio
 import json
 import sys
 import argparse
-import time
 import random
 import string
 import os
@@ -145,7 +144,7 @@ class WebChatTester:
         """Test 1: Basic WebSocket connection"""
         print("\n[Test: WebSocket Connection]")
         try:
-            async with websockets.connect(self.ws_url) as ws:
+            async with websockets.connect(self.ws_url):
                 self.results.ok("WebSocket connection established")
                 return True
         except Exception as e:
@@ -786,18 +785,3 @@ async def main():
 
 if __name__ == '__main__':
     asyncio.run(main())
-
-            await self.send_raw(ws_a, f"MODE {channel} +b {nick_b}!*@*")
-            await self.send_raw(ws_b, f"JOIN {channel}")
-            msg, _ = await self.recv_until(ws_b, numeric='474', timeout=5)
-            if msg:
-                self.results.ok("BAN enforced", "474 received")
-            else:
-                self.results.fail("BAN enforced", "No 474 received")
-
-            await ws_a.close()
-            await ws_b.close()
-            return True
-        except Exception as e:
-            self.results.fail("KICK/BAN", str(e))
-            return False

@@ -16,7 +16,7 @@ Update version in ALL of these locations:
 - [ ] `install.sh` - Line 64 (`INSTALL_VERSION`)
 - [ ] `webadmin/index.php` - Line 97 (version display in sidebar)
 - [ ] `webchat/index.html` - Line 216 (version display in header)
-- [ ] Create new `RELEASE_v{VERSION}.md` file
+- [ ] Create new `docs/releases/RELEASE_v{VERSION}.md` file
 
 **Search commands to find version references:**
 ```bash
@@ -30,7 +30,7 @@ grep -r "version.*=" --include="*.json" .
 ### 2. Date/Timestamp Updates
 
 - [ ] Update `__created__` timestamp in `pyircx.py` (line 27)
-- [ ] Update release date in `RELEASE_v{VERSION}.md`
+- [ ] Update release date in `docs/releases/RELEASE_v{VERSION}.md`
 - [ ] Check copyright years in file headers (if new year)
 
 **Get current date:**
@@ -54,7 +54,7 @@ date "+%a %b %d %I:%M:%S %p %Z %Y"
 - [ ] Check `repair.sh` for version-specific paths
 
 #### Release Notes
-- [ ] Create `RELEASE_v{VERSION}.md` with:
+- [ ] Create `docs/releases/RELEASE_v{VERSION}.md` with:
   - [ ] Release date
   - [ ] Summary of changes
   - [ ] Breaking changes section
@@ -108,7 +108,7 @@ grep -r "TODO\|FIXME" --include="*.py" .
 - [ ] Push commits: `git push origin main`
 - [ ] Push tags: `git push origin --tags`
 - [ ] Verify remote: `git log origin/main -5`
-- [ ] Create GitHub release: `gh release create v{VERSION} --title "Title" --notes-file RELEASE_v{VERSION}.md`
+- [ ] Create GitHub release: `gh release create v{VERSION} --title "Title" --notes-file docs/releases/RELEASE_v{VERSION}.md`
 - [ ] Verify release: `gh release view v{VERSION}`
 
 ---
@@ -174,8 +174,8 @@ echo -e "\n=== Searching for old version numbers ==="
 grep -r "1\.[0-9]\.[0-9]" --include="*.md" --include="*.py" . | grep -v ".git" | grep -v "RELEASE_" | grep -v "CHANGELOG"
 
 # Check for missing release notes
-if [ ! -f "RELEASE_v${VERSION}.md" ]; then
-    echo -e "\n⚠️  WARNING: RELEASE_v${VERSION}.md not found!"
+if [ ! -f "docs/releases/RELEASE_v${VERSION}.md" ]; then
+    echo -e "\n⚠️  WARNING: docs/releases/RELEASE_v${VERSION}.md not found!"
 fi
 
 # Check for outdated copyright years
@@ -209,7 +209,7 @@ git push origin main
 git push origin --tags
 
 # 7. Create GitHub release
-gh release create v{VERSION} --title "Title" --notes-file RELEASE_v{VERSION}.md
+gh release create v{VERSION} --title "Title" --notes-file docs/releases/RELEASE_v{VERSION}.md
 gh release view v{VERSION}
 ```
 

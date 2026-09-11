@@ -16,8 +16,7 @@ import time
 import sys
 import argparse
 from dataclasses import dataclass
-from typing import List, Dict
-import socket
+from typing import List
 import os
 
 TEST_ADMIN_PASS = os.environ.get("PYIRCX_TEST_ADMIN_PASS", "testpass")

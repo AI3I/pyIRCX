@@ -5,9 +5,7 @@ Test script for webchat validators
 
 import sys
 from validators import (
-    validate_nickname, validate_username, validate_realname,
-    validate_channel, validate_message, validate_reason,
-    validate_password, validate_key, validate_raw_command, sanitize_ip
+    validate_nickname, validate_channel, validate_message, validate_raw_command, sanitize_ip
 )
 
 

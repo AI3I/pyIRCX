@@ -210,7 +210,6 @@ def create_database(db_path, admin_username=None, admin_password=None):
 
     print(f"\nCreating default staff accounts...")
 
-    import uuid
     timestamp = int(datetime.now().timestamp())
 
     # Define default staff accounts

@@ -397,14 +397,14 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v7
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v7
         with:
-          python-version: '3.8'
+          python-version: '3.12'
       - name: Install dependencies
         run: |
-          pip install bcrypt aiosqlite pyotp
+          pip install -r requirements-dev.txt
       - name: Setup test accounts
         run: |
           sudo python3 tests/integration/setup_test_accounts.py

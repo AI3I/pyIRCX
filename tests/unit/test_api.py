@@ -9,7 +9,6 @@ server configuration, and health check.
 import pytest
 import sys
 import os
-import tempfile
 import json
 import time
 import sqlite3
@@ -526,7 +525,7 @@ class TestStaffManagement:
 
     def test_delete_nonexistent_staff(self, api_module):
         """Test deleting non-existent staff fails gracefully"""
-        result = api_module.delete_staff_account('nonexistent')
+        api_module.delete_staff_account('nonexistent')
         # Should return success=False or handle gracefully
         # The exact behavior depends on implementation
 
@@ -691,7 +690,7 @@ class TestNewsflash:
     def test_delete_newsflash(self, api_module):
         """Test deleting a newsflash message"""
         # Add first
-        add_result = api_module.add_newsflash(
+        api_module.add_newsflash(
             message='To be deleted',
             created_by='admin'
         )

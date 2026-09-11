@@ -2,7 +2,7 @@
 
 **A production-ready Python implementation of the IRCX protocol — the modern IRCX server for distributed chat networks**
 
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![Version](https://img.shields.io/badge/version-version.json-brightgreen.svg)](version.json)
 [![Tests](https://img.shields.io/badge/tests-243%20passing-brightgreen.svg)](#testing)
 
@@ -16,11 +16,11 @@ See [LICENSE](LICENSE) for the full license text.
 
 ## Platform Support
 
-pyIRCX requires Python `3.8+`.
+pyIRCX requires Python `3.9+` and is tested on 3.9 through 3.14.
 
-In practice, that means current Debian/Ubuntu, Fedora, and newer RHEL-family environments are supported when they provide a modern enough Python base.
+In practice, that means current Debian/Ubuntu, Fedora, and RHEL-family 9+ environments are supported when they provide a modern enough Python base.
 
-Older baseline installs that do not provide Python `3.8+` are not supported by the standard install path. This includes older `RHEL`/`OEL`/`Alma`/`Rocky` class systems unless they have already been explicitly modernized.
+Older baseline installs that do not provide Python `3.9+` are not supported by the standard install path. This includes older `RHEL`/`OEL`/`Alma`/`Rocky` class systems unless they have already been explicitly modernized.
 
 ---
 
@@ -38,7 +38,7 @@ If you remember the days of **Microsoft Comic Chat**, chat rooms with real nicks
 
 > **Active Development:** pyIRCX is under active development with frequent updates, enhancements, and bug fixes. New features, security improvements, and performance optimizations are released regularly. See [CHANGELOG.md](CHANGELOG.md) for detailed release notes and version history.
 
-**Current Version:** v2.0.5. See [version.json](version.json) for canonical release metadata.
+**Current Version:** v2.0.6. See [version.json](version.json) for canonical release metadata.
 
 **Highlights in the current major release:**
 - 🎨 **Personalized Messaging** - ~185+ friendly, conversational messages throughout the system
@@ -231,7 +231,7 @@ Three-tier staff hierarchy matching the original MECS design:
 
 ### Modern Infrastructure
 
-- **Pure Python 3.8+** with asyncio for high concurrency
+- **Pure Python 3.9+** with asyncio for high concurrency
 - **SQLite database** with connection pooling for persistence
 - **Dual-stack IPv4/IPv6** support out of the box
 - **Systemd integration** for production deployments
@@ -335,7 +335,7 @@ pyIRCX implements defense-in-depth with multiple security layers:
 
 ### Installation
 
-Verify that the target host provides Python `3.8+` before running the installer.
+Verify that the target host provides Python `3.9+` before running the installer.
 
 Older baseline systems below that requirement are outside the supported install path.
 
@@ -348,7 +348,7 @@ cd pyIRCX
 sudo ./install.sh
 
 # OR manual installation
-pip install aiosqlite bcrypt pyotp cryptography
+pip install -r requirements.txt
 python3 pyircx.py
 ```
 
@@ -573,10 +573,10 @@ sudo journalctl -u pyircx -f
 ### Docker Deployment
 
 ```dockerfile
-FROM python:3.9-slim
+FROM python:3.12-slim
 WORKDIR /app
 COPY . .
-RUN pip install aiosqlite bcrypt pyotp
+RUN pip install -r requirements.txt
 CMD ["python3", "pyircx.py"]
 ```
 
@@ -747,15 +747,17 @@ Please open an issue or pull request on GitHub.
 git clone https://github.com/AI3I/pyIRCX.git
 cd pyIRCX
 
-# Install dev dependencies
-pip install aiosqlite bcrypt pyotp
+# Install runtime + dev dependencies
+pip install -r requirements-dev.txt
 
-# Run tests
-python3 pyIRCX_test_users.py
-python3 pyIRCX_test_linking.py
+# Run unit tests
+pytest tests/unit
 
-# Check code
-python3 -m py_compile pyircx.py linking.py
+# Run integration tests (starts a temporary 3-server network)
+./run_tests.sh
+
+# Lint (same checks as CI)
+ruff check . --target-version py39 --select E9,F63,F7,F82,F401,F811,F841 --exclude docs
 ```
 
 ---

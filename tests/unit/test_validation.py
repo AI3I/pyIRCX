@@ -25,7 +25,6 @@ from validation import (
     validate_username_strict,
     validate_channel_strict,
     validate_realname_strict,
-    validate_message_strict,
     validate_password_strict,
     validate_staff_level_strict,
     validate_reason,
