@@ -19,7 +19,7 @@
                 <a href="#about">About</a>
                 <a href="#screenshots">Screenshots</a>
                 <a href="#quickstart">Quick Start</a>
-                <a href="#documentation">Docs</a>
+                <a href="#documentation">Documentation</a>
                 <a href="https://github.com/AI3I/pyIRCX" target="_blank" class="btn-github">GitHub</a>
                 <a href="https://atlas.jdlewis.net/webchat" class="btn-chat-now">💬 Chat Now</a>
             </nav>
@@ -32,15 +32,15 @@
                 <h2>Bringing Back the Chat Rooms of Yesterday, With the Technology of Today</h2>
                 <p class="hero-subtitle">A production-ready Python implementation of the IRCX protocol — the technology that powered MSN Chat and TalkCity</p>
                 <div class="hero-badges">
-                    <span class="badge">Python 3.8+</span>
+                    <span class="badge">Python 3.9+</span>
                     <span class="badge" id="siteVersionBadge">Version ...</span>
-                    <span class="badge">243 Tests Passing</span>
+                    <span class="badge">Open Source (AGPLv3)</span>
                 </div>
                 <div class="hero-buttons">
                     <a href="irc://atlas.jdlewis.net/#pyIRCX" class="btn btn-try-irc-large">🔗 Try IRC</a>
                     <a href="https://atlas.jdlewis.net/webchat" class="btn btn-webchat">💬 Try WebChat</a>
                     <a href="#quickstart" class="btn btn-primary">Get Started</a>
-                    <a href="https://github.com/AI3I/pyIRCX" target="_blank" class="btn btn-secondary">View on GitHub</a>
+                    <a href="https://github.com/AI3I/pyIRCX/releases/latest" target="_blank" class="btn btn-secondary">Download Latest Release</a>
                 </div>
             </div>
         </div>
@@ -218,15 +218,16 @@
             <h2>Quick Start</h2>
             <div class="quickstart-content">
                 <div class="quickstart-step">
-                    <h3>1. Clone the Repository</h3>
-                    <pre><code>git clone https://github.com/AI3I/pyIRCX.git
-cd pyIRCX</code></pre>
+                    <h3>1. Download the Latest Release</h3>
+                    <p>Download <strong>Source code (tar.gz)</strong> from the <a href="https://github.com/AI3I/pyIRCX/releases/latest" target="_blank">latest release</a>, then unpack it:</p>
+                    <pre><code>tar xzf pyIRCX-*.tar.gz
+cd pyIRCX-*</code></pre>
                 </div>
                 <div class="quickstart-step">
                     <h3>2. Install</h3>
                     <pre><code>sudo ./install.sh</code></pre>
                     <p>Or manually:</p>
-                    <pre><code>pip install aiosqlite bcrypt pyotp cryptography
+                    <pre><code>pip install -r requirements.txt
 python3 pyircx.py</code></pre>
                 </div>
                 <div class="quickstart-step">
@@ -313,27 +314,27 @@ python3 pyircx.py</code></pre>
         <div class="container">
             <h2>Documentation</h2>
             <div class="doc-grid">
-                <a href="docs/LINKING.md" class="doc-card">
+                <a href="https://github.com/AI3I/pyIRCX/blob/main/docs/LINKING.md" class="doc-card">
                     <h3>Server Linking</h3>
                     <p>Setup and configuration for multi-server networks</p>
                 </a>
-                <a href="docs/user/MANUAL.md" class="doc-card">
+                <a href="https://github.com/AI3I/pyIRCX/blob/main/docs/user/MANUAL.md" class="doc-card">
                     <h3>User Manual</h3>
                     <p>Command guide for users and operators</p>
                 </a>
-                <a href="docs/user/CONFIG.md" class="doc-card">
+                <a href="https://github.com/AI3I/pyIRCX/blob/main/docs/user/CONFIG.md" class="doc-card">
                     <h3>Configuration</h3>
                     <p>Complete configuration reference</p>
                 </a>
-                <a href="docs/testing/TESTING.md" class="doc-card">
+                <a href="https://github.com/AI3I/pyIRCX/blob/main/docs/testing/TESTING.md" class="doc-card">
                     <h3>Testing</h3>
-                    <p>Comprehensive testing guide (243 tests)</p>
+                    <p>Comprehensive testing guide</p>
                 </a>
-                <a href="docs/user/STAFF_ACCOUNT_REFERENCE.md" class="doc-card">
+                <a href="https://github.com/AI3I/pyIRCX/blob/main/docs/user/STAFF_ACCOUNT_REFERENCE.md" class="doc-card">
                     <h3>Staff Commands</h3>
                     <p>Quick reference for administrators</p>
                 </a>
-                <a href="docs/performance/PERFORMANCE.md" class="doc-card">
+                <a href="https://github.com/AI3I/pyIRCX/blob/main/docs/performance/PERFORMANCE.md" class="doc-card">
                     <h3>Performance</h3>
                     <p>Tuning and optimization guide</p>
                 </a>
@@ -380,7 +381,7 @@ python3 pyircx.py</code></pre>
             <p>Deploy your own IRCX server in minutes, or try our live demo</p>
             <div class="cta-buttons">
                 <a href="https://atlas.jdlewis.net/webchat" class="btn btn-webchat btn-large">💬 Try WebChat Now</a>
-                <a href="https://github.com/AI3I/pyIRCX" target="_blank" class="btn btn-primary btn-large">View on GitHub</a>
+                <a href="https://github.com/AI3I/pyIRCX/releases/latest" target="_blank" class="btn btn-primary btn-large">Download Latest Release</a>
                 <a href="#quickstart" class="btn btn-secondary btn-large">Quick Start Guide</a>
             </div>
         </div>
@@ -399,17 +400,17 @@ python3 pyircx.py</code></pre>
                     <ul>
                         <li><a href="https://github.com/AI3I/pyIRCX">GitHub Repository</a></li>
                         <li><a href="https://github.com/AI3I/pyIRCX/issues">Issue Tracker</a></li>
-                        <li><a href="https://github.com/AI3I/pyIRCX/discussions">Discussions</a></li>
-                        <li><a href="CHANGELOG.md">Changelog</a></li>
+                        <li><a href="https://github.com/AI3I/pyIRCX/releases/latest">Latest Release</a></li>
+                        <li><a href="https://github.com/AI3I/pyIRCX/blob/main/CHANGELOG.md">Changelog</a></li>
                     </ul>
                 </div>
                 <div class="footer-section">
                     <h4>Documentation</h4>
                     <ul>
-                        <li><a href="docs/LINKING.md">Server Linking</a></li>
-                        <li><a href="docs/user/MANUAL.md">User Manual</a></li>
-                        <li><a href="docs/user/CONFIG.md">Configuration</a></li>
-                        <li><a href="docs/testing/TESTING.md">Testing Guide</a></li>
+                        <li><a href="https://github.com/AI3I/pyIRCX/blob/main/docs/LINKING.md">Server Linking</a></li>
+                        <li><a href="https://github.com/AI3I/pyIRCX/blob/main/docs/user/MANUAL.md">User Manual</a></li>
+                        <li><a href="https://github.com/AI3I/pyIRCX/blob/main/docs/user/CONFIG.md">Configuration</a></li>
+                        <li><a href="https://github.com/AI3I/pyIRCX/blob/main/docs/testing/TESTING.md">Testing Guide</a></li>
                     </ul>
                 </div>
             </div>
