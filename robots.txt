@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /webadmin/
+
+Sitemap: https://atlas.jdlewis.net/sitemap.xml
