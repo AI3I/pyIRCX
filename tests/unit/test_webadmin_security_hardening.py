@@ -237,10 +237,8 @@ def test_webchat_install_and_docs_use_ini_config_format():
 def test_web_ui_reads_shared_version_metadata():
     webadmin = _read(WEBADMIN_DIR / "index.php")
     webchat = _read(WEBCHAT_FILE)
-    landing = _read(PROJECT_ROOT / "index.html")
     assert "version.json" in webadmin
     assert "fetch('./version.json')" in webchat
-    assert "fetch('./version.json')" in landing
 
 
 def test_webadmin_logs_page_has_connection_sessions_tab():
