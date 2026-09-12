@@ -656,6 +656,10 @@ if [ $NEEDS_WEBCHAT_UPDATE -eq 1 ] && [ -d "$SCRIPT_DIR/webchat" ]; then
         cp "$SCRIPT_DIR/webchat/gateway.py" "$INSTALL_DIR/webchat/"
         chmod 755 "$INSTALL_DIR/webchat/gateway.py"
         chown "$SERVICE_USER:$SERVICE_GROUP" "$INSTALL_DIR/webchat/gateway.py"
+        # gateway.py exits at startup without validators.py beside it
+        cp "$SCRIPT_DIR/webchat/validators.py" "$INSTALL_DIR/webchat/"
+        chmod 644 "$INSTALL_DIR/webchat/validators.py"
+        chown "$SERVICE_USER:$SERVICE_GROUP" "$INSTALL_DIR/webchat/validators.py"
         echo -e "${GREEN}✓ WebChat gateway updated${NC}"
     fi
 

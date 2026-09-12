@@ -1148,6 +1148,9 @@ install_webchat() {
         # Backend gateway goes to /opt/pyircx/webchat
         cp "$SCRIPT_DIR/webchat/gateway.py" "$INSTALL_DIR/webchat/"
         chmod 755 "$INSTALL_DIR/webchat/gateway.py"
+        # gateway.py exits at startup without validators.py beside it
+        cp "$SCRIPT_DIR/webchat/validators.py" "$INSTALL_DIR/webchat/"
+        chmod 644 "$INSTALL_DIR/webchat/validators.py"
 
         # Frontend files go to /var/www/html/webchat
         cp "$SCRIPT_DIR/webchat/index.html" "$WEBCHAT_WEB_DIR/"

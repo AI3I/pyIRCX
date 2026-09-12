@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Graceful shutdown used `asyncio.timeout()`, which only exists on Python 3.11+; on 3.9/3.10 the whole shutdown sequence (link shutdown, client disconnects, session persistence, DB pool close) was skipped.
 - `tests/integration/web/webchat.py` had a stray code fragment after `__main__` that made it a syntax error and failed CI lint on every run.
 - `install.sh` and `repair.sh` installed `websockets` without `--break-system-packages`, which fails on PEP 668 distributions (Debian 12+, Ubuntu 23.04+).
+- `install.sh` and `upgrade.sh` never installed `webchat/validators.py`, which the WebChat gateway needs at startup, so fresh installs got a gateway that exited immediately. Both now copy it, `repair.sh` checks for and restores it, and `webchat/REMOTE_DEPLOYMENT.md` lists every file a remote gateway needs.
 
 ### Changed
 - Added `requirements.txt` and `requirements-dev.txt`; install, repair, CI, and docs now use them.
@@ -28,7 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Removed unused imports and variables flagged by ruff.
 
 ### Validated
-- Full local unit suite passes with 420 tests, including new coverage for link authentication, admin-queue validation, and CREATE modes.
+- Full local unit suite passes with 424 tests, including new coverage for link authentication, admin-queue validation, CREATE modes, and install-script completeness.
 - Plaintext and bcrypt server links verified end to end with a two-server test.
 - Server exercised under the new systemd sandbox settings, including graceful shutdown.
 
