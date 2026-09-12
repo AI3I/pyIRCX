@@ -4,7 +4,7 @@
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![Version](https://img.shields.io/badge/version-version.json-brightgreen.svg)](version.json)
-[![Tests](https://img.shields.io/badge/tests-243%20passing-brightgreen.svg)](#testing)
+[![CI](https://github.com/AI3I/pyIRCX/actions/workflows/ci.yml/badge.svg)](https://github.com/AI3I/pyIRCX/actions/workflows/ci.yml)
 
 ---
 
@@ -339,10 +339,12 @@ Verify that the target host provides Python `3.9+` before running the installer.
 
 Older baseline systems below that requirement are outside the supported install path.
 
+Download **Source code (tar.gz)** from the [latest release](https://github.com/AI3I/pyIRCX/releases/latest), then:
+
 ```bash
-# Clone the repository
-git clone https://github.com/AI3I/pyIRCX.git
-cd pyIRCX
+# Unpack the release
+tar xzf pyIRCX-*.tar.gz
+cd pyIRCX-*
 
 # Automated installation (recommended)
 sudo ./install.sh
