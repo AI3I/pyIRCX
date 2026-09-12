@@ -13,12 +13,13 @@ pyIRCX v2.0.6 is a maintenance and hardening release: it fixes bcrypt-hashed ser
 - WEBIRC and plaintext link passwords are compared in constant time.
 - systemd units re-enable `ProtectSystem=full` and `PrivateTmp=true`.
 - New `requirements.txt` / `requirements-dev.txt`; install and repair use them, and install `websockets` correctly on PEP 668 distributions.
+- Install and upgrade now copy `webchat/validators.py`; without it the WebChat gateway exits at startup. Repair checks for and restores it.
 - STATS, CONFIG, STAFF, and PROFANITY handlers moved from `pyircx.py` to the new `staff_commands.py` module.
 - CI updated to Node 24 actions, ruff linting, and Python 3.9 through 3.14.
 
 ## Validation
 
-- Full local unit suite passes with 420 tests (new coverage for link authentication, admin-queue validation, and CREATE modes).
+- Full local unit suite passes with 424 tests (new coverage for link authentication, admin-queue validation, CREATE modes, and install-script completeness).
 - Server started and exercised under a transient systemd unit with the new `ProtectSystem=full` sandbox (CREATE, STATS, STAFF, CONFIG, graceful shutdown).
 - Two-server link test: plaintext and bcrypt link passwords both authenticate (on 2.0.5 the bcrypt link failed with `name 'bcrypt' is not defined`).
 - Integration suite (`run_tests.sh`) run on 2.0.5 and 2.0.6 side by side: no new failures beyond one timing-sensitive topology test. Both versions show the same ~118 pre-existing integration failures on the test host.

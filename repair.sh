@@ -405,6 +405,14 @@ if [ -d "$INSTALL_DIR/webchat" ]; then
         ((WEBCHAT_ISSUES+=1))
     fi
 
+    # Check validators.py (gateway.py exits at startup without it)
+    if [ -f "$INSTALL_DIR/webchat/validators.py" ]; then
+        echo -e "${GREEN}✓${NC} validators.py exists"
+    else
+        echo -e "${RED}✗${NC} validators.py missing ${YELLOW}(FIXABLE)${NC}"
+        ((WEBCHAT_ISSUES+=1))
+    fi
+
     # Check frontend files (in web directory)
     if [ -f "/var/www/html/webchat/index.html" ]; then
         echo -e "${GREEN}✓${NC} webchat/index.html exists"
@@ -798,6 +806,16 @@ if [[ ! $REPLY =~ ^[Nn]$ ]]; then
             echo -e "${YELLOW}Fixing WebChat gateway permissions...${NC}"
             chmod 755 "$INSTALL_DIR/webchat/gateway.py"
             echo -e "${GREEN}✓ WebChat gateway permissions fixed${NC}"
+            ((FIXES_APPLIED+=1))
+        fi
+
+        # Restore validators.py if missing
+        if [ ! -f "$INSTALL_DIR/webchat/validators.py" ] && [ -f "$SCRIPT_DIR/webchat/validators.py" ]; then
+            echo -e "${YELLOW}Restoring WebChat validators.py...${NC}"
+            cp "$SCRIPT_DIR/webchat/validators.py" "$INSTALL_DIR/webchat/"
+            chmod 644 "$INSTALL_DIR/webchat/validators.py"
+            chown --reference="$INSTALL_DIR/webchat" "$INSTALL_DIR/webchat/validators.py" 2>/dev/null || true
+            echo -e "${GREEN}✓ WebChat validators.py restored${NC}"
             ((FIXES_APPLIED+=1))
         fi
 

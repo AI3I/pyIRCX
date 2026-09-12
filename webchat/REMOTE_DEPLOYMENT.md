@@ -117,7 +117,9 @@ From the pyIRCX git repository on your local machine:
 scp webchat/index.html root@web.example.com:/var/www/html/webchat/
 scp webchat/config.js root@web.example.com:/var/www/html/webchat/
 scp webchat/favicon.svg root@web.example.com:/var/www/html/webchat/
-scp webchat/gateway.py root@web.example.com:/opt/pyircx/webchat/
+scp webchat/gateway.py webchat/validators.py root@web.example.com:/opt/pyircx/webchat/
+# The gateway also imports these from the directory above it
+scp validation.py responses.py root@web.example.com:/opt/pyircx/
 ```
 
 ---
@@ -504,7 +506,8 @@ systemctl restart httpd
 ```bash
 # On web server
 systemctl stop pyircx-webchat
-cp gateway.py /opt/pyircx/webchat/
+cp gateway.py validators.py /opt/pyircx/webchat/
+cp ../validation.py ../responses.py /opt/pyircx/
 systemctl start pyircx-webchat
 ```
 
